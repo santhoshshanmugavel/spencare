@@ -2,3 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
   - "packages/domain/*"
+
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
