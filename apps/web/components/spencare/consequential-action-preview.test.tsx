@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { axe } from "jest-axe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ConsequentialActionPreview,
@@ -16,6 +17,27 @@ const expensePreview: ActionPreview = {
     { label: "Date", value: "Today, 25 Aug 2026" },
   ],
   effect: { label: "Safe to Spend", before: "₹22,123", after: "₹21,623" },
+  undoable: true,
+};
+
+/**
+ * Non-expense fixture (confirmation-ui-specification.md §5's "Goal
+ * contribution" row) -- proves the component's field-set/effect contract is
+ * genuinely command-agnostic, not accidentally coupled to the one
+ * createTransaction fixture every other test in this file uses. This is a
+ * presentation-contract fixture only: no addContribution command, RPC, or
+ * database operation is implemented or invoked anywhere here.
+ */
+const goalContributionPreview: ActionPreview = {
+  commandType: "addContribution",
+  summary: "I'll move ₹2,000 from HDFC Bank into your Goa Trip goal.",
+  fields: [
+    { label: "Goal", value: "Goa Trip" },
+    { label: "Amount", value: "₹2,000.00" },
+    { label: "Source Account", value: "HDFC Bank" },
+    { label: "New Saved Total", value: "₹42,000.00", emphasis: true },
+  ],
+  effect: { label: "Safe to Spend", before: "₹22,123", after: "₹20,123" },
   undoable: true,
 };
 
@@ -185,6 +207,94 @@ describe("ConsequentialActionPreview — error state", () => {
     render(<ConsequentialActionPreview preview={expensePreview} state="error" errorMessage="x" />);
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+});
+
+describe("ConsequentialActionPreview — non-expense command (goal contribution)", () => {
+  it("renders a wholly different field set/effect correctly, proving the component is command-agnostic", () => {
+    render(<ConsequentialActionPreview preview={goalContributionPreview} state="proposed" />);
+    expect(
+      screen.getByText("I'll move ₹2,000 from HDFC Bank into your Goa Trip goal."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Goal")).toBeInTheDocument();
+    expect(screen.getByText("Goa Trip")).toBeInTheDocument();
+    expect(screen.getByText("New Saved Total")).toBeInTheDocument();
+    expect(screen.getByText("₹42,000.00")).toBeInTheDocument();
+    expect(screen.getByText("₹22,123 → ₹20,123")).toBeInTheDocument();
+    // Same Cancel/Confirm contract as the expense fixture -- confirms the
+    // footer/state-machine logic doesn't branch on commandType anywhere.
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+  });
+
+  it("carries through confirmed/undo just like the expense fixture", async () => {
+    const onUndo = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ConsequentialActionPreview preview={goalContributionPreview} state="confirmed" onUndo={onUndo} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ConsequentialActionPreview — touch target compliance (accessibility-requirements.md §5, §10)", () => {
+  it("Confirm and Cancel resolve to the touch size in the proposed state", () => {
+    render(<ConsequentialActionPreview preview={expensePreview} state="proposed" />);
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("data-size", "touch");
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveAttribute("data-size", "touch");
+  });
+
+  it("the disabled confirming-state buttons retain the touch size (hit area doesn't shrink while disabled/loading)", () => {
+    render(<ConsequentialActionPreview preview={expensePreview} state="confirming" />);
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const confirm = screen.getByRole("button", { name: /Confirm/ });
+    expect(cancel).toBeDisabled();
+    expect(confirm).toBeDisabled();
+    expect(cancel).toHaveAttribute("data-size", "touch");
+    expect(confirm).toHaveAttribute("data-size", "touch");
+  });
+
+  it("Undo (confirmed), Ask again (expired), and Try again/Cancel (error) all resolve to the touch size too", () => {
+    const { rerender } = render(
+      <ConsequentialActionPreview preview={expensePreview} state="confirmed" />,
+    );
+    expect(screen.getByRole("button", { name: "Undo" })).toHaveAttribute("data-size", "touch");
+
+    rerender(<ConsequentialActionPreview preview={expensePreview} state="expired" />);
+    expect(screen.getByRole("button", { name: "Ask again" })).toHaveAttribute("data-size", "touch");
+
+    rerender(
+      <ConsequentialActionPreview preview={expensePreview} state="error" errorMessage="x" />,
+    );
+    expect(screen.getByRole("button", { name: "Try again" })).toHaveAttribute("data-size", "touch");
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("data-size", "touch");
+  });
+});
+
+describe("ConsequentialActionPreview — automated accessibility (axe)", () => {
+  // jsdom has no layout engine, so axe's layout-dependent rules
+  // (color-contrast, etc.) are unreliable/inert here -- this catches
+  // structural/ARIA/semantic violations only (accessibility-requirements.md).
+  it("has no axe violations in the proposed state (Cancel/Confirm visible)", async () => {
+    const { container } = render(
+      <ConsequentialActionPreview preview={expensePreview} state="proposed" expiresAt={new Date(Date.now() + 60_000)} />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("has no axe violations in the confirmed state (Undo link visible)", async () => {
+    const { container } = render(
+      <ConsequentialActionPreview preview={expensePreview} state="confirmed" />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("has no axe violations in the error state", async () => {
+    const { container } = render(
+      <ConsequentialActionPreview preview={expensePreview} state="error" errorMessage="This account was deleted since you asked." />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
   });
 });
 

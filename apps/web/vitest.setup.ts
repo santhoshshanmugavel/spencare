@@ -1,6 +1,14 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach } from "vitest";
+import { afterEach, expect } from "vitest";
+import { toHaveNoViolations } from "jest-axe";
+
+// Registers `expect(...).toHaveNoViolations()` for the axe-based automated
+// accessibility checks on the highest-risk Foundation components
+// (accessibility-requirements.md). jsdom has no layout engine, so
+// layout-dependent rules (color-contrast, etc.) are unreliable/inert here --
+// this catches structural/ARIA/semantic violations only.
+expect.extend(toHaveNoViolations);
 
 // jsdom doesn't implement ResizeObserver, which Radix primitives (Tooltip,
 // Dialog, Sheet content sizing) touch as soon as they actually open.

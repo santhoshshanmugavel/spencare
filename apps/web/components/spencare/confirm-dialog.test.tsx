@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { axe } from "jest-axe";
 import { describe, expect, it, vi } from "vitest";
 import { ConfirmDialog } from "./confirm-dialog";
 
@@ -83,6 +84,20 @@ describe("<ConfirmDialog>", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it("both actions resolve to the touch size (44px minimum, accessibility-requirements.md §5)", () => {
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={() => {}}
+        title="Delete goal?"
+        confirmLabel="Delete"
+        onConfirm={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveAttribute("data-size", "touch");
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("data-size", "touch");
+  });
+
   it("renders as an accessible dialog with the title as its accessible name", () => {
     render(
       <ConfirmDialog
@@ -94,5 +109,20 @@ describe("<ConfirmDialog>", () => {
       />,
     );
     expect(screen.getByRole("dialog", { name: "Delete my account?" })).toBeInTheDocument();
+  });
+
+  it("has no axe violations when open with a full consequence list", async () => {
+    const { container } = render(
+      <ConfirmDialog
+        open
+        onOpenChange={() => {}}
+        title="Delete my account?"
+        description="This action is permanent and cannot be undone."
+        consequences={["Transaction history and insights", "All your accounts and balances"]}
+        confirmLabel="Verify & delete"
+        onConfirm={() => {}}
+      />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
   });
 });

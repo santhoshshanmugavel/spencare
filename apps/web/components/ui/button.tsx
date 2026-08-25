@@ -33,6 +33,14 @@ const buttonVariants = cva(
         xs: "h-6 gap-1 rounded-full px-2.5 text-xs has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 gap-1 rounded-full px-3 text-[0.8rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-9 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
+        // 44x44 minimum touch target (accessibility-requirements.md §5/§10)
+        // -- h-11 = 2.75rem = 44px fixed height; min-w-11 = 44px floor width
+        // that still grows with label text, on Tailwind's default 4px scale
+        // (the same scale NavigationRail's size-11 and PinOtpInput's size-12
+        // already rely on elsewhere in this codebase). Use for any control
+        // whose mis-tap has real consequences (financial confirm/cancel).
+        touch:
+          "h-11 min-w-11 gap-1.5 px-4 has-data-[icon=inline-end]:pr-3.5 has-data-[icon=inline-start]:pl-3.5",
         icon: "size-8 rounded-full",
         "icon-xs": "size-6 rounded-full [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-7 rounded-full",

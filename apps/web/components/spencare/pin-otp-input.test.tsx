@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { axe } from "jest-axe";
 import { describe, expect, it, vi } from "vitest";
 import { PinOtpInput } from "./pin-otp-input";
 
@@ -92,5 +93,15 @@ describe("<PinOtpInput>", () => {
     for (const box of screen.getAllByRole("textbox")) {
       expect(box).toBeDisabled();
     }
+  });
+
+  it("has no axe violations (PIN mode)", async () => {
+    const { container } = render(<PinOtpInput length={4} value="" onChange={() => {}} masked />);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("has no axe violations (OTP mode, error state)", async () => {
+    const { container } = render(<PinOtpInput length={6} value="" onChange={() => {}} error />);
+    expect(await axe(container)).toHaveNoViolations();
   });
 });

@@ -68,13 +68,18 @@ export function ConfirmDialog({
         ) : null}
 
         <DialogFooter>
+          {/* size="touch": 44x44 minimum touch target
+              (accessibility-requirements.md §5) -- this dialog gates
+              destructive/consequential actions (Delete Account, Deactivate
+              AI Brain), the same mis-tap-has-consequences class of control
+              as ConsequentialActionPreview's footer. */}
           {/* Destructive action: outline weight, per the evidenced convention. */}
-          <Button variant="destructive" onClick={onConfirm} disabled={confirmDisabled}>
+          <Button variant="destructive" size="touch" onClick={onConfirm} disabled={confirmDisabled}>
             {confirmLabel}
           </Button>
           {/* Safe/cancel action: solid primary weight -- deliberately the
               heavier visual treatment, nudging toward safety. */}
-          <Button variant="default" onClick={() => onOpenChange(false)}>
+          <Button variant="default" size="touch" onClick={() => onOpenChange(false)}>
             {cancelLabel}
           </Button>
         </DialogFooter>

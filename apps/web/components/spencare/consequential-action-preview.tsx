@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 /**
@@ -165,11 +166,15 @@ export function ConsequentialActionPreview({
   }, [state, preview.summary, errorMessage]);
 
   return (
-    <div
+    <Card
       role="group"
       aria-label={`${meta.label}: ${preview.summary}`}
       className={cn(
-        "relative overflow-hidden rounded-lg border border-border bg-card pl-4",
+        // card.standard (design-system-specification.md §3) is the canonical
+        // container for this component -- reset the default Card
+        // spacing/gap to 0 so the header/body divs below own their own
+        // padding exactly as before, instead of double-padding.
+        "relative gap-0 py-0 pl-4 [--card-spacing:--spacing(0)]",
         className,
       )}
       data-state={state}
@@ -228,13 +233,17 @@ export function ConsequentialActionPreview({
         ) : null}
 
         <div className="mt-4 flex justify-end gap-2">
+          {/* All footer actions use size="touch" (44x44 minimum) --
+              accessibility-requirements.md §5/§10, confirmation-ui-
+              specification.md §9: a mis-tap on any control in this card can
+              authorize or reject a real financial mutation. */}
           {state === "proposed" ? (
             <>
-              <Button variant="outline" size="sm" onClick={onCancel}>
+              <Button variant="outline" size="touch" onClick={onCancel}>
                 Cancel
               </Button>
               {/* No autoFocus here, ever -- confirmation-ui-specification.md §9. */}
-              <Button variant="default" size="sm" onClick={onConfirm}>
+              <Button variant="default" size="touch" onClick={onConfirm}>
                 Confirm
               </Button>
             </>
@@ -242,10 +251,10 @@ export function ConsequentialActionPreview({
 
           {state === "confirming" ? (
             <>
-              <Button variant="outline" size="sm" disabled>
+              <Button variant="outline" size="touch" disabled>
                 Cancel
               </Button>
-              <Button variant="default" size="sm" disabled>
+              <Button variant="default" size="touch" disabled>
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 Confirm
               </Button>
@@ -253,23 +262,23 @@ export function ConsequentialActionPreview({
           ) : null}
 
           {state === "confirmed" && preview.undoable ? (
-            <Button variant="ghost" size="sm" onClick={onUndo}>
+            <Button variant="ghost" size="touch" onClick={onUndo}>
               Undo
             </Button>
           ) : null}
 
           {state === "expired" ? (
-            <Button variant="outline" size="sm" onClick={onRetry}>
+            <Button variant="outline" size="touch" onClick={onRetry}>
               Ask again
             </Button>
           ) : null}
 
           {state === "error" ? (
             <>
-              <Button variant="ghost" size="sm" onClick={onCancel}>
+              <Button variant="ghost" size="touch" onClick={onCancel}>
                 Cancel
               </Button>
-              <Button variant="outline" size="sm" onClick={onRetry}>
+              <Button variant="outline" size="touch" onClick={onRetry}>
                 Try again
               </Button>
             </>
@@ -280,6 +289,6 @@ export function ConsequentialActionPreview({
       <div ref={liveRegionRef} aria-live="polite" className="sr-only" role="status">
         {announcement}
       </div>
-    </div>
+    </Card>
   );
 }
