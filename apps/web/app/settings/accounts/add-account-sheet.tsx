@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { createAccountAction } from "./actions";
+import { ChangeCurrencyDialog } from "./change-currency-dialog";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP"];
 
@@ -55,15 +56,19 @@ function useMoneyField(initial = "") {
 
 function BankForm({ onDone }: { onDone: () => void }) {
   const money = useMoneyField();
+  const [currencyDialogOpen, setCurrencyDialogOpen] = useState(false);
   const {
     register,
     control,
+    watch,
+    setValue,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(createBankAccountSchema),
     defaultValues: { type: "bank" as const, name: "", currency: "INR", balanceMinor: 0 },
   });
+  const currency = watch("currency");
 
   async function onSubmit(data: CreateAccountInput) {
     const result = await createAccountAction(data);
@@ -80,21 +85,7 @@ function BankForm({ onDone }: { onDone: () => void }) {
       <FormField id="bank-name" label="Bank name" error={errors.name?.message}>
         <Input id="bank-name" placeholder="Eg: HDFC, IDFC Bank" aria-invalid={!!errors.name} aria-describedby={errors.name ? errorId("bank-name") : undefined} {...register("name")} />
       </FormField>
-      <FormField id="bank-currency" label="Currency" error={errors.currency?.message}>
-        <Controller
-          control={control}
-          name="currency"
-          render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger id="bank-currency"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CURRENCIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-        />
-      </FormField>
-      <FormField id="bank-balance" label="Available balance" error={errors.balanceMinor?.message}>
+      <FormField id="bank-balance" label={`Available balance (${currency} ₹)`} error={errors.balanceMinor?.message}>
         <Controller
           control={control}
           name="balanceMinor"
@@ -103,6 +94,19 @@ function BankForm({ onDone }: { onDone: () => void }) {
           )}
         />
       </FormField>
+      <button
+        type="button"
+        className="-mt-2 text-xs font-medium text-primary hover:underline"
+        onClick={() => setCurrencyDialogOpen(true)}
+      >
+        Change currency
+      </button>
+      <ChangeCurrencyDialog
+        open={currencyDialogOpen}
+        onOpenChange={setCurrencyDialogOpen}
+        currency={currency}
+        onChange={(c) => setValue("currency", c)}
+      />
       <p className="text-xs text-muted-foreground">Your financial data stays private and encrypted.</p>
       <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? "Adding…" : "Add account"}
@@ -156,6 +160,8 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
   const {
     register,
     control,
+    watch,
+    setValue,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm({
@@ -168,6 +174,8 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
       creditUsedMinor: 0,
     },
   });
+  const [currencyDialogOpen, setCurrencyDialogOpen] = useState(false);
+  const currency = watch("currency");
 
   async function onSubmit(data: CreateAccountInput) {
     const result = await createAccountAction(data);
@@ -184,7 +192,7 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
       <FormField id="cc-name" label="Card provider" error={errors.name?.message}>
         <Input id="cc-name" placeholder="Eg: ICICI, HDFC" aria-invalid={!!errors.name} aria-describedby={errors.name ? errorId("cc-name") : undefined} {...register("name")} />
       </FormField>
-      <FormField id="cc-limit" label="Total credit limit" error={errors.creditLimitMinor?.message}>
+      <FormField id="cc-limit" label={`Total credit limit (${currency} ₹)`} error={errors.creditLimitMinor?.message}>
         <Controller
           control={control}
           name="creditLimitMinor"
@@ -193,6 +201,19 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
           )}
         />
       </FormField>
+      <button
+        type="button"
+        className="-mt-2 text-xs font-medium text-primary hover:underline"
+        onClick={() => setCurrencyDialogOpen(true)}
+      >
+        Change currency
+      </button>
+      <ChangeCurrencyDialog
+        open={currencyDialogOpen}
+        onOpenChange={setCurrencyDialogOpen}
+        currency={currency}
+        onChange={(c) => setValue("currency", c)}
+      />
       <FormField id="cc-used" label="Current outstanding balance" error={errors.creditUsedMinor?.message} hint="Spensa uses this to track credit usage and spending.">
         <Controller
           control={control}

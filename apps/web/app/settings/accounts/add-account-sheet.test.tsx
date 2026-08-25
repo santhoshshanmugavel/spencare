@@ -40,6 +40,18 @@ describe("<AddAccountSheet> — accessibility", () => {
   });
 });
 
+describe("<AddAccountSheet> — Change Currency (SP-236)", () => {
+  it("opens the currency sub-modal and reflects the chosen currency back in the balance label", async () => {
+    const user = userEvent.setup();
+    render(<AddAccountSheet open onOpenChange={() => {}} onCreated={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "Change currency" }));
+    expect(screen.getByRole("heading", { name: "Change Currency" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/all account balances and spending will be displayed in/i),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("<AddAccountSheet> — bank tab (default)", () => {
   it("requires a name before submitting", async () => {
     const { createAccountAction } = await import("./actions");
@@ -56,7 +68,7 @@ describe("<AddAccountSheet> — bank tab (default)", () => {
     const user = userEvent.setup();
     render(<AddAccountSheet open onOpenChange={() => {}} onCreated={onCreated} />);
     await user.type(screen.getByLabelText("Bank name"), "HDFC Bank");
-    await user.type(screen.getByLabelText("Available balance"), "50000");
+    await user.type(screen.getByLabelText("Available balance (INR ₹)"), "50000");
     await user.click(screen.getByRole("button", { name: "Add account" }));
     expect(await screen.findByRole("button", { name: "Add account" })).toBeEnabled();
     expect(createAccountAction).toHaveBeenCalledWith(
@@ -73,7 +85,7 @@ describe("<AddAccountSheet> — credit card tab", () => {
     render(<AddAccountSheet open onOpenChange={() => {}} onCreated={() => {}} />);
     await user.click(screen.getByRole("tab", { name: "Credit card" }));
     await user.type(screen.getByLabelText("Card provider"), "ICICI");
-    await user.type(screen.getByLabelText("Total credit limit"), "200000");
+    await user.type(screen.getByLabelText("Total credit limit (INR ₹)"), "200000");
     await user.type(screen.getByLabelText("Current outstanding balance"), "45000");
     await user.click(screen.getByRole("button", { name: "Add card" }));
     expect(createAccountAction).toHaveBeenCalledWith(

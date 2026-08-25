@@ -104,10 +104,39 @@ describe("<AccountList> — populated", () => {
     expect(screen.queryByText(/balance|available/i)).not.toBeInTheDocument();
   });
 
-  it("exposes accessible, name-specific Edit/Delete actions per row", () => {
+  it("exposes an accessible, name-specific Actions menu per card (SP-238/SP-239 dropdown, not hover icons)", () => {
     render(<AccountList initialAccounts={[bank()]} masked={false} />);
-    expect(screen.getByRole("button", { name: "Edit HDFC Savings" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete HDFC Savings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actions for HDFC Savings" })).toBeInTheDocument();
+  });
+
+  it("Actions menu offers only Edit/Delete this phase -- Add money/View reserved goals/Self transfer/Pay Now need the Transactions/Goals engine and are correctly deferred", async () => {
+    const user = userEvent.setup();
+    render(<AccountList initialAccounts={[bank()]} masked={false} />);
+    await user.click(screen.getByRole("button", { name: "Actions for HDFC Savings" }));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "Edit account" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Delete account" })).toBeInTheDocument();
+    expect(within(menu).queryByText(/add money|view reserved goals|self transfer|pay now/i)).not.toBeInTheDocument();
+  });
+
+  it("credit card Actions menu uses card-specific wording (SP-239)", async () => {
+    const user = userEvent.setup();
+    render(<AccountList initialAccounts={[creditCard]} masked={false} />);
+    await user.click(screen.getByRole("button", { name: "Actions for ICICI Card" }));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "Edit credit card" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Delete credit card" })).toBeInTheDocument();
+  });
+
+  it("shows credit card utilization (used / total limit) using existing schema data, not fabricated figures", () => {
+    render(<AccountList initialAccounts={[creditCard]} masked={false} />);
+    expect(screen.getByText(/used/)).toBeInTheDocument();
+    expect(screen.getByText(/total limit/)).toBeInTheDocument();
+  });
+
+  it("masks both the headline and the used/total sub-line under Privacy Mode (CF-D09 -- the source screens themselves flag the sub-line as a real leak)", () => {
+    render(<AccountList initialAccounts={[creditCard]} masked />);
+    expect(screen.queryByText(/₹45,000|₹2,00,000|450|2,00,000/)).not.toBeInTheDocument();
   });
 
   it("opens the Add Account sheet from the header button", async () => {
@@ -120,7 +149,8 @@ describe("<AccountList> — populated", () => {
   it("opens Edit for the clicked account only", async () => {
     const user = userEvent.setup();
     render(<AccountList initialAccounts={[bank(), creditCard]} masked={false} />);
-    await user.click(screen.getByRole("button", { name: "Edit ICICI Card" }));
+    await user.click(screen.getByRole("button", { name: "Actions for ICICI Card" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit credit card" }));
     expect(screen.getByText("Edit account")).toBeInTheDocument();
     expect(screen.getByText(/Update ICICI Card/)).toBeInTheDocument();
   });
@@ -128,7 +158,8 @@ describe("<AccountList> — populated", () => {
   it("opens the archive confirmation for the clicked account, gated behind a preview (not a single-click destructive action)", async () => {
     const user = userEvent.setup();
     render(<AccountList initialAccounts={[bank()]} masked={false} />);
-    await user.click(screen.getByRole("button", { name: "Delete HDFC Savings" }));
+    await user.click(screen.getByRole("button", { name: "Actions for HDFC Savings" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete account" }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Confirm" })).toBeInTheDocument();
@@ -138,7 +169,8 @@ describe("<AccountList> — populated", () => {
     const { archiveAccountAction } = await import("./actions");
     const user = userEvent.setup();
     render(<AccountList initialAccounts={[bank()]} masked={false} />);
-    await user.click(screen.getByRole("button", { name: "Delete HDFC Savings" }));
+    await user.click(screen.getByRole("button", { name: "Actions for HDFC Savings" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete account" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
     expect(archiveAccountAction).toHaveBeenCalledWith("acc-bank-1");
   });

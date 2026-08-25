@@ -2,17 +2,28 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Landmark, Wallet, CreditCard, TrendingUp, Pencil, Trash2 } from "lucide-react";
-import { Money as DomainMoney } from "@spencare/domain-core";
+import { Landmark, Wallet, CreditCard, TrendingUp } from "lucide-react";
 import type { AccountRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ListRow } from "@/components/spencare/list-row";
-import { Money } from "@/components/spencare/money";
+import { Card, CardContent } from "@/components/ui/card";
+import { AccountCard } from "@/components/spencare/account-card";
 import { AddAccountSheet } from "./add-account-sheet";
 import { EditAccountSheet } from "./edit-account-sheet";
 import { ArchiveAccountDialog } from "./archive-account-dialog";
 
+/**
+ * Grid-of-cards layout per SP-234 ("Settings > Accounts (Main Grid)"),
+ * grouped into type sections with headers — replaces an earlier pass's
+ * grouped-<ListRow> layout, which was built before the screen specs were
+ * consulted and doesn't match the source screen's actual anatomy
+ * (component-inventory.md §6 "Account card" vs §8 "Transaction/list
+ * row" are two distinct, non-interchangeable patterns).
+ *
+ * Column count below 1024px is INFERRED — SP-234 itself marks its own
+ * responsive behavior "INFERRED (desktop grid only)"; no mobile/tablet
+ * evidence exists for this screen. A single column at narrow widths and
+ * two above `sm` is the least-risky reading, not a claimed observation.
+ */
 const SECTION_ORDER = ["bank", "credit_card", "cash", "investment"] as const;
 const SECTION_LABELS: Record<(typeof SECTION_ORDER)[number], string> = {
   bank: "Banks",
@@ -26,36 +37,6 @@ const SECTION_ICONS: Record<(typeof SECTION_ORDER)[number], React.ReactNode> = {
   cash: <Wallet className="size-4" aria-hidden="true" />,
   investment: <TrendingUp className="size-4" aria-hidden="true" />,
 };
-
-function trailingFor(account: AccountRow, masked: boolean) {
-  if (account.type === "credit_card") {
-    const limit = account.credit_limit_minor ?? 0;
-    const used = account.credit_used_minor ?? 0;
-    const available = DomainMoney.fromMinorUnits(BigInt(limit - used), account.currency as never);
-    return (
-      <div className="text-right">
-        <Money value={available} masked={masked} size="numeric" aria-label={`Credit limit available for ${account.name}`} />
-        <p className="text-xs text-muted-foreground">Credit limit available</p>
-      </div>
-    );
-  }
-  if (account.type === "investment") {
-    const value = DomainMoney.fromMinorUnits(BigInt(account.market_value_minor ?? 0), account.currency as never);
-    return (
-      <div className="text-right">
-        <Money value={value} masked={masked} size="numeric" aria-label={`Total invested in ${account.name}`} />
-        <p className="text-xs text-muted-foreground">Total invested</p>
-      </div>
-    );
-  }
-  const value = DomainMoney.fromMinorUnits(BigInt(account.balance_minor), account.currency as never);
-  return (
-    <div className="text-right">
-      <Money value={value} masked={masked} size="numeric" tone="auto" aria-label={`Balance for ${account.name}`} />
-      <p className="text-xs text-muted-foreground">Total balance</p>
-    </div>
-  );
-}
 
 export function AccountList({
   initialAccounts,
@@ -104,46 +85,23 @@ export function AccountList({
       ) : null}
 
       {grouped.map((section) => (
-        <Card key={section.type}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              {SECTION_ICONS[section.type]}
-              {SECTION_LABELS[section.type]}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
+        <div key={section.type} className="space-y-3">
+          <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
+            {SECTION_ICONS[section.type]}
+            {SECTION_LABELS[section.type]}
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {section.accounts.map((account) => (
-              <ListRow
+              <AccountCard
                 key={account.id}
-                icon={SECTION_ICONS[account.type]}
-                title={account.name}
-                trailing={trailingFor(account, masked)}
-                hoverActions={
-                  <>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Edit ${account.name}`}
-                      onClick={() => setEditing(account)}
-                    >
-                      <Pencil className="size-4" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Delete ${account.name}`}
-                      onClick={() => setArchiving(account)}
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </Button>
-                  </>
-                }
+                account={account}
+                masked={masked}
+                onEdit={() => setEditing(account)}
+                onDelete={() => setArchiving(account)}
               />
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ))}
 
       <AddAccountSheet
