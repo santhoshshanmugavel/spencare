@@ -12,3 +12,4 @@ coverage/
 supabase/.branches/
 supabase/.temp/
 *.tsbuildinfo
+next-env.d.ts
