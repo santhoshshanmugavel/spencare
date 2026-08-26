@@ -192,6 +192,75 @@ R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/accounts?id=
 check "user2 cannot delete user1's account row (RLS, HTTP 204/0 rows)" "204" "$R"
 echo
 
+echo "== transactions: ownership / IDOR (Phase 8) =="
+TXN_ACC=$(curl -s -X POST "$BASE/rest/v1/accounts" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"type\":\"bank\",\"name\":\"Txn Smoke Bank\",\"currency\":\"INR\",\"balance_minor\":1000000}")
+TXN_ACCID=$(echo "$TXN_ACC" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+TXN_ACC2=$(curl -s -X POST "$BASE/rest/v1/accounts" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"type\":\"cash\",\"name\":\"Txn Smoke Cash\",\"currency\":\"INR\",\"balance_minor\":0}")
+TXN_ACCID2=$(echo "$TXN_ACC2" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+CATID=$(curl -s "$BASE/rest/v1/categories?is_system=eq.true&limit=1&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+TXN=$(curl -s -X POST "$BASE/rest/v1/rpc/create_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_account_id\":\"$TXN_ACCID\",\"p_type\":\"expense\",\"p_amount_minor\":50000,\"p_category_id\":\"$CATID\",\"p_occurred_at\":\"2026-08-25\"}")
+TXNID=$(echo "$TXN" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
+
+R=$(curl -s "$BASE/rest/v1/transactions?id=eq.$TXNID&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's transaction" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/transactions?id=eq.$TXNID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"amount_minor":999999}')
+check "user2 cannot update user1's transaction via raw PATCH (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/transactions" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"account_id\":\"$TXN_ACCID\",\"type\":\"income\",\"amount_minor\":1,\"currency\":\"INR\",\"category_id\":\"$CATID\",\"occurred_at\":\"2026-08-25\"}")
+check "user2 cannot insert a transaction impersonating user1 (RLS with check, HTTP 403)" "403" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/create_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_account_id\":\"$TXN_ACCID\",\"p_type\":\"expense\",\"p_amount_minor\":50000,\"p_category_id\":\"$CATID\",\"p_occurred_at\":\"2026-08-25\"}")
+check "user2 cannot spoof p_user_id in create_transaction to post against user1's account" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/transfer" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_from_account_id\":\"$TXN_ACCID\",\"p_to_account_id\":\"$TXN_ACCID2\",\"p_amount_minor\":50000,\"p_occurred_at\":\"2026-08-25\"}")
+check "user2 cannot spoof p_user_id in transfer to move user1's money" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/update_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_transaction_id\":\"$TXNID\",\"p_account_id\":\"$TXN_ACCID\",\"p_amount_minor\":1,\"p_category_id\":\"$CATID\",\"p_occurred_at\":\"2026-08-25\"}")
+check "user2 cannot spoof p_user_id in update_transaction to edit user1's transaction" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/delete_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_transaction_id\":\"$TXNID\"}")
+check "user2 cannot spoof p_user_id in delete_transaction to delete user1's transaction" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "user1's account balance unchanged after every one of user2's spoofed attempts" "950000" "$R"
+
+R=$(curl -s "$BASE/rest/v1/transactions?id=eq.$TXNID&select=amount_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['amount_minor'])")
+check "user1's transaction amount unchanged after user2's spoofed update attempt" "50000" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/update_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_transaction_id\":\"$TXNID\",\"p_account_id\":\"$TXN_ACCID\",\"p_amount_minor\":60000,\"p_category_id\":\"$CATID\",\"p_occurred_at\":\"2026-08-25\"}")
+check "user1 (real owner) can update their own transaction" "200" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/delete_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_transaction_id\":\"$TXNID\"}")
+check "user1 (real owner) can delete their own transaction" "204" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/transactions?id=eq.$TXNID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot delete user1's transaction row via raw REST DELETE (RLS, HTTP 204/0 rows)" "204" "$R"
+echo
+
 echo "== summary =="
 echo "  $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then

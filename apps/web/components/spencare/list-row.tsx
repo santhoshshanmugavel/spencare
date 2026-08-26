@@ -23,6 +23,16 @@ export interface ListRowProps {
   hoverActions?: ReactNode;
   onClick?: () => void;
   className?: string;
+  /**
+   * Only meaningful when `onClick` is set. Without it, a clickable row's
+   * accessible name falls back to browser name-from-content — every text
+   * node (title, metadata, trailing amount) concatenated with no
+   * separators (e.g. "SwiggyDiningHDFC Bank₹450.00"), which is valid but
+   * unusable read aloud. Found live during Phase 8 (Transactions), the
+   * first feature to actually use ListRow as a clickable row rather than
+   * a static line with separate hover-action buttons.
+   */
+  "aria-label"?: string;
 }
 
 export function ListRow({
@@ -34,12 +44,14 @@ export function ListRow({
   hoverActions,
   onClick,
   className,
+  "aria-label": ariaLabel,
 }: ListRowProps) {
   const isInteractive = typeof onClick === "function";
 
   return (
     <div
       role={isInteractive ? "button" : undefined}
+      aria-label={isInteractive ? ariaLabel : undefined}
       tabIndex={isInteractive ? 0 : undefined}
       onClick={onClick}
       onKeyDown={
