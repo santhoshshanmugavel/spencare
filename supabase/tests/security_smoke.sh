@@ -261,6 +261,48 @@ R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/transactions
 check "user2 cannot delete user1's transaction row via raw REST DELETE (RLS, HTTP 204/0 rows)" "204" "$R"
 echo
 
+echo "== budgets: ownership / IDOR (Phase 9) =="
+# Budgets use plain RLS-scoped CRUD, no SECURITY DEFINER RPC (locked Phase 9
+# decision: single-table mutation, no cross-table balance, no audit_log
+# requirement found in any source document) -- so unlike accounts/transactions
+# there is no p_user_id-spoofing RPC vector to test here. Every check below
+# is a raw PostgREST call exercising RLS directly.
+BUDGET_CATID=$(curl -s "$BASE/rest/v1/categories?is_system=eq.true&limit=1&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+BUDGET=$(curl -s -X POST "$BASE/rest/v1/budgets" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"category_id\":\"$BUDGET_CATID\",\"period_start\":\"2026-08-01\",\"period_end\":\"2026-08-31\",\"amount_minor\":600000}")
+BUDGETID=$(echo "$BUDGET" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s "$BASE/rest/v1/budgets?id=eq.$BUDGETID&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's budget" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/budgets?id=eq.$BUDGETID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"amount_minor":1}')
+check "user2 cannot update (shrink) user1's budget limit (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/budgets?id=eq.$BUDGETID&select=amount_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['amount_minor'])")
+check "user1's budget limit unchanged after user2's attempted manipulation" "600000" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/budgets" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"category_id\":\"$BUDGET_CATID\",\"period_start\":\"2026-09-01\",\"period_end\":\"2026-09-30\",\"amount_minor\":1}")
+check "user2 cannot insert a budget impersonating user1 (RLS with check, HTTP 403)" "403" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/budgets?id=eq.$BUDGETID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot delete user1's budget row (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/budgets?id=eq.$BUDGETID&select=deleted_at" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['deleted_at'])")
+check "user1's budget still not deleted after user2's attempted DELETE" "None" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/budgets?id=eq.$BUDGETID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d '{"amount_minor":750000}')
+check "user1 (real owner) can update their own budget" "204" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/budgets?id=eq.$BUDGETID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"deleted_at\":\"2026-08-25T00:00:00Z\"}")
+check "user1 (real owner) can soft-delete their own budget" "204" "$R"
+echo
+
 echo "== summary =="
 echo "  $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then

@@ -1,23 +1,34 @@
 import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight } from "lucide-react";
-import { getProfile, listAccounts, listCategories, listTransactions, type AuthContext } from "@spencare/domain-application";
+import { getProfile, listBudgetsWithUsage, listCategories, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { CashFlowTabs } from "@/components/spencare/cash-flow-tabs";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
-import { TransactionList } from "./transaction-list";
+import { BudgetDashboard } from "./budget-dashboard";
+
+function currentPeriodStart(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
 
 /**
- * Route matches SP-089/090's OBSERVED `/cash-flow/transactions`. This page
- * renders only the transaction-list slice (SP-081's row anatomy) -- the
- * surrounding Cash Flow page chrome (donut, spend-limits panel, month
- * stepper, AI insight banner, the SP-081-vs-SP-089/090 toolbar question)
- * is step-12 Cash Flow per design-decision-gate.md §I, out of Phase 8's
- * scope. "Cash Flow" is one of NavigationRail's own documented 4
- * destinations (component-inventory.md §18) -- wiring it here is
- * completing an already-specified nav item, not inventing one.
+ * Route mirrors Phase 8's `/cash-flow/transactions` convention -- Budgets
+ * is step 9 of design-decision-gate.md §I's build order, under the same
+ * Cash Flow area. This renders SP-166's "Spend limits" dashboard slice
+ * only: the surrounding Cash Flow page chrome (donut, Income tab, "All
+ * accounts" filter, sparkle/AI banner) belongs to step-12 Cash Flow /
+ * step-8 Safe to Spend, both out of this phase's scope.
+ *
+ * The `?month=YYYY-MM-01` param is a minimal period switch (budgets are
+ * inherently monthly per the `period_start`/`period_end` schema) -- not a
+ * fabricated feature, just the smallest UI needed to view more than the
+ * current month.
  */
-export default async function TransactionsPage() {
+export default async function BudgetsPage(props: PageProps<"/cash-flow/budgets">) {
+  const params = await props.searchParams;
+  const periodStart = typeof params.month === "string" ? params.month : currentPeriodStart();
+
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -30,13 +41,11 @@ export default async function TransactionsPage() {
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
-  const [transactions, accounts, categories, profile] = await Promise.all([
-    listTransactions(ctx),
-    listAccounts(ctx),
+  const [usages, categories, profile] = await Promise.all([
+    listBudgetsWithUsage(ctx, periodStart),
     listCategories(ctx),
     getProfile(ctx),
   ]);
-  const spendEligibleAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
 
   return (
     <AppShell
@@ -50,7 +59,6 @@ export default async function TransactionsPage() {
               label: "Cash Flow",
               icon: <ArrowLeftRight className="size-5" />,
               href: "/cash-flow/transactions",
-              active: true,
             },
             {
               key: "settings",
@@ -63,12 +71,12 @@ export default async function TransactionsPage() {
       }
     >
       <div className="mx-auto max-w-2xl">
-        <CashFlowTabs active="transactions" />
+        <CashFlowTabs active="budgets" />
       </div>
       <div className="mx-auto max-w-2xl py-8">
-        <TransactionList
-          initialTransactions={transactions}
-          accounts={spendEligibleAccounts}
+        <BudgetDashboard
+          periodStart={periodStart}
+          usages={usages}
           categories={categories}
           masked={profile?.privacy_mode_enabled ?? false}
         />

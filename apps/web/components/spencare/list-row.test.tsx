@@ -31,7 +31,7 @@ describe("<ListRow>", () => {
     render(<ListRow title="Netflix" onClick={onClick} />);
 
     const row = screen.getByRole("button");
-    expect(row).toHaveAttribute("tabindex", "0");
+    expect(row.tagName).toBe("BUTTON"); // natively focusable/tabbable, no explicit tabindex needed
 
     row.focus();
     await user.keyboard("{Enter}");

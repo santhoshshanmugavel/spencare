@@ -48,29 +48,8 @@ export function ListRow({
 }: ListRowProps) {
   const isInteractive = typeof onClick === "function";
 
-  return (
-    <div
-      role={isInteractive ? "button" : undefined}
-      aria-label={isInteractive ? ariaLabel : undefined}
-      tabIndex={isInteractive ? 0 : undefined}
-      onClick={onClick}
-      onKeyDown={
-        isInteractive
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onClick?.();
-              }
-            }
-          : undefined
-      }
-      className={cn(
-        "group/row flex min-h-14 items-center gap-3 rounded-lg px-3 py-2",
-        isInteractive &&
-          "cursor-pointer hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        className,
-      )}
-    >
+  const content = (
+    <>
       {icon ? <div className="flex size-9 shrink-0 items-center justify-center">{icon}</div> : null}
 
       <div className="min-w-0 flex-1">
@@ -87,6 +66,31 @@ export function ListRow({
       ))}
 
       {trailing ? <div className="shrink-0 text-right">{trailing}</div> : null}
+    </>
+  );
+
+  return (
+    <div className={cn("group/row flex min-h-14 items-center gap-3 rounded-lg px-3 py-2", className)}>
+      {isInteractive ? (
+        // A real <button>, not a div[role=button] wrapping the whole row --
+        // when `hoverActions` also contains real buttons (Delete), nesting
+        // them inside a div[role=button] is an ARIA "nested interactive
+        // controls" violation (axe: nested-interactive), caught live while
+        // testing Budgets (Phase 9), the first feature to combine
+        // hoverActions with a clickable row. Scoping the button to just the
+        // row's own content -- leaving hoverActions as true siblings --
+        // keeps every interactive element a sibling, never nested.
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={ariaLabel}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {content}
+        </button>
+      ) : (
+        content
+      )}
 
       {hoverActions ? (
         <div className="hidden shrink-0 items-center gap-1 group-hover/row:flex group-focus-within/row:flex">
