@@ -28,6 +28,15 @@
 
 set -u
 ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
+# Fixed local-dev demo JWT (same one `supabase status` always prints for a
+# fresh `supabase start`) -- needed once, for the Bills section below, to
+# seed a `bill_predictions` row directly: that table has SELECT-only RLS
+# for `authenticated` (no insert policy at all -- "predictions are written
+# exclusively by the background detection job / matching RPCs, which run
+# under the service role"), so no authenticated user, including the real
+# owner, can insert one via PostgREST. Never sent as an `apikey` header
+# alongside a real user's bearer token elsewhere in this script.
+SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU"
 BASE="http://127.0.0.1:54321"
 PASS=0
 FAIL=0
@@ -367,6 +376,131 @@ check "withdrawing more than the goal's saved amount is rejected (insufficient_s
 R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/goals" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
   -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"name\":\"Spoofed\",\"target_amount_minor\":1,\"funding_account_id\":\"$TXN_ACCID\"}")
 check "user2 cannot insert a goal impersonating user1 (RLS with check, HTTP 403)" "403" "$R"
+echo
+
+echo "== bills: ownership / IDOR (Phase 12) =="
+# bill_definitions has full plain-RLS owner CRUD (checked the same way as
+# goals/budgets below). bill_predictions has SELECT-only RLS -- seeded
+# directly with the service role key (see the SERVICE_ROLE_KEY comment
+# above), since no authenticated user, including the real owner, can
+# insert one via PostgREST.
+BILL=$(curl -s -X POST "$BASE/rest/v1/bill_definitions" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"merchant_pattern\":\"Smoke Test Netflix\",\"expected_amount_minor\":49900,\"recurrence_interval\":\"monthly\",\"detection_source\":\"manual\"}")
+BILLID=$(echo "$BILL" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+PRED=$(curl -s -X POST "$BASE/rest/v1/bill_predictions" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"bill_definition_id\":\"$BILLID\",\"user_id\":\"$UID1\",\"expected_date\":\"2026-09-15\",\"expected_amount_minor\":49900,\"status\":\"open\"}")
+PREDID=$(echo "$PRED" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s "$BASE/rest/v1/bill_definitions?id=eq.$BILLID&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's bill definition" "[]" "$R"
+
+R=$(curl -s "$BASE/rest/v1/bill_predictions?id=eq.$PREDID&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's bill prediction" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/bill_definitions?id=eq.$BILLID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"merchant_pattern":"Hijacked"}')
+check "user2 cannot update user1's bill definition via raw PATCH (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/bill_definitions" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"merchant_pattern\":\"Spoofed\",\"recurrence_interval\":\"monthly\",\"detection_source\":\"manual\"}")
+check "user2 cannot insert a bill definition impersonating user1 (RLS with check, HTTP 403)" "403" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/mark_bill_paid" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_prediction_id\":\"$PREDID\",\"p_account_id\":\"$TXN_ACCID\",\"p_category_id\":\"$CATID\",\"p_amount_minor\":49900,\"p_occurred_at\":\"2026-09-15\"}")
+check "user2 cannot spoof p_user_id in mark_bill_paid to settle user1's bill" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+# 970000 is TXN_ACCID's running balance carried in from the Transactions
+# and Goals sections above (1000000 - 50000 contribution + 20000
+# withdrawal), not a Bills-specific figure -- this check only cares that
+# it did NOT additionally drop by 49900 (the spoofed mark_bill_paid's
+# amount), which would prove the spoofed call actually moved money.
+check "user1's account balance unchanged after user2's spoofed mark_bill_paid attempt" "970000" "$R"
+
+R=$(curl -s "$BASE/rest/v1/bill_predictions?id=eq.$PREDID&select=status" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['status'])")
+check "user1's prediction still open after user2's spoofed mark_bill_paid attempt" "open" "$R"
+
+TXN2=$(curl -s -X POST "$BASE/rest/v1/rpc/create_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_account_id\":\"$TXN_ACCID\",\"p_type\":\"expense\",\"p_amount_minor\":1000,\"p_category_id\":\"$CATID\",\"p_occurred_at\":\"2026-08-25\"}")
+TXNID2=$(echo "$TXN2" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/match_bill_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_prediction_id\":\"$PREDID\",\"p_transaction_id\":\"$TXNID2\"}")
+check "user2 cannot spoof p_user_id in match_bill_transaction to settle user1's bill" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/bill_predictions?id=eq.$PREDID&select=status" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['status'])")
+check "user1's prediction still open after user2's spoofed match_bill_transaction attempt" "open" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/mark_bill_paid" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_prediction_id\":\"$PREDID\",\"p_account_id\":\"$TXN_ACCID\",\"p_category_id\":\"$CATID\",\"p_amount_minor\":49900,\"p_occurred_at\":\"2026-09-15\"}")
+check "user1 (real owner) can mark their own bill paid via the RPC" "200" "$R"
+
+R=$(curl -s "$BASE/rest/v1/bill_predictions?id=eq.$PREDID&select=status,matched_transaction_id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+echo "$R" | grep -q '"status":"matched"' && check "user1's prediction is matched after mark_bill_paid" "pass" "pass" || check "user1's prediction is matched after mark_bill_paid" "pass" "fail: $R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/mark_bill_paid" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_prediction_id\":\"$PREDID\",\"p_account_id\":\"$TXN_ACCID\",\"p_category_id\":\"$CATID\",\"p_amount_minor\":49900,\"p_occurred_at\":\"2026-09-15\"}")
+check "a second mark_bill_paid on an already-matched prediction is rejected (prediction_already_settled, no double payment)" "400" "$R"
+
+MATCHEDTXNID=$(curl -s "$BASE/rest/v1/bill_predictions?id=eq.$PREDID&select=matched_transaction_id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['matched_transaction_id'])")
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/delete_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_transaction_id\":\"$MATCHEDTXNID\"}")
+check "user1 can undo a mark-paid bill by deleting the matched transaction (delete_transaction, HTTP 204 -- void return, same as the Phase 8 delete check above)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/bill_predictions?id=eq.$PREDID&select=status,matched_transaction_id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+echo "$R" | grep -q '"status":"open"' && echo "$R" | grep -q '"matched_transaction_id":null' && check "deleting the matched transaction reopens the prediction (Phase 8's delete_transaction behavior, reused unmodified for Bills)" "pass" "pass" || check "deleting the matched transaction reopens the prediction (Phase 8's delete_transaction behavior, reused unmodified for Bills)" "pass" "fail: $R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/match_bill_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_prediction_id\":\"$PREDID\",\"p_transaction_id\":\"$TXNID2\"}")
+check "user1 (real owner) can match an existing transaction to their own reopened prediction" "200" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/match_bill_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_prediction_id\":\"$PREDID\",\"p_transaction_id\":\"$TXNID2\"}")
+check "matching an already-matched prediction a second time is rejected (prediction_already_settled)" "400" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/bill_definitions?id=eq.$BILLID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot delete user1's bill definition row via raw REST DELETE (RLS, HTTP 204/0 rows)" "204" "$R"
+
+# create_bill: a real defect found live (a plain bill_definitions insert
+# alone leaves a bill with zero predictions, permanently invisible) means
+# this RPC exists specifically to atomically create the definition AND an
+# initial prediction together -- both the IDOR guard and the atomic
+# dual-insert itself need their own direct coverage here, distinct from
+# the raw-insert-based bill_definitions checks above.
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/create_bill" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_merchant_pattern\":\"Spoofed Bill\",\"p_recurrence_interval\":\"monthly\",\"p_initial_expected_date\":\"2026-09-15\"}")
+check "user2 cannot spoof p_user_id in create_bill to create a bill under user1's identity" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+BILLS_BEFORE=$(curl -s "$BASE/rest/v1/bill_definitions?user_id=eq.$UID1&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "user1 has no bill created under their identity by user2's spoofed create_bill attempt" "1" "$BILLS_BEFORE"
+
+RPCBILL=$(curl -s -X POST "$BASE/rest/v1/rpc/create_bill" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_merchant_pattern\":\"Smoke Test Electricity\",\"p_recurrence_interval\":\"monthly\",\"p_initial_expected_date\":\"2026-09-20\"}")
+RPCBILLID=$(echo "$RPCBILL" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
+
+R=$(curl -s "$BASE/rest/v1/bill_predictions?bill_definition_id=eq.$RPCBILLID&select=status,expected_date" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+echo "$R" | grep -q '"status":"open"' && echo "$R" | grep -q '"expected_date":"2026-09-20"' && check "create_bill atomically generated the initial open prediction (the real defect's fix)" "pass" "pass" || check "create_bill atomically generated the initial open prediction (the real defect's fix)" "pass" "fail: $R"
+
+RPCBILL2=$(curl -s -X POST "$BASE/rest/v1/rpc/create_bill" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_merchant_pattern\":\"Smoke Test One-off Repair\",\"p_recurrence_interval\":\"irregular\"}")
+RPCBILLID2=$(echo "$RPCBILL2" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
+R=$(curl -s "$BASE/rest/v1/bill_predictions?bill_definition_id=eq.$RPCBILLID2&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "create_bill generates NO prediction for an irregular bill (no deterministic first occurrence to fabricate)" "0" "$R"
 echo
 
 echo "== summary =="
