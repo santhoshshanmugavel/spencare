@@ -1,4 +1,4 @@
-import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight } from "lucide-react";
+import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
 import { getProfile, listAccounts, listCategories, listTransactions, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
@@ -52,6 +52,7 @@ export default async function TransactionsPage() {
               href: "/cash-flow/transactions",
               active: true,
             },
+            { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             {
               key: "settings",
               label: "Settings",

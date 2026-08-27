@@ -1,4 +1,4 @@
-import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight } from "lucide-react";
+import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
 import { getProfile, listBudgetsWithUsage, listCategories, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
@@ -60,6 +60,7 @@ export default async function BudgetsPage(props: PageProps<"/cash-flow/budgets">
               icon: <ArrowLeftRight className="size-5" />,
               href: "/cash-flow/transactions",
             },
+            { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             {
               key: "settings",
               label: "Settings",

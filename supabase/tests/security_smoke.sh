@@ -303,6 +303,72 @@ R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/budgets?id=eq
 check "user1 (real owner) can soft-delete their own budget" "204" "$R"
 echo
 
+echo "== goals: ownership / IDOR (Phase 11) =="
+# add_goal_contribution had a confirmed live IDOR (no p_user_id = auth.uid()
+# assertion) until migration 20260830000001 -- these checks are the
+# permanent regression proving it stays fixed, plus the new
+# withdraw_goal_contribution RPC built with the assertion from day one.
+GOAL=$(curl -s -X POST "$BASE/rest/v1/goals" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"name\":\"Security Smoke Goal\",\"target_amount_minor\":1000000,\"funding_account_id\":\"$TXN_ACCID\"}")
+GOALID=$(echo "$GOAL" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s "$BASE/rest/v1/goals?id=eq.$GOALID&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's goal" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/goals?id=eq.$GOALID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"target_amount_minor":1}')
+check "user2 cannot update user1's goal (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/goals?id=eq.$GOALID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"status":"archived"}')
+check "user2 cannot archive/delete user1's goal via raw PATCH (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/add_goal_contribution" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_goal_id\":\"$GOALID\",\"p_account_id\":\"$TXN_ACCID\",\"p_amount_minor\":50000}")
+check "user2 cannot spoof p_user_id in add_goal_contribution to contribute to user1's goal" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/withdraw_goal_contribution" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_goal_id\":\"$GOALID\",\"p_account_id\":\"$TXN_ACCID\",\"p_amount_minor\":10000}")
+check "user2 cannot spoof p_user_id in withdraw_goal_contribution to withdraw from user1's goal" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/goals?id=eq.$GOALID&select=saved_amount_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['saved_amount_minor'])")
+check "user1's goal saved amount unchanged after user2's spoofed contribution/withdrawal attempts" "0" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "user1's account balance unchanged after user2's spoofed goal RPC attempts" "1000000" "$R"
+
+R=$(curl -s "$BASE/rest/v1/transactions?goal_id=eq.$GOALID&user_id=eq.$UID1&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+check "no transaction was created under user1's identity by user2's spoofed attempts" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/goals?id=eq.$GOALID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot delete user1's goal row via raw REST DELETE (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/add_goal_contribution" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_goal_id\":\"$GOALID\",\"p_account_id\":\"$TXN_ACCID\",\"p_amount_minor\":50000}")
+echo "$R" | grep -q '"type":"goal_contribution"' && check "user1 (real owner) can contribute to their own goal" "pass" "pass" || check "user1 (real owner) can contribute to their own goal" "pass" "fail: $R"
+
+R=$(curl -s "$BASE/rest/v1/goals?id=eq.$GOALID&select=saved_amount_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['saved_amount_minor'])")
+check "user1's goal saved amount reflects their own legitimate contribution" "50000" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/withdraw_goal_contribution" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_goal_id\":\"$GOALID\",\"p_account_id\":\"$TXN_ACCID\",\"p_amount_minor\":20000}")
+echo "$R" | grep -q '"type":"goal_withdrawal"' && check "user1 (real owner) can withdraw from their own goal" "pass" "pass" || check "user1 (real owner) can withdraw from their own goal" "pass" "fail: $R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/withdraw_goal_contribution" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_goal_id\":\"$GOALID\",\"p_account_id\":\"$TXN_ACCID\",\"p_amount_minor\":99999999}")
+check "withdrawing more than the goal's saved amount is rejected (insufficient_saved_amount)" "400" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/goals" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"name\":\"Spoofed\",\"target_amount_minor\":1,\"funding_account_id\":\"$TXN_ACCID\"}")
+check "user2 cannot insert a goal impersonating user1 (RLS with check, HTTP 403)" "403" "$R"
+echo
+
 echo "== summary =="
 echo "  $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then
