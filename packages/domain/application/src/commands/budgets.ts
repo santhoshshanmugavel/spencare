@@ -106,8 +106,33 @@ export const deleteBudget: Command<DeleteBudgetInput, void> = {
   },
 };
 
+/**
+ * Real defect found live during Phase 11 (Goals) and fixed there first:
+ * the error thrown by `if (error) throw error;` in the infra layer's
+ * repo/RPC callers is a plain `PostgrestError`-SHAPED OBJECT, never a
+ * genuine `Error` instance (confirmed live: `error instanceof Error` is
+ * `false` for a real Supabase error). `e instanceof Error ? e.message :
+ * String(e)` therefore always fell through to `String(e)`, which
+ * stringifies a plain object as the useless literal `"[object Object]"`
+ * -- every substring check below silently never matched, and every RPC/
+ * query failure fell back to the generic message regardless of its real
+ * cause. This was invisible in unit tests because every mock in this
+ * file's own test suite threw a genuine `new Error(...)`, which never
+ * exercises this path. Fixed by reading `.message` off any object shape,
+ * not just real `Error` instances -- see `packages/domain/application/
+ * src/commands/goals.ts`'s identical `extractErrorMessage` for the
+ * original fix and its full doc comment.
+ */
+function extractErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "object" && e !== null && "message" in e && typeof (e as { message: unknown }).message === "string") {
+    return (e as { message: string }).message;
+  }
+  return String(e);
+}
+
 function mapBudgetError(e: unknown, fallback: string): string {
-  const msg = e instanceof Error ? e.message : String(e);
+  const msg = extractErrorMessage(e);
   if (msg.includes("duplicate key") || msg.includes("budgets_user_category_period_key")) {
     return "A budget for this category and month already exists.";
   }

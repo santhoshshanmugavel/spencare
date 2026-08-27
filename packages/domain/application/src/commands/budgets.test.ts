@@ -21,6 +21,19 @@ function reset() {
   nextId = 1;
 }
 
+/**
+ * Real Supabase errors are plain PostgrestError-SHAPED OBJECTS, never
+ * genuine `Error` instances (confirmed live: `error instanceof Error` is
+ * `false`). Throwing `new Error(...)` here would mask the exact real bug
+ * found live in Phase 11/fixed here (`mapBudgetError`'s `e instanceof
+ * Error` check silently never matching a real RPC/query error, falling
+ * back to the generic message for every failure) -- this fake reproduces
+ * the real shape.
+ */
+function pgError(message: string) {
+  return { code: "23505", details: null, hint: null, message };
+}
+
 vi.mock("@spencare/domain-infra", () => ({
   createBudget: vi.fn(async (_client: unknown, userId: string, patch: Record<string, unknown>) => {
     const existing = [...budgets.values()].find(
@@ -30,7 +43,7 @@ vi.mock("@spencare/domain-infra", () => ({
         b.period_start === patch.periodStart &&
         !b.deleted_at,
     );
-    if (existing) throw new Error("duplicate key value violates unique constraint budgets_user_category_period_key");
+    if (existing) throw pgError("duplicate key value violates unique constraint budgets_user_category_period_key");
     const id = `budget-${nextId++}`;
     const row: FakeBudget = {
       id,
