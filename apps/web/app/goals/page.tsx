@@ -40,7 +40,7 @@ export default async function GoalsPage() {
               key: "cash-flow",
               label: "Cash Flow",
               icon: <ArrowLeftRight className="size-5" />,
-              href: "/cash-flow/transactions",
+              href: "/cash-flow",
             },
             { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals", active: true },
             {

@@ -42,6 +42,17 @@ const TRANSACTION_COLUMNS =
 export interface ListTransactionsOptions {
   accountId?: string;
   limit?: number;
+  /**
+   * Phase 13 (Cash Flow) -- inclusive date-range filter on `occurred_at`,
+   * added here rather than as a second query, per the reconnaissance's own
+   * "extend, don't duplicate" finding: `getCashFlowOverview`/
+   * `getCashFlowByCategory` need a period-scoped read of the same
+   * `transactions` table Phase 8 already queries, nothing new about the
+   * read itself. Both bounds are plain ISO date strings (`YYYY-MM-DD`),
+   * matching `occurred_at`'s own column type.
+   */
+  occurredFrom?: string;
+  occurredTo?: string;
 }
 
 export async function listTransactions(
@@ -55,6 +66,8 @@ export async function listTransactions(
     .eq("user_id", userId)
     .is("deleted_at", null);
   if (options.accountId) query = query.eq("account_id", options.accountId);
+  if (options.occurredFrom) query = query.gte("occurred_at", options.occurredFrom);
+  if (options.occurredTo) query = query.lte("occurred_at", options.occurredTo);
   query = query.order("occurred_at", { ascending: false }).order("created_at", { ascending: false });
   if (options.limit) query = query.limit(options.limit);
   const { data, error } = await query;

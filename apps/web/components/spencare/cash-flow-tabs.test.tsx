@@ -9,8 +9,9 @@ describe("<CashFlowTabs>", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("renders all three tabs, including the new Bills tab, each as a real link", () => {
+  it("renders all four tabs, including the new Overview tab, each as a real link", () => {
     render(<CashFlowTabs active="transactions" />);
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/cash-flow");
     expect(screen.getByRole("link", { name: "Transactions" })).toHaveAttribute("href", "/cash-flow/transactions");
     expect(screen.getByRole("link", { name: "Budgets" })).toHaveAttribute("href", "/cash-flow/budgets");
     expect(screen.getByRole("link", { name: "Bills" })).toHaveAttribute("href", "/cash-flow/bills");

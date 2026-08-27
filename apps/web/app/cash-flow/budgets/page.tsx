@@ -58,7 +58,8 @@ export default async function BudgetsPage(props: PageProps<"/cash-flow/budgets">
               key: "cash-flow",
               label: "Cash Flow",
               icon: <ArrowLeftRight className="size-5" />,
-              href: "/cash-flow/transactions",
+              href: "/cash-flow",
+              active: true,
             },
             { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             {
