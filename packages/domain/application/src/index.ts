@@ -17,6 +17,12 @@ export {
   regenerateBackupCodes,
   type RegenerateBackupCodesOutput,
 } from "./commands/disableTwoFactor.js";
+export {
+  saveOnboardingStep,
+  completeOnboarding,
+  getOnboardingStatusQuery,
+  type OnboardingStatusOutput,
+} from "./commands/onboarding.js";
 
 export { getProfile } from "./queries/getProfile.js";
 export { getProfileForDisplay, type ProfileForDisplay } from "./queries/getProfileForDisplay.js";

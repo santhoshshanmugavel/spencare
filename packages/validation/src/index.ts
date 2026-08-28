@@ -18,3 +18,14 @@ export {
   type BackupCodeInput,
   type AvatarUploadInput,
 } from "./auth.js";
+
+export {
+  INCOME_FREQUENCIES,
+  CATEGORY_INTERESTS,
+  GOAL_TYPE_INTERESTS,
+  onboardingStepSchema,
+  completeOnboardingSchema,
+  type IncomeFrequency,
+  type OnboardingStepInput,
+  type CompleteOnboardingInput,
+} from "./onboarding.js";
