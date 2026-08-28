@@ -1,0 +1,25 @@
+{
+  "name": "@spencare/domain-application",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.3.0",
+    "otpauth": "^9.5.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  },
+  "dependencies": {
+    "@spencare/domain-core": "workspace:*",
+    "@spencare/domain-infra": "workspace:*",
+    "@spencare/validation": "workspace:*",
+    "zod": "^4.4.3"
+  }
+}

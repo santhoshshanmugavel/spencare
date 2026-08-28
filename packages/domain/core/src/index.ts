@@ -14,3 +14,14 @@ export {
   type CurrencyCode,
   type MoneyJSON,
 } from "./Money.js";
+
+export {
+  generateTotpEnrollment,
+  verifyTotpCode,
+  generateBackupCodes,
+  hashBackupCode,
+  consumeBackupCode,
+  type TotpEnrollment,
+} from "./twoFactor.js";
+
+export { sniffImageMimeType, type SniffedImageType } from "./fileSniff.js";
