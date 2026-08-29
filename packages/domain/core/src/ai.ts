@@ -24,20 +24,94 @@ function redactAmount(amount: { amountMinor: number; currency: string }, masked:
   return masked ? { private: true } : amount;
 }
 
-export interface AiAccountSummaryInput {
-  id: string;
-  name: string;
-  type: string;
-  balanceMinor: number;
-  currency: string;
+/**
+ * A ratio (e.g. credit utilization) is not itself a currency figure, but
+ * it is DERIVED from two monetary ones -- redacted the same way under
+ * Privacy Mode so a precise utilization percentage can never be used to
+ * back-infer an approximate limit/used figure the user asked to keep
+ * private (Spensa Spec v1.0 Correction Pass §1: "all credit monetary
+ * values must pass through the same Spensa redaction boundary").
+ */
+export type MaybePrivateRatio = number | PrivateAmount;
+
+function redactRatio(ratio: number | null, masked: boolean): MaybePrivateRatio | null {
+  if (ratio === null) return null;
+  return masked ? { private: true } : ratio;
 }
 
-export interface AiAccountSummaryRedacted {
-  id: string;
-  name: string;
-  type: string;
-  balance: MaybePrivateAmount;
-  currency: string;
+/**
+ * `used / limit`, safe against `limit === 0` (a $0-limit card, or a
+ * not-yet-configured one) -- returns `null` rather than `Infinity`/`NaN`,
+ * which the caller must treat as "utilization unknown," never as 0%.
+ */
+export function calculateCreditUtilization(usedMinor: number, limitMinor: number): number | null {
+  if (limitMinor <= 0) return null;
+  return usedMinor / limitMinor;
+}
+
+/**
+ * Discriminated by `type` so each account variant only carries the fields
+ * that are actually authoritative for it (database-architecture.md §3:
+ * `balanceMinor` is authoritative for bank/cash ONLY; `credit_card` rows
+ * use `creditLimitMinor`/`creditUsedMinor` instead -- never `balanceMinor`,
+ * which Spensa's tool layer was incorrectly reading for credit cards
+ * before this correction pass). `spendable` is a literal, structural flag
+ * (not a comment) so nothing downstream can accidentally treat a credit or
+ * investment figure as spendable cash by forgetting to check `type`.
+ */
+export type AiAccountSummaryInput =
+  | { id: string; name: string; type: "bank" | "cash"; currency: string; spendable: true; balanceMinor: number }
+  | { id: string; name: string; type: "credit_card"; currency: string; spendable: false; creditLimitMinor: number; creditUsedMinor: number }
+  | { id: string; name: string; type: "investment"; currency: string; spendable: false; marketValueMinor: number };
+
+export type AiAccountSummaryRedacted =
+  | { id: string; name: string; type: "bank" | "cash"; currency: string; spendable: true; balance: MaybePrivateAmount }
+  | {
+      id: string;
+      name: string;
+      type: "credit_card";
+      currency: string;
+      spendable: false;
+      creditLimit: MaybePrivateAmount;
+      creditUsed: MaybePrivateAmount;
+      availableCredit: MaybePrivateAmount;
+      creditUtilization: MaybePrivateRatio | null;
+    }
+  | { id: string; name: string; type: "investment"; currency: string; spendable: false; marketValue: MaybePrivateAmount };
+
+function redactAccountSummary(a: AiAccountSummaryInput, masked: boolean): AiAccountSummaryRedacted {
+  if (a.type === "credit_card") {
+    const availableMinor = a.creditLimitMinor - a.creditUsedMinor;
+    return {
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      currency: a.currency,
+      spendable: false,
+      creditLimit: redactAmount({ amountMinor: a.creditLimitMinor, currency: a.currency }, masked),
+      creditUsed: redactAmount({ amountMinor: a.creditUsedMinor, currency: a.currency }, masked),
+      availableCredit: redactAmount({ amountMinor: availableMinor, currency: a.currency }, masked),
+      creditUtilization: redactRatio(calculateCreditUtilization(a.creditUsedMinor, a.creditLimitMinor), masked),
+    };
+  }
+  if (a.type === "investment") {
+    return {
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      currency: a.currency,
+      spendable: false,
+      marketValue: redactAmount({ amountMinor: a.marketValueMinor, currency: a.currency }, masked),
+    };
+  }
+  return {
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    currency: a.currency,
+    spendable: true,
+    balance: redactAmount({ amountMinor: a.balanceMinor, currency: a.currency }, masked),
+  };
 }
 
 export interface AiFinancialSnapshotInput {
@@ -59,13 +133,7 @@ export function redactFinancialSnapshot(
       state: input.safeToSpend.state,
       amount: redactAmount({ amountMinor: input.safeToSpend.amountMinor, currency: input.safeToSpend.currency }, privacyModeEnabled),
     },
-    accounts: input.accounts.map((a) => ({
-      id: a.id,
-      name: a.name,
-      type: a.type,
-      balance: redactAmount({ amountMinor: a.balanceMinor, currency: a.currency }, privacyModeEnabled),
-      currency: a.currency,
-    })),
+    accounts: input.accounts.map((a) => redactAccountSummary(a, privacyModeEnabled)),
   };
 }
 

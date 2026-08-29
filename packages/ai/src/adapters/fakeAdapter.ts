@@ -16,7 +16,7 @@ export type FakeScenario =
 export class FakeAiProviderAdapter implements AiProviderAdapter {
   provider = "anthropic" as const;
   private scenarios: FakeScenario[];
-  public receivedCalls: { messages: ChatMessage[]; tools: ToolDefinition[] }[] = [];
+  public receivedCalls: { messages: ChatMessage[]; tools: ToolDefinition[]; system?: string }[] = [];
 
   constructor(scenarios: FakeScenario[]) {
     this.scenarios = [...scenarios];
@@ -26,8 +26,8 @@ export class FakeAiProviderAdapter implements AiProviderAdapter {
     return key === "invalid-test-key" ? { valid: false, error: "Invalid API key" } : { valid: true };
   }
 
-  async *chat(messages: ChatMessage[], tools: ToolDefinition[]): AsyncIterable<AiEvent> {
-    this.receivedCalls.push({ messages, tools });
+  async *chat(messages: ChatMessage[], tools: ToolDefinition[], system?: string): AsyncIterable<AiEvent> {
+    this.receivedCalls.push({ messages, tools, system });
     const scenario = this.scenarios.shift();
     if (!scenario) {
       yield { type: "text_delta", text: "" };

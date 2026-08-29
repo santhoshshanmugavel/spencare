@@ -14,8 +14,54 @@ import {
 import { buildAiContext } from "./context.js";
 import { resolveProviderAdapter } from "./resolver.js";
 import { getToolDefinitions, executeTool } from "./tools/registry.js";
-import type { AiProviderAdapter, ChatMessage } from "./provider.js";
+import type { AiEvent, AiProviderAdapter, ChatMessage, ToolDefinition } from "./provider.js";
 import { NoProviderConfiguredError, ProviderOutageError, ProviderRateLimitError, MalformedProviderResponseError } from "./provider.js";
+import { SPENSA_SYSTEM_PROMPT } from "./systemPrompt.js";
+
+/**
+ * Rate-limit retry (Spensa Spec v1.0 Correction Pass, Conflict-3;
+ * ai-architecture.md §6: "a single backoff retry at most, then the same
+ * explicit-failure message"). No source doc specifies an exact backoff
+ * duration -- this value is an implementation detail, chosen
+ * conservatively (long enough that a burst rate limit has a real chance
+ * to clear, short enough not to stall the chat UI noticeably).
+ */
+export const RATE_LIMIT_RETRY_BACKOFF_MS = 1000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wraps `adapter.chat()` with AT MOST one retry, and only for a rate-limit
+ * failure that happened before any event was yielded on this attempt --
+ * never for any other error type (never for `ProviderOutageError`/
+ * `MalformedProviderResponseError`/anything else, per the locked
+ * "do not retry arbitrary validation/business errors" rule), and never a
+ * second time even if the retry itself rate-limits again. If any event had
+ * already been yielded before the failure, this does NOT retry -- retrying
+ * from scratch after partial output was already streamed to the user
+ * would duplicate that output, which is worse than a clean failure.
+ */
+async function* chatWithRetry(adapter: AiProviderAdapter, messages: ChatMessage[], tools: ToolDefinition[], system: string): AsyncGenerator<AiEvent> {
+  let attempt = 0;
+  for (;;) {
+    attempt += 1;
+    let yieldedAny = false;
+    try {
+      for await (const event of adapter.chat(messages, tools, system)) {
+        yieldedAny = true;
+        yield event;
+      }
+      return;
+    } catch (err) {
+      const canRetry = err instanceof ProviderRateLimitError && attempt === 1 && !yieldedAny;
+      if (!canRetry) throw err;
+      await delay(RATE_LIMIT_RETRY_BACKOFF_MS);
+      // loop back for exactly one more attempt
+    }
+  }
+}
 
 /**
  * The processing loop (ai-architecture.md §3's sequence diagram, restated
@@ -123,7 +169,7 @@ export async function* sendMessage(ctx: AuthContext, rawInput: SendMessageInput,
     let sawToolCall = false;
 
     try {
-      for await (const event of adapter.chat(messages, tools)) {
+      for await (const event of chatWithRetry(adapter, messages, tools, SPENSA_SYSTEM_PROMPT)) {
         if (event.type === "text_delta") {
           finalText += event.text;
           yield { type: "text_delta", text: event.text };

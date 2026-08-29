@@ -14,7 +14,8 @@ export { READ_TOOLS } from "./tools/readTools.js";
 export { WRITE_TOOLS } from "./tools/writeTools.js";
 export type { ToolHandlerContext } from "./tools/readTools.js";
 
-export { sendMessage, type OrchestratorEvent, type SendMessageOptions } from "./orchestrator.js";
+export { sendMessage, type OrchestratorEvent, type SendMessageOptions, RATE_LIMIT_RETRY_BACKOFF_MS } from "./orchestrator.js";
+export { SPENSA_SYSTEM_PROMPT } from "./systemPrompt.js";
 export { getConversation, listConversations, getConversationMessages, deleteConversation, regenerateReply } from "./conversations.js";
 
 // Re-exported so the Web UI never needs to import @spencare/domain-infra

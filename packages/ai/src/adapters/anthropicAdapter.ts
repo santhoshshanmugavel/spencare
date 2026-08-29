@@ -31,7 +31,7 @@ export class AnthropicAdapter implements AiProviderAdapter {
     }
   }
 
-  async *chat(messages: ChatMessage[], tools: ToolDefinition[]): AsyncIterable<AiEvent> {
+  async *chat(messages: ChatMessage[], tools: ToolDefinition[], system?: string): AsyncIterable<AiEvent> {
     try {
       const anthropicMessages = messages.map((m) => ({
         role: m.role === "tool" ? ("user" as const) : m.role,
@@ -47,6 +47,7 @@ export class AnthropicAdapter implements AiProviderAdapter {
       const stream = this.client.messages.stream({
         model: "claude-sonnet-4-5",
         max_tokens: 1024,
+        system,
         messages: anthropicMessages,
         tools: anthropicTools.length > 0 ? anthropicTools : undefined,
       });

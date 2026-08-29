@@ -30,7 +30,16 @@ export type AiEvent =
 
 export interface AiProviderAdapter {
   provider: AiProviderName;
-  chat(messages: ChatMessage[], tools: ToolDefinition[]): AsyncIterable<AiEvent>;
+  /**
+   * `system` is a plain, provider-agnostic instruction string (Spensa
+   * Spec v1.0 Correction Pass, Conflict-2: `systemPrompt.ts`'s
+   * `SPENSA_SYSTEM_PROMPT`, defined once at the orchestration layer).
+   * Each adapter maps it into whatever its own SDK expects -- Anthropic's
+   * top-level `system` field, or a future OpenAI/Gemini/OpenRouter
+   * adapter's own equivalent -- so the prompt content itself is never
+   * duplicated per provider.
+   */
+  chat(messages: ChatMessage[], tools: ToolDefinition[], system?: string): AsyncIterable<AiEvent>;
   validateKey(key: string): Promise<{ valid: boolean; error?: string }>;
 }
 

@@ -10,6 +10,7 @@ import {
   type AuthContext,
 } from "@spencare/domain-application";
 import { lastDayOfMonth, redactFinancialSnapshot, redactBudgetSummaries, redactGoalSummaries, redactBillSummaries, redactCashFlowSummary } from "@spencare/domain-core";
+import { toAiAccountSummaryInput } from "./accountMapping.js";
 import type {
   AiFinancialSnapshotRedacted,
   AiBudgetSummaryRedacted,
@@ -95,9 +96,13 @@ export async function buildAiContext(ctx: AuthContext, uiContext?: AiContext["ui
         amountMinor: Number(safeToSpendResult.amount.amountMinorUnits),
         currency: safeToSpendResult.amount.currencyCode,
       },
-      accounts: accounts
-        .filter((a) => a.type === "bank" || a.type === "cash")
-        .map((a) => ({ id: a.id, name: a.name, type: a.type, balanceMinor: a.balance_minor, currency: a.currency })),
+      // Every account type is represented -- credit_card/investment are
+      // NEVER excluded (Spensa Spec v1.0 Correction Pass, Conflict-1: the
+      // architecture's own illustrative AiContext shape expects them
+      // present but non-spendable, not absent). `toAiAccountSummaryInput`
+      // is what actually keeps them out of anything spendable -- never a
+      // filter here.
+      accounts: accounts.map(toAiAccountSummaryInput),
     },
     privacyModeEnabled,
   );

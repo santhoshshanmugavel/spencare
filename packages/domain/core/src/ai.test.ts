@@ -6,36 +6,43 @@ import {
   redactBillSummaries,
   redactCashFlowSummary,
   describeAmountForProvider,
+  calculateCreditUtilization,
+  type AiAccountSummaryInput,
 } from "./ai.js";
 
+function bankAccount(overrides: Partial<Extract<AiAccountSummaryInput, { type: "bank" | "cash" }>> = {}): AiAccountSummaryInput {
+  return { id: "a1", name: "HDFC", type: "bank", currency: "INR", spendable: true, balanceMinor: 1000000, ...overrides };
+}
+
+function creditCardAccount(overrides: Partial<Extract<AiAccountSummaryInput, { type: "credit_card" }>> = {}): AiAccountSummaryInput {
+  return { id: "c1", name: "HDFC Credit Card", type: "credit_card", currency: "INR", spendable: false, creditLimitMinor: 10000000, creditUsedMinor: 3000000, ...overrides };
+}
+
 describe("redactFinancialSnapshot — Privacy Mode OFF", () => {
-  it("passes real amounts through unchanged", () => {
+  it("passes real amounts through unchanged for a bank account", () => {
     const result = redactFinancialSnapshot(
-      {
-        safeToSpend: { state: "balance_only", amountMinor: 500000, currency: "INR" },
-        accounts: [{ id: "a1", name: "HDFC", type: "bank", balanceMinor: 1000000, currency: "INR" }],
-      },
+      { safeToSpend: { state: "balance_only", amountMinor: 500000, currency: "INR" }, accounts: [bankAccount()] },
       false,
     );
     expect(result.safeToSpend.amount).toEqual({ amountMinor: 500000, currency: "INR" });
-    expect(result.accounts[0]!.balance).toEqual({ amountMinor: 1000000, currency: "INR" });
+    const account = result.accounts[0]!;
+    expect(account.spendable).toBe(true);
+    if (account.spendable) expect(account.balance).toEqual({ amountMinor: 1000000, currency: "INR" });
   });
 });
 
 describe("redactFinancialSnapshot — Privacy Mode ON", () => {
   it("never includes the real amountMinor anywhere in the output", () => {
     const result = redactFinancialSnapshot(
-      {
-        safeToSpend: { state: "balance_only", amountMinor: 500000, currency: "INR" },
-        accounts: [{ id: "a1", name: "HDFC", type: "bank", balanceMinor: 1000000, currency: "INR" }],
-      },
+      { safeToSpend: { state: "balance_only", amountMinor: 500000, currency: "INR" }, accounts: [bankAccount()] },
       true,
     );
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("500000");
     expect(serialized).not.toContain("1000000");
     expect(result.safeToSpend.amount).toEqual({ private: true });
-    expect(result.accounts[0]!.balance).toEqual({ private: true });
+    const account = result.accounts[0]!;
+    if (account.spendable) expect(account.balance).toEqual({ private: true });
   });
 
   it("still exposes non-monetary fields (state, name, type) -- masking hides amounts, not activity", () => {
@@ -44,6 +51,75 @@ describe("redactFinancialSnapshot — Privacy Mode ON", () => {
       true,
     );
     expect(result.safeToSpend.state).toBe("budget_and_goals");
+  });
+});
+
+describe("redactFinancialSnapshot — credit_card accounts (Spensa Spec v1.0 correction, Conflict-1)", () => {
+  it("represents a credit card via creditLimit/creditUsed/availableCredit/creditUtilization, never a plain balance", () => {
+    const result = redactFinancialSnapshot(
+      { safeToSpend: { state: "balance_only", amountMinor: 0, currency: "INR" }, accounts: [creditCardAccount()] },
+      false,
+    );
+    const account = result.accounts[0]!;
+    expect(account.type).toBe("credit_card");
+    expect(account.spendable).toBe(false);
+    if (account.type === "credit_card") {
+      expect(account.creditLimit).toEqual({ amountMinor: 10000000, currency: "INR" });
+      expect(account.creditUsed).toEqual({ amountMinor: 3000000, currency: "INR" });
+      expect(account.availableCredit).toEqual({ amountMinor: 7000000, currency: "INR" });
+      expect(account.creditUtilization).toBe(0.3);
+    }
+    expect("balance" in account).toBe(false);
+  });
+
+  it("is marked spendable: false -- structurally distinct from cash, never eligible to be summed into Safe-to-Spend by a careless caller", () => {
+    const result = redactFinancialSnapshot({ safeToSpend: { state: "balance_only", amountMinor: 0, currency: "INR" }, accounts: [creditCardAccount()] }, false);
+    expect(result.accounts[0]!.spendable).toBe(false);
+  });
+
+  it("redacts every credit monetary figure, including utilization, when Privacy Mode is on", () => {
+    const result = redactFinancialSnapshot({ safeToSpend: { state: "balance_only", amountMinor: 0, currency: "INR" }, accounts: [creditCardAccount()] }, true);
+    const account = result.accounts[0]!;
+    if (account.type === "credit_card") {
+      expect(account.creditLimit).toEqual({ private: true });
+      expect(account.creditUsed).toEqual({ private: true });
+      expect(account.availableCredit).toEqual({ private: true });
+      expect(account.creditUtilization).toEqual({ private: true });
+    }
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("10000000");
+    expect(serialized).not.toContain("3000000");
+    expect(serialized).not.toContain("7000000");
+    expect(serialized).not.toContain("0.3");
+  });
+
+  it("represents an investment account as non-spendable market value, never counted as cash", () => {
+    const result = redactFinancialSnapshot(
+      {
+        safeToSpend: { state: "balance_only", amountMinor: 0, currency: "INR" },
+        accounts: [{ id: "i1", name: "Zerodha", type: "investment", currency: "INR", spendable: false, marketValueMinor: 5000000 }],
+      },
+      false,
+    );
+    const account = result.accounts[0]!;
+    expect(account.type).toBe("investment");
+    expect(account.spendable).toBe(false);
+    if (account.type === "investment") expect(account.marketValue).toEqual({ amountMinor: 5000000, currency: "INR" });
+  });
+});
+
+describe("calculateCreditUtilization", () => {
+  it("computes used / limit", () => {
+    expect(calculateCreditUtilization(300000, 1000000)).toBe(0.3);
+  });
+
+  it("returns null (never Infinity/NaN) when limit is 0 -- 'unknown', not '0% used'", () => {
+    expect(calculateCreditUtilization(0, 0)).toBeNull();
+    expect(calculateCreditUtilization(500, 0)).toBeNull();
+  });
+
+  it("returns null for a negative limit (defensive -- should never occur given the DB's own check constraint)", () => {
+    expect(calculateCreditUtilization(500, -100)).toBeNull();
   });
 });
 

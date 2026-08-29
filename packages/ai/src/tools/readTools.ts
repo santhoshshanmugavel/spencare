@@ -14,6 +14,7 @@ import {
 import { lastDayOfMonth, redactFinancialSnapshot, redactBudgetSummaries, redactGoalSummaries, redactBillSummaries, redactCashFlowSummary } from "@spencare/domain-core";
 import { searchTransactionsToolSchema, getUpcomingBillsToolSchema } from "@spencare/validation";
 import type { ToolDefinition } from "../provider.js";
+import { toAiAccountSummaryInput } from "../accountMapping.js";
 
 const CURRENCY = "INR";
 
@@ -64,7 +65,7 @@ const getDashboardSummaryTool: ReadToolHandler = {
         privacyModeEnabled,
       ).safeToSpend,
       accounts: redactFinancialSnapshot(
-        { safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: summary.accounts.map((a) => ({ id: a.id, name: a.name, type: a.type, balanceMinor: a.balance_minor, currency: a.currency })) },
+        { safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: summary.accounts.map(toAiAccountSummaryInput) },
         privacyModeEnabled,
       ).accounts,
       goals: redactGoalSummaries(summary.goals.map((g) => ({ id: g.id, name: g.name, targetAmountMinor: g.target_amount_minor, savedAmountMinor: g.saved_amount_minor, currency: CURRENCY })), privacyModeEnabled),
@@ -83,7 +84,7 @@ const getAccountsTool: ReadToolHandler = {
   execute: async ({ ctx, privacyModeEnabled }) => {
     const accounts = await listAccounts(ctx);
     return redactFinancialSnapshot(
-      { safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: accounts.map((a) => ({ id: a.id, name: a.name, type: a.type, balanceMinor: a.balance_minor, currency: a.currency })) },
+      { safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: accounts.map(toAiAccountSummaryInput) },
       privacyModeEnabled,
     ).accounts;
   },
