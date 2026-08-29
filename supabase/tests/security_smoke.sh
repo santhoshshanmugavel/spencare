@@ -503,6 +503,196 @@ R=$(curl -s "$BASE/rest/v1/bill_predictions?bill_definition_id=eq.$RPCBILLID2&se
 check "create_bill generates NO prediction for an irregular bill (no deterministic first occurrence to fabricate)" "0" "$R"
 echo
 
+echo "== imports: ownership / IDOR (Phase 15) =="
+
+BALANCE_BEFORE_IMPORT=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+
+IMPBATCH=$(curl -s -X POST "$BASE/rest/v1/import_batches" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source_type\":\"csv\",\"account_id\":\"$TXN_ACCID\",\"file_name\":\"smoke.csv\",\"file_size_bytes\":100}")
+IMPBATCHID=$(echo "$IMPBATCH" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+check "user1 (real owner) can create their own import batch (authenticated insert policy)" "1" "$(echo "$IMPBATCH" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")"
+
+# import_staged_transactions has NO authenticated insert policy by design
+# (staged rows are written by the processing pipeline, service role only)
+# -- seeding here mirrors the real application's own service-role insert.
+STAGED_EXPENSE=$(curl -s -X POST "$BASE/rest/v1/import_staged_transactions" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"import_batch_id\":\"$IMPBATCHID\",\"user_id\":\"$UID1\",\"raw_payload\":{\"line\":\"smoke expense\"},\"normalized_amount_minor\":45000,\"normalized_date\":\"2026-08-12\",\"normalized_merchant\":\"Smoke Swiggy\",\"suggested_category_id\":\"$CATID\",\"staged_transaction_type\":\"expense\",\"confidence_score\":0.900,\"review_status\":\"accepted\"}")
+STAGEDID1=$(echo "$STAGED_EXPENSE" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+STAGED_INCOME=$(curl -s -X POST "$BASE/rest/v1/import_staged_transactions" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"import_batch_id\":\"$IMPBATCHID\",\"user_id\":\"$UID1\",\"raw_payload\":{\"line\":\"smoke income\"},\"normalized_amount_minor\":500000,\"normalized_date\":\"2026-08-13\",\"normalized_merchant\":\"Smoke Salary\",\"suggested_category_id\":\"$CATID\",\"staged_transaction_type\":\"income\",\"confidence_score\":0.950,\"review_status\":\"accepted\"}")
+STAGEDID2=$(echo "$STAGED_INCOME" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+STAGED_PENDING=$(curl -s -X POST "$BASE/rest/v1/import_staged_transactions" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"import_batch_id\":\"$IMPBATCHID\",\"user_id\":\"$UID1\",\"raw_payload\":{\"line\":\"smoke pending\"},\"normalized_amount_minor\":10000,\"normalized_date\":\"2026-08-14\",\"normalized_merchant\":\"Smoke Untouched\",\"suggested_category_id\":null,\"staged_transaction_type\":\"expense\",\"confidence_score\":0.400,\"review_status\":\"pending\"}")
+STAGEDID3=$(echo "$STAGED_PENDING" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+curl -s -X PATCH "$BASE/rest/v1/import_batches?id=eq.$IMPBATCHID" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -d '{"status":"awaiting_review"}' > /dev/null
+
+R=$(curl -s "$BASE/rest/v1/import_batches?id=eq.$IMPBATCHID&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's import batch (RLS)" "[]" "$R"
+
+R=$(curl -s "$BASE/rest/v1/import_staged_transactions?import_batch_id=eq.$IMPBATCHID&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's staged rows (RLS)" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/import_staged_transactions?id=eq.$STAGEDID1" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"review_status":"rejected"}')
+check "user2 cannot update user1's staged row (RLS, HTTP 204/0 rows)" "204" "$R"
+R=$(curl -s "$BASE/rest/v1/import_staged_transactions?id=eq.$STAGEDID1&select=review_status" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+echo "$R" | grep -q '"review_status":"accepted"' && check "user1's staged row unchanged after user2's spoofed update attempt" "pass" "pass" || check "user1's staged row unchanged after user2's spoofed update attempt" "pass" "fail: $R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_import_batch" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_import_batch_id\":\"$IMPBATCHID\"}")
+check "user2 cannot spoof p_user_id in confirm_import_batch to confirm user1's import" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_import_batch" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID2\",\"p_import_batch_id\":\"$IMPBATCHID\"}")
+check "user2 cannot confirm user1's import batch under their own identity (import_batch_not_found -- RLS-scoped lookup)" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"import_batch_not_found\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "user1's account balance unchanged after every one of user2's spoofed confirm_import_batch attempts" "$BALANCE_BEFORE_IMPORT" "$R"
+
+echo
+echo "== imports: confirmation atomicity + financial correctness (Phase 15) =="
+
+R=$(curl -s -X POST "$BASE/rest/v1/rpc/confirm_import_batch" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_import_batch_id\":\"$IMPBATCHID\"}")
+echo "$R" | grep -q '"status":"confirmed"' && check "user1 (real owner) can confirm their own import batch via the RPC" "pass" "pass" || check "user1 (real owner) can confirm their own import batch via the RPC" "pass" "fail: $R"
+
+R=$(curl -s "$BASE/rest/v1/import_staged_transactions?id=eq.$STAGEDID1&select=created_transaction_id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+CREATEDTXN1=$(echo "$R" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['created_transaction_id'])")
+[ "$CREATEDTXN1" != "None" ] && check "the accepted expense staged row is linked to a real created transaction" "pass" "pass" || check "the accepted expense staged row is linked to a real created transaction" "pass" "fail: not linked"
+
+R=$(curl -s "$BASE/rest/v1/transactions?id=eq.$CREATEDTXN1&select=type,amount_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+echo "$R" | grep -q '"type":"expense"' && echo "$R" | grep -q '"amount_minor":45000' && check "confirm_import_batch maps staged_transaction_type=expense to transactions.type=expense with a POSITIVE amount_minor (never a sign-derived type)" "pass" "pass" || check "confirm_import_batch maps staged_transaction_type=expense to transactions.type=expense with a POSITIVE amount_minor (never a sign-derived type)" "pass" "fail: $R"
+
+R=$(curl -s "$BASE/rest/v1/import_staged_transactions?id=eq.$STAGEDID2&select=created_transaction_id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+CREATEDTXN2=$(echo "$R" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['created_transaction_id'])")
+R=$(curl -s "$BASE/rest/v1/transactions?id=eq.$CREATEDTXN2&select=type,amount_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+echo "$R" | grep -q '"type":"income"' && echo "$R" | grep -q '"amount_minor":500000' && check "confirm_import_batch maps staged_transaction_type=income to transactions.type=income with a POSITIVE amount_minor" "pass" "pass" || check "confirm_import_batch maps staged_transaction_type=income to transactions.type=income with a POSITIVE amount_minor" "pass" "fail: $R"
+
+R=$(curl -s "$BASE/rest/v1/import_staged_transactions?id=eq.$STAGEDID3&select=review_status,created_transaction_id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+echo "$R" | grep -q '"review_status":"pending"' && echo "$R" | grep -q '"created_transaction_id":null' && check "the untouched pending row was NEVER included in confirmImport -- still pending, no transaction created (never silently auto-accepted regardless of confidence)" "pass" "pass" || check "the untouched pending row was NEVER included in confirmImport -- still pending, no transaction created" "pass" "fail: $R"
+
+EXPECTED_BALANCE=$((BALANCE_BEFORE_IMPORT - 45000 + 500000))
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "account balance reflects exactly one batched update summing both accepted rows (net +455000), not one update per row" "$EXPECTED_BALANCE" "$R"
+
+R=$(curl -s "$BASE/rest/v1/audit_log?entity_id=eq.$IMPBATCHID&action=eq.confirm_import_batch&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "confirm_import_batch wrote exactly one audit_log entry for the whole batch (not one per row)" "1" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_import_batch" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_import_batch_id\":\"$IMPBATCHID\"}")
+check "a second confirm_import_batch call on an already-confirmed batch is rejected (double confirmation prevented)" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"import_batch_not_confirmable\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "balance unchanged after the rejected double-confirmation attempt (no double-application)" "$EXPECTED_BALANCE" "$R"
+
+echo
+echo "== imports: cancellation (Phase 15) =="
+
+IMPBATCH2=$(curl -s -X POST "$BASE/rest/v1/import_batches" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source_type\":\"csv\",\"account_id\":\"$TXN_ACCID\",\"file_name\":\"smoke2.csv\",\"file_size_bytes\":100}")
+IMPBATCHID2=$(echo "$IMPBATCH2" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+curl -s -X POST "$BASE/rest/v1/import_staged_transactions" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"import_batch_id\":\"$IMPBATCHID2\",\"user_id\":\"$UID1\",\"raw_payload\":{},\"normalized_amount_minor\":100,\"normalized_date\":\"2026-08-15\",\"staged_transaction_type\":\"expense\",\"confidence_score\":0.5,\"review_status\":\"pending\"}" > /dev/null
+curl -s -X PATCH "$BASE/rest/v1/import_batches?id=eq.$IMPBATCHID2" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -d '{"status":"awaiting_review"}' > /dev/null
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/import_batches?id=eq.$IMPBATCHID2" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"status":"cancelled"}')
+check "user2 cannot cancel user1's batch via raw REST PATCH (RLS, HTTP 204/0 rows)" "204" "$R"
+R=$(curl -s "$BASE/rest/v1/import_batches?id=eq.$IMPBATCHID2&select=status" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+echo "$R" | grep -q '"status":"awaiting_review"' && check "user1's batch unchanged after user2's spoofed cancel attempt" "pass" "pass" || check "user1's batch unchanged after user2's spoofed cancel attempt" "pass" "fail: $R"
+
+curl -s -X PATCH "$BASE/rest/v1/import_batches?id=eq.$IMPBATCHID2" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d '{"status":"cancelled","cancelled_at":"2026-08-15T00:00:00Z"}' > /dev/null
+curl -s -X DELETE "$BASE/rest/v1/import_staged_transactions?import_batch_id=eq.$IMPBATCHID2" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" > /dev/null
+R=$(curl -s "$BASE/rest/v1/import_staged_transactions?import_batch_id=eq.$IMPBATCHID2&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "cancelling a batch removes its staged rows (hard delete, the one documented soft-delete exception)" "0" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_import_batch" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_import_batch_id\":\"$IMPBATCHID2\"}")
+check "a cancelled batch can never be confirmed" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"import_batch_not_confirmable\"}HTTP:400" "$R"
+
+echo
+echo "== imports: concurrency (Phase 15, api-architecture.md §5.3 scenario 4) =="
+
+IMPBATCH3=$(curl -s -X POST "$BASE/rest/v1/import_batches" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source_type\":\"csv\",\"account_id\":\"$TXN_ACCID\",\"file_name\":\"smoke3.csv\",\"file_size_bytes\":100}")
+IMPBATCHID3=$(echo "$IMPBATCH3" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+curl -s -X POST "$BASE/rest/v1/import_staged_transactions" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"import_batch_id\":\"$IMPBATCHID3\",\"user_id\":\"$UID1\",\"raw_payload\":{},\"normalized_amount_minor\":7500,\"normalized_date\":\"2026-08-16\",\"suggested_category_id\":\"$CATID\",\"staged_transaction_type\":\"expense\",\"confidence_score\":0.9,\"review_status\":\"accepted\"}" > /dev/null
+curl -s -X PATCH "$BASE/rest/v1/import_batches?id=eq.$IMPBATCHID3" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -d '{"status":"awaiting_review"}' > /dev/null
+
+BALANCE_BEFORE_RACE=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+
+# Two simultaneous confirm_import_batch calls for the SAME batch: the
+# batch-row FOR UPDATE lock must serialize them so exactly one succeeds.
+curl -s -w "HTTP:%{http_code}\n" -X POST "$BASE/rest/v1/rpc/confirm_import_batch" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_import_batch_id\":\"$IMPBATCHID3\"}" > /tmp/import_race_a.out &
+curl -s -w "HTTP:%{http_code}\n" -X POST "$BASE/rest/v1/rpc/confirm_import_batch" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_import_batch_id\":\"$IMPBATCHID3\"}" > /tmp/import_race_b.out &
+wait
+
+SUCCESSES=$(grep -l "HTTP:200" /tmp/import_race_a.out /tmp/import_race_b.out 2>/dev/null | wc -l | tr -d ' ')
+check "exactly one of two concurrent confirm_import_batch calls on the same batch succeeds" "1" "$SUCCESSES"
+
+EXPECTED_BALANCE_AFTER_RACE=$((BALANCE_BEFORE_RACE - 7500))
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "concurrent double-confirmation applied the balance delta exactly once, not twice" "$EXPECTED_BALANCE_AFTER_RACE" "$R"
+
+R=$(curl -s "$BASE/rest/v1/transactions?import_batch_id=eq.$IMPBATCHID3&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "exactly one transaction was created from the raced batch, not two" "1" "$R"
+
+# Import confirmation + a concurrent manual transaction on the SAME
+# account (api-architecture.md §5.3's fourth mandatory scenario).
+IMPBATCH4=$(curl -s -X POST "$BASE/rest/v1/import_batches" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source_type\":\"csv\",\"account_id\":\"$TXN_ACCID\",\"file_name\":\"smoke4.csv\",\"file_size_bytes\":100}")
+IMPBATCHID4=$(echo "$IMPBATCH4" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+curl -s -X POST "$BASE/rest/v1/import_staged_transactions" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"import_batch_id\":\"$IMPBATCHID4\",\"user_id\":\"$UID1\",\"raw_payload\":{},\"normalized_amount_minor\":3000,\"normalized_date\":\"2026-08-17\",\"suggested_category_id\":\"$CATID\",\"staged_transaction_type\":\"income\",\"confidence_score\":0.9,\"review_status\":\"accepted\"}" > /dev/null
+curl -s -X PATCH "$BASE/rest/v1/import_batches?id=eq.$IMPBATCHID4" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -d '{"status":"awaiting_review"}' > /dev/null
+
+BALANCE_BEFORE_MIXED_RACE=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+
+curl -s -X POST "$BASE/rest/v1/rpc/confirm_import_batch" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_import_batch_id\":\"$IMPBATCHID4\"}" > /tmp/import_mixed_a.out &
+curl -s -X POST "$BASE/rest/v1/rpc/create_transaction" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_account_id\":\"$TXN_ACCID\",\"p_type\":\"expense\",\"p_amount_minor\":2000,\"p_category_id\":\"$CATID\",\"p_occurred_at\":\"2026-08-17\"}" > /tmp/import_mixed_b.out &
+wait
+
+EXPECTED_BALANCE_MIXED=$((BALANCE_BEFORE_MIXED_RACE + 3000 - 2000))
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "concurrent confirm_import_batch + create_transaction on the same account both apply, serialized, no lost update" "$EXPECTED_BALANCE_MIXED" "$R"
+
+echo
+echo "== imports: storage path isolation (Phase 15) =="
+
+R=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/storage/v1/object/statements/$UID1/$IMPBATCHID/smoke.csv" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's statement file directly from Storage (path-scoped RLS)" "400" "$R"
+
+echo
+
 echo "== summary =="
 echo "  $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then

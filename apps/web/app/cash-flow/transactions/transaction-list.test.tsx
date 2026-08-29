@@ -124,4 +124,10 @@ describe("<TransactionList> — populated", () => {
     await user.click(screen.getByRole("button", { name: "+ Add" }));
     expect(screen.getByRole("heading", { name: "Add transaction" })).toBeInTheDocument();
   });
+
+  it("links to the standalone Import screen (Phase 15), additive alongside + Add, not replacing it", () => {
+    render(<TransactionList initialTransactions={[]} accounts={[account]} categories={[category]} masked={false} />);
+    expect(screen.getByRole("link", { name: "Import statement" })).toHaveAttribute("href", "/cash-flow/import");
+    expect(screen.getByRole("button", { name: "+ Add" })).toBeInTheDocument();
+  });
 });

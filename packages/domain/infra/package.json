@@ -16,6 +16,8 @@
     "vitest": "^2.1.4"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.112.4"
+    "@spencare/domain-core": "workspace:*",
+    "@supabase/supabase-js": "^2.112.4",
+    "pdf-parse": "^2.4.5"
   }
 }

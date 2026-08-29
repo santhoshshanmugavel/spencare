@@ -25,3 +25,24 @@ export {
 } from "./twoFactor.js";
 
 export { sniffImageMimeType, type SniffedImageType } from "./fileSniff.js";
+
+export {
+  sniffStatementFileType,
+  type SniffedStatementFileType,
+  LOW_CONFIDENCE_THRESHOLD,
+  normalizeStagedAmount,
+  directionFromSignedAmount,
+  directionFromDebitCredit,
+  directionFromMarker,
+  normalizeStagedDate,
+  scoreConfidence,
+  calculateDuplicateSignals,
+  calculateImportSummary,
+  type StagedTransactionType,
+  type ConfidenceInput,
+  type DuplicateCandidateInput,
+  type ExistingTransactionForMatch,
+  type DuplicateSignal,
+  type ImportSummaryInput,
+  type ImportSummary,
+} from "./imports.js";

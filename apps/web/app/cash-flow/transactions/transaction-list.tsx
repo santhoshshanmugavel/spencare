@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
@@ -131,9 +132,14 @@ export function TransactionList({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">Transactions</h1>
-        <Button size="touch" onClick={() => setAddOpen(true)}>
-          + Add
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="touch">
+            <Link href="/cash-flow/import">Import statement</Link>
+          </Button>
+          <Button size="touch" onClick={() => setAddOpen(true)}>
+            + Add
+          </Button>
+        </div>
       </div>
 
       {transactions.length === 0 ? (
