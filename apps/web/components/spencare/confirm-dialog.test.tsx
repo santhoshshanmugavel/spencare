@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { describe, expect, it, vi } from "vitest";
@@ -109,6 +109,20 @@ describe("<ConfirmDialog>", () => {
       />,
     );
     expect(screen.getByRole("dialog", { name: "Delete my account?" })).toBeInTheDocument();
+  });
+
+  it("never auto-focuses the destructive Confirm button on open -- Cancel receives focus instead (Phase 17 fix)", async () => {
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={() => {}}
+        title="Disconnect AI provider?"
+        confirmLabel="Disconnect"
+        onConfirm={() => {}}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Disconnect" })).not.toHaveFocus();
   });
 
   it("has no axe violations when open with a full consequence list", async () => {

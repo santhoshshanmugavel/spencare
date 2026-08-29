@@ -70,3 +70,21 @@ export class NoProviderConfiguredError extends Error {
     this.name = "NoProviderConfiguredError";
   }
 }
+
+/**
+ * Distinct from `NoProviderConfiguredError` (which means "nothing is
+ * connected yet"): this means "this specific provider isn't buildable yet
+ * in this release" (Phase 17 locked decision #1 -- OpenAI/Google/
+ * OpenRouter/Other are on the approved roster but have no adapter). Thrown
+ * by `buildAdapterForProvider` for any provider outside
+ * `IMPLEMENTED_PROVIDERS`; the settings UI must never let a user reach
+ * this path at all (those roster cards are disabled/"Coming soon"), so
+ * this is a defense-in-depth, server-side backstop, not the primary
+ * enforcement.
+ */
+export class ProviderNotImplementedError extends Error {
+  constructor(provider: string) {
+    super(`${provider} isn't available to connect yet. Coming soon.`);
+    this.name = "ProviderNotImplementedError";
+  }
+}

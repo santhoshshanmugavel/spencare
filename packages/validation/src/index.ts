@@ -132,3 +132,16 @@ export {
   regenerateReplySchema,
   type RegenerateReplyInput,
 } from "./ai.js";
+
+export {
+  AI_PROVIDERS,
+  type AiProviderValue,
+  connectProviderSchema,
+  type ConnectProviderInput,
+  switchProviderSchema,
+  type SwitchProviderInput,
+  validateProviderKeySchema,
+  type ValidateProviderKeyInput,
+  updateProviderKeySchema,
+  type UpdateProviderKeyInput,
+} from "./aiProvider.js";

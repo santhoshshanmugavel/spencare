@@ -15,6 +15,8 @@ import {
   type AuthContext,
 } from "@spencare/domain-application";
 import type { ProfileUpdateInput } from "@spencare/validation";
+import { connectProvider, switchProvider, updateProviderKey, disconnectProvider, getProviderStatus } from "@spencare/ai";
+import type { ConnectProviderInput, SwitchProviderInput, UpdateProviderKeyInput } from "@spencare/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 
@@ -97,4 +99,48 @@ export async function disableTwoFactorAction(code: string) {
 export async function regenerateBackupCodesAction(code: string) {
   const ctx = await requireAuthContext();
   return regenerateBackupCodes.execute(ctx, { code });
+}
+
+/**
+ * BYO AI provider settings (Phase 17). Every action here resolves
+ * AuthContext from the verified session exactly like every action above
+ * -- no client-supplied user id, no exception for credential-bearing
+ * inputs. The plaintext API key passed into `connectProviderAction`/
+ * `switchProviderAction`/`updateProviderKeyAction` is used once, server-
+ * side, to validate-then-encrypt-then-store; none of these actions ever
+ * return it (or the encrypted form) back to the caller -- only the safe
+ * `AiProviderStatus` shape (provider, keyLastFour, isActive,
+ * lastValidatedAt, lastValidationError).
+ */
+export async function getProviderStatusAction() {
+  const ctx = await requireAuthContext();
+  return getProviderStatus(ctx);
+}
+
+export async function connectProviderAction(input: ConnectProviderInput) {
+  const ctx = await requireAuthContext();
+  const result = await connectProvider(ctx, input);
+  if (result.ok) revalidatePath("/settings/ai");
+  return result;
+}
+
+export async function switchProviderAction(input: SwitchProviderInput) {
+  const ctx = await requireAuthContext();
+  const result = await switchProvider(ctx, input);
+  if (result.ok) revalidatePath("/settings/ai");
+  return result;
+}
+
+export async function updateProviderKeyAction(input: UpdateProviderKeyInput) {
+  const ctx = await requireAuthContext();
+  const result = await updateProviderKey(ctx, input);
+  if (result.ok) revalidatePath("/settings/ai");
+  return result;
+}
+
+export async function disconnectProviderAction() {
+  const ctx = await requireAuthContext();
+  await disconnectProvider(ctx);
+  revalidatePath("/settings/ai");
+  revalidatePath("/spensa");
 }

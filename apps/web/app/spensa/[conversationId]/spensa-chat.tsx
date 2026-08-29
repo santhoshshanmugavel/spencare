@@ -306,12 +306,24 @@ function MessageBubble({
   }
 
   if (message.kind === "error") {
+    // Phase 17 closes the loop this exact message (resolver.ts's
+    // NoProviderConfiguredError) opened in Phase 16 -- link straight to
+    // the now-real settings page instead of leaving "in Settings" as
+    // unclickable prose.
+    const isNoProviderError = message.text?.toLowerCase().includes("connect an ai provider");
     return (
       <div className="flex justify-start">
         <Card className="max-w-[80%] border-destructive/40">
           <CardContent className="flex items-start gap-2 py-3">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-            <p className="text-sm text-destructive">{message.text}</p>
+            <div className="space-y-2">
+              <p className="text-sm text-destructive">{message.text}</p>
+              {isNoProviderError ? (
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/settings/ai">Connect a provider</Link>
+                </Button>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -803,6 +803,83 @@ check "user2 cannot delete user1's AI provider credential (RLS, HTTP 204/0 rows)
 R=$(curl -s "$BASE/rest/v1/ai_provider_credentials?id=eq.$CREDID1&select=id" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
 check "user1's credential row still exists after user2's spoofed delete attempt" "1" "$R"
 
+curl -s -X DELETE "$BASE/rest/v1/ai_provider_credentials?id=eq.$CREDID1" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" > /dev/null
+
+echo
+echo "== Spensa: BYO AI provider connect/switch/rotate/disconnect (Phase 17) =="
+
+# No authenticated role -- not even the real owner -- may call the atomic
+# replace RPC directly. It is service-role only by design (the migration's
+# own comment explains why): the validate-then-replace ordering is enforced
+# entirely in application code, so if PostgREST let an authenticated client
+# reach this RPC directly, that ordering could be bypassed outright.
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/replace_active_ai_provider_credential" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_provider\":\"anthropic\",\"p_encrypted_api_key\":\"\\\\x00112233\",\"p_key_last_four\":\"9999\"}")
+echo "$R" | grep -q "HTTP:40" && check "even the real owner cannot call replace_active_ai_provider_credential directly (service-role only, EXECUTE revoked from authenticated)" "pass" "pass" || check "even the real owner cannot call replace_active_ai_provider_credential directly (service-role only, EXECUTE revoked from authenticated)" "pass" "fail: $R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/replace_active_ai_provider_credential" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_provider\":\"anthropic\",\"p_encrypted_api_key\":\"\\\\x00112233\",\"p_key_last_four\":\"9999\"}")
+echo "$R" | grep -q "HTTP:40" && check "a spoofed p_user_id via the RPC is equally rejected (authenticated has no EXECUTE at all, regardless of whose id is named)" "pass" "pass" || check "a spoofed p_user_id via the RPC is equally rejected (authenticated has no EXECUTE at all, regardless of whose id is named)" "pass" "fail: $R"
+
+# Service-role call: this is what connectProvider actually does once the
+# new key has already been validated -- a real INSERT of the first
+# credential.
+R=$(curl -s -X POST "$BASE/rest/v1/rpc/replace_active_ai_provider_credential" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_provider\":\"anthropic\",\"p_encrypted_api_key\":\"\\\\x00112233\",\"p_key_last_four\":\"1111\"}")
+echo "$R" | grep -q '"provider":"anthropic"' && check "connectProvider's underlying RPC creates the first credential" "pass" "pass" || check "connectProvider's underlying RPC creates the first credential" "pass" "fail: $R"
+
+R=$(curl -s "$BASE/rest/v1/ai_provider_credentials?user_id=eq.$UID1&select=id,provider,key_last_four" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d))")
+check "exactly one credential row exists for user1 after connecting" "1" "$R"
+
+# switchProvider's/updateProviderKey's underlying RPC: replace with a
+# DIFFERENT provider, simulating a switch.
+R=$(curl -s -X POST "$BASE/rest/v1/rpc/replace_active_ai_provider_credential" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_provider\":\"openai\",\"p_encrypted_api_key\":\"\\\\x00445566\",\"p_key_last_four\":\"2222\"}")
+echo "$R" | grep -q '"provider":"openai"' && check "switchProvider's underlying RPC replaces with the new provider" "pass" "pass" || check "switchProvider's underlying RPC replaces with the new provider" "pass" "fail: $R"
+
+R=$(curl -s "$BASE/rest/v1/ai_provider_credentials?user_id=eq.$UID1&select=id,provider,key_last_four" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY")
+echo "$R" | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if len(d)==1 and d[0]['provider']=='openai' and d[0]['key_last_four']=='2222' else 1)" \
+  && check "exactly one credential survives a switch -- the OLD (anthropic/1111) is gone, only the NEW (openai/2222) remains" "pass" "pass" \
+  || check "exactly one credential survives a switch -- the OLD (anthropic/1111) is gone, only the NEW (openai/2222) remains" "pass" "fail: $R"
+
+# Rotation (same provider, new key) is the identical RPC call.
+R=$(curl -s -X POST "$BASE/rest/v1/rpc/replace_active_ai_provider_credential" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"p_user_id\":\"$UID1\",\"p_provider\":\"openai\",\"p_encrypted_api_key\":\"\\\\x00778899\",\"p_key_last_four\":\"3333\"}")
+R=$(curl -s "$BASE/rest/v1/ai_provider_credentials?user_id=eq.$UID1&select=id,provider,key_last_four" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY")
+echo "$R" | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if len(d)==1 and d[0]['provider']=='openai' and d[0]['key_last_four']=='3333' else 1)" \
+  && check "rotation (same provider, new key) also leaves exactly one row, with the updated key_last_four" "pass" "pass" \
+  || check "rotation (same provider, new key) also leaves exactly one row, with the updated key_last_four" "pass" "fail: $R"
+
+echo
+echo "== Spensa: BYO AI concurrent switching cannot produce two active credentials (Phase 17) =="
+
+curl -s -X POST "$BASE/rest/v1/rpc/replace_active_ai_provider_credential" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_provider\":\"google\",\"p_encrypted_api_key\":\"\\\\xaaaa\",\"p_key_last_four\":\"aaaa\"}" > /tmp/ai_switch_a.out &
+curl -s -X POST "$BASE/rest/v1/rpc/replace_active_ai_provider_credential" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_provider\":\"openrouter\",\"p_encrypted_api_key\":\"\\\\xbbbb\",\"p_key_last_four\":\"bbbb\"}" > /tmp/ai_switch_b.out &
+wait
+
+R=$(curl -s "$BASE/rest/v1/ai_provider_credentials?user_id=eq.$UID1&select=id" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "two concurrent replace calls for the same user never leave more than one active credential (the unique index + atomic delete-then-insert both prevent it)" "1" "$R"
+
+echo
+echo "== Spensa: BYO AI disconnect (Phase 17, complete purge) =="
+
+# Owner disconnect: a plain RLS-scoped DELETE, exactly what disconnectProvider does.
+# (PostgREST returns 204 for a DELETE regardless of row count without
+# `Prefer: return=representation` -- the actual proof is the follow-up
+# SELECT below showing 0 rows remain.)
+R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/ai_provider_credentials?user_id=eq.$UID1" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+check "user1 (real owner) can disconnect via their own RLS-scoped client (HTTP 204)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/ai_provider_credentials?user_id=eq.$UID1&select=id" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "disconnect actually deletes the row -- no encrypted secret material survives, not merely is_active flipped" "0" "$R"
+
 echo
 
 echo "== summary =="

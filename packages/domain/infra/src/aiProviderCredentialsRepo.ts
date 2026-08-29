@@ -91,3 +91,56 @@ export async function seedProviderCredential(
   });
   if (error) throw error;
 }
+
+/**
+ * Atomically replaces the caller's active credential (Phase 17 locked
+ * decision #2: connect / switch / rotate are all this same operation --
+ * "connectProvider on an already-connected provider replaces the row",
+ * security-architecture.md §7). Calls the `replace_active_ai_provider_
+ * credential` SECURITY DEFINER RPC, which deletes any existing row for
+ * this user and inserts the new one inside ONE transaction -- if the
+ * insert fails for any reason, the delete rolls back with it, so a
+ * WORKING existing credential can never be lost to a failed write. This
+ * function must only ever be called AFTER the new key has already been
+ * validated against the real provider (a live network call that must
+ * never happen inside this DB transaction) -- validating first, writing
+ * second, is what makes "an invalid new key never destroys a valid old
+ * one" true: an invalid key is rejected before this function is ever
+ * called at all.
+ *
+ * Service-role only, like every other function here that touches
+ * `encrypted_api_key`. The RPC itself has EXECUTE revoked from
+ * `authenticated`/`anon` (see the migration) specifically so a
+ * client-facing caller can never invoke this directly and bypass the
+ * validate-then-replace ordering that only the application layer enforces.
+ */
+export async function replaceActiveCredential(
+  serviceClient: TypedSupabaseClient,
+  userId: string,
+  provider: AiProvider,
+  encryptedApiKey: Buffer,
+  keyLastFour: string,
+): Promise<void> {
+  const { error } = await serviceClient.rpc("replace_active_ai_provider_credential", {
+    p_user_id: userId,
+    p_provider: provider,
+    p_encrypted_api_key: `\\x${encryptedApiKey.toString("hex")}`,
+    p_key_last_four: keyLastFour,
+  });
+  if (error) throw error;
+}
+
+/**
+ * `disconnectProvider` (Phase 17 locked decision #3): a COMPLETE credential
+ * purge, not a deactivation. Deletes the row entirely -- `encrypted_api_key`
+ * is `not null`, so there is no way to "clear" it in place; the only way to
+ * stop retaining the secret is to remove the row. Uses the caller's own
+ * RLS-scoped client (not service role): this only ever deletes, never
+ * reads or writes `encrypted_api_key`, and the existing "delete own ai
+ * provider credentials" RLS policy already scopes it correctly to the
+ * caller's own row.
+ */
+export async function disconnectCredential(client: TypedSupabaseClient, userId: string): Promise<void> {
+  const { error } = await client.from("ai_provider_credentials").delete().eq("user_id", userId);
+  if (error) throw error;
+}

@@ -1,11 +1,23 @@
 export type { AiProviderAdapter, AiProviderName, AiEvent, ChatMessage, ToolDefinition } from "./provider.js";
-export { ProviderOutageError, ProviderRateLimitError, MalformedProviderResponseError, NoProviderConfiguredError } from "./provider.js";
+export { ProviderOutageError, ProviderRateLimitError, MalformedProviderResponseError, NoProviderConfiguredError, ProviderNotImplementedError } from "./provider.js";
 
 export { AnthropicAdapter } from "./adapters/anthropicAdapter.js";
 export { FakeAiProviderAdapter, type FakeScenario } from "./adapters/fakeAdapter.js";
 
-export { resolveProviderAdapter } from "./resolver.js";
+export { resolveProviderAdapter, buildAdapterForProvider, isProviderImplemented, IMPLEMENTED_PROVIDERS } from "./resolver.js";
 export { buildAiContext, type AiContext } from "./context.js";
+
+export {
+  connectProvider,
+  switchProvider,
+  updateProviderKey,
+  validateProviderKey,
+  disconnectProvider,
+  getActiveProvider,
+  getProviderStatus,
+  type ProviderMutationResult,
+  type ProviderMutationError,
+} from "./providerManagement.js";
 
 export { proposeCommand, confirmCommand, cancelPendingCommand, getProposal, type ProposalResult, type ProposalPreviewField, type ConfirmResult, type ConfirmError } from "./confirmation.js";
 
@@ -23,4 +35,4 @@ export { getConversation, listConversations, getConversationMessages, deleteConv
 // packages/ai is the layer the UI is allowed to depend on for every
 // AI/Spensa-related type, the same way packages/domain/application is for
 // every other domain's row types.
-export type { AiConversationRow, AiMessageRow, AiMessageRole, AiMessageContent } from "@spencare/domain-infra";
+export type { AiConversationRow, AiMessageRow, AiMessageRole, AiMessageContent, AiProvider, AiProviderStatus } from "@spencare/domain-infra";

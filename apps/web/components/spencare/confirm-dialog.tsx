@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -46,9 +46,22 @@ export function ConfirmDialog({
   onConfirm,
   confirmDisabled,
 }: ConfirmDialogProps) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* Radix focuses the first tabbable element on open by default --
+          here that would be the destructive Confirm button, since it's
+          rendered first in the footer below (matching the evidenced
+          button-order convention). Explicitly redirect initial focus to
+          Cancel instead: a mis-timed Enter keypress right as this dialog
+          opens must never confirm a destructive/consequential action
+          (confirmation-ui-specification.md §9's "never auto-focused" rule,
+          same hard requirement as ConsequentialActionPreview's Confirm). */}
+      <DialogContent onOpenAutoFocus={(e) => {
+        e.preventDefault();
+        cancelRef.current?.focus();
+      }}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
@@ -79,7 +92,7 @@ export function ConfirmDialog({
           </Button>
           {/* Safe/cancel action: solid primary weight -- deliberately the
               heavier visual treatment, nudging toward safety. */}
-          <Button variant="default" size="touch" onClick={() => onOpenChange(false)}>
+          <Button ref={cancelRef} variant="default" size="touch" onClick={() => onOpenChange(false)}>
             {cancelLabel}
           </Button>
         </DialogFooter>
