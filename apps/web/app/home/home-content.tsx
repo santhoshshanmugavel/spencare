@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Landmark, PiggyBank, Target } from "lucide-react";
+import { Landmark, PiggyBank, Sparkles, Target } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import type { SafeToSpendState } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
@@ -94,6 +94,28 @@ export function HomeContent({
       <h1 className="text-2xl font-semibold text-foreground">
         Welcome{displayName ? `, ${displayName}` : ""}
       </h1>
+
+      {/*
+        Phase 16 locked decision #2: Home is Spensa's launcher/entry
+        surface -- Spensa is never embedded directly into Home, only
+        linked to from it. Always visible (not gated behind setup
+        completion), since asking Spensa a question doesn't require
+        accounts/budget/goals to already exist.
+      */}
+      <Card>
+        <CardContent className="flex items-center gap-4 py-5">
+          <Sparkles className="size-6 shrink-0 text-primary" aria-hidden="true" />
+          <div className="flex-1 space-y-0.5">
+            <p className="font-medium text-foreground">Ask Spensa</p>
+            <p className="text-sm text-muted-foreground">
+              Ask about your Safe-to-Spend, budgets, goals, or bills.
+            </p>
+          </div>
+          <Button asChild size="touch" variant="outline">
+            <Link href="/spensa/new">Chat</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       {/*
         SP-051 setup-nudge grid (approved) -- "Connect AI Model" excluded

@@ -53,6 +53,14 @@ describe("<HomeContent> — Safe-to-Spend header (DD-01)", () => {
   });
 });
 
+describe("<HomeContent> — Spensa launcher (Phase 16 locked decision #2)", () => {
+  it("always shows an 'Ask Spensa' launcher linking to a new conversation, regardless of setup state", () => {
+    render(<HomeContent {...baseProps} hasAccounts={false} hasBudget={false} hasGoals={false} />);
+    const link = screen.getByRole("link", { name: "Chat" });
+    expect(link).toHaveAttribute("href", "/spensa/new");
+  });
+});
+
 describe("<HomeContent> — SP-051 setup-nudge grid", () => {
   it("shows no nudge cards once accounts, a budget, and a goal all exist", () => {
     render(<HomeContent {...baseProps} />);

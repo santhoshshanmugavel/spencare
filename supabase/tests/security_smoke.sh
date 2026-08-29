@@ -693,6 +693,118 @@ check "user2 cannot read user1's statement file directly from Storage (path-scop
 
 echo
 
+echo "== Spensa: pending_confirmations ownership / IDOR (Phase 16) =="
+
+# A real Spensa-shaped proposal: a createTransaction confirmation for a
+# 300-rupee expense on user1's own account/category.
+PC1=$(curl -s -X POST "$BASE/rest/v1/pending_confirmations" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source\":\"spensa\",\"command_type\":\"createTransaction\",\"payload\":{\"accountId\":\"$TXN_ACCID\",\"type\":\"expense\",\"amountMinor\":30000,\"categoryId\":\"$CATID\",\"occurredAt\":\"2026-08-20\"},\"preview\":{\"summary\":\"Log a 300 rupee expense\"},\"expires_at\":\"2026-12-31T00:00:00Z\"}")
+PCID1=$(echo "$PC1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s "$BASE/rest/v1/pending_confirmations?id=eq.$PCID1&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's pending confirmation" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/pending_confirmations?id=eq.$PCID1" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"status":"cancelled"}')
+check "user2 cannot cancel user1's pending confirmation via raw REST PATCH (RLS, HTTP 204/0 rows)" "204" "$R"
+R=$(curl -s "$BASE/rest/v1/pending_confirmations?id=eq.$PCID1&select=status" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['status'])")
+check "user1's pending confirmation unchanged after user2's spoofed cancel attempt" "pending" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$PCID1\"}")
+check "user2 cannot confirm user1's pending confirmation, even naming user1's own id as p_user_id (spoofed user_id rejected)" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID2\",\"p_confirmation_id\":\"$PCID1\"}")
+check "user2 cannot confirm user1's pending confirmation by naming their own (real) user_id -- the row just isn't theirs" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"confirmation_not_found\"}HTTP:400" "$R"
+
+BALANCE_BEFORE_CONFIRM=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$PCID1\"}")
+check "user1 (real owner) can confirm their own pending confirmation via the RPC" "200" "$R"
+
+EXPECTED_BALANCE_AFTER_CONFIRM=$((BALANCE_BEFORE_CONFIRM - 30000))
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "confirming a Spensa proposal applies the real domain command exactly once" "$EXPECTED_BALANCE_AFTER_CONFIRM" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$PCID1\"}")
+check "a second confirm attempt on the same (already-confirmed) confirmation is rejected -- not replayable" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"confirmation_not_pending\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "the replayed confirm attempt did not apply the balance delta a second time" "$EXPECTED_BALANCE_AFTER_CONFIRM" "$R"
+
+echo
+echo "== Spensa: pending_confirmations expiry (Phase 16) =="
+
+PC2=$(curl -s -X POST "$BASE/rest/v1/pending_confirmations" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source\":\"spensa\",\"command_type\":\"createTransaction\",\"payload\":{\"accountId\":\"$TXN_ACCID\",\"type\":\"expense\",\"amountMinor\":10000,\"categoryId\":\"$CATID\",\"occurredAt\":\"2026-08-20\"},\"preview\":{\"summary\":\"Log a 100 rupee expense\"},\"expires_at\":\"2020-01-01T00:00:00Z\"}")
+PCID2=$(echo "$PC2" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$PCID2\"}")
+# Deliberately HTTP 200 with a structured {"error":...} body, not a
+# raised/400 Postgres exception -- see the migration's own comment on why
+# raising here would have silently rolled back the status='expired' update
+# a few lines below this check.
+check "an already-expired pending confirmation cannot be confirmed" "{\"error\": \"confirmation_expired\"}HTTP:200" "$R"
+
+R=$(curl -s "$BASE/rest/v1/pending_confirmations?id=eq.$PCID2&select=status" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['status'])")
+check "the rejected expired confirmation is marked expired, not left dangling as pending" "expired" "$R"
+
+BALANCE_AFTER_EXPIRY_ATTEMPT=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "an expired confirmation never applies its balance delta" "$EXPECTED_BALANCE_AFTER_CONFIRM" "$BALANCE_AFTER_EXPIRY_ATTEMPT"
+
+echo
+echo "== Spensa: ai_conversations / ai_messages ownership / IDOR (Phase 16) =="
+
+CONV1=$(curl -s -X POST "$BASE/rest/v1/ai_conversations" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"title\":\"Safe to Spend\"}")
+CONVID1=$(echo "$CONV1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+MSG1=$(curl -s -X POST "$BASE/rest/v1/ai_messages" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"conversation_id\":\"$CONVID1\",\"role\":\"user\",\"content\":{\"kind\":\"text\",\"text\":\"How much can I spend?\"}}")
+MSGID1=$(echo "$MSG1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s "$BASE/rest/v1/ai_conversations?id=eq.$CONVID1&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's conversation" "[]" "$R"
+
+R=$(curl -s "$BASE/rest/v1/ai_messages?id=eq.$MSGID1&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's message (join-based RLS through ai_conversations)" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/ai_conversations?id=eq.$CONVID1" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"title":"HACKED"}')
+check "user2 cannot rename user1's conversation (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/ai_messages" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"conversation_id\":\"$CONVID1\",\"role\":\"user\",\"content\":{\"kind\":\"text\",\"text\":\"injected\"}}")
+check "user2 cannot insert a message into user1's conversation (join-based RLS WITH CHECK, HTTP 403)" "403" "$R"
+R=$(curl -s "$BASE/rest/v1/ai_messages?conversation_id=eq.$CONVID1&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "user1's conversation still shows only their own message -- user2's insert attempt silently failed RLS, not silently succeeded" "1" "$R"
+
+echo
+echo "== Spensa: ai_provider_credentials ownership / IDOR (Phase 16) =="
+
+CRED1=$(curl -s -X POST "$BASE/rest/v1/ai_provider_credentials" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"provider\":\"anthropic\",\"encrypted_api_key\":\"\\\\x00112233\",\"key_last_four\":\"abcd\",\"is_active\":true}")
+CREDID1=$(echo "$CRED1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s "$BASE/rest/v1/ai_provider_credentials?id=eq.$CREDID1&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's AI provider credential row at all (RLS)" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/ai_provider_credentials?id=eq.$CREDID1" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot delete user1's AI provider credential (RLS, HTTP 204/0 rows)" "204" "$R"
+R=$(curl -s "$BASE/rest/v1/ai_provider_credentials?id=eq.$CREDID1&select=id" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "user1's credential row still exists after user2's spoofed delete attempt" "1" "$R"
+
+echo
+
 echo "== summary =="
 echo "  $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then

@@ -1,0 +1,25 @@
+export type { AiProviderAdapter, AiProviderName, AiEvent, ChatMessage, ToolDefinition } from "./provider.js";
+export { ProviderOutageError, ProviderRateLimitError, MalformedProviderResponseError, NoProviderConfiguredError } from "./provider.js";
+
+export { AnthropicAdapter } from "./adapters/anthropicAdapter.js";
+export { FakeAiProviderAdapter, type FakeScenario } from "./adapters/fakeAdapter.js";
+
+export { resolveProviderAdapter } from "./resolver.js";
+export { buildAiContext, type AiContext } from "./context.js";
+
+export { proposeCommand, confirmCommand, cancelPendingCommand, getProposal, type ProposalResult, type ProposalPreviewField, type ConfirmResult, type ConfirmError } from "./confirmation.js";
+
+export { getToolDefinitions, executeTool, type ToolExecutionResult } from "./tools/registry.js";
+export { READ_TOOLS } from "./tools/readTools.js";
+export { WRITE_TOOLS } from "./tools/writeTools.js";
+export type { ToolHandlerContext } from "./tools/readTools.js";
+
+export { sendMessage, type OrchestratorEvent, type SendMessageOptions } from "./orchestrator.js";
+export { getConversation, listConversations, getConversationMessages, deleteConversation, regenerateReply } from "./conversations.js";
+
+// Re-exported so the Web UI never needs to import @spencare/domain-infra
+// directly (dependency-cruiser's "no-web-ui-direct-database" rule) --
+// packages/ai is the layer the UI is allowed to depend on for every
+// AI/Spensa-related type, the same way packages/domain/application is for
+// every other domain's row types.
+export type { AiConversationRow, AiMessageRow, AiMessageRole, AiMessageContent } from "@spencare/domain-infra";

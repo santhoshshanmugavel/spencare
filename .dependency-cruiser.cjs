@@ -70,6 +70,18 @@ module.exports = {
       from: {},
       to: { circular: true },
     },
+    {
+      name: "ai-provider-sdk-only-in-adapters",
+      comment:
+        "A provider SDK (ai-architecture.md §1) may only be imported inside packages/ai/src/adapters -- " +
+        "orchestration, tools, context, and confirmation code are written entirely against the " +
+        "AiProviderAdapter interface and must never import a provider SDK directly.",
+      severity: "error",
+      from: { path: "^packages/ai/src", pathNot: "^packages/ai/src/adapters" },
+      to: {
+        path: ["@anthropic-ai", "openai", "@google/generative-ai"],
+      },
+    },
   ],
   options: {
     doNotFollow: { path: "node_modules" },

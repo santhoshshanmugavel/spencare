@@ -96,9 +96,9 @@ export default async function HomePage() {
           hasGoals={goals.length > 0}
         />
         <p className="text-sm text-muted-foreground">
-          You&apos;re signed in as {user.email}. Spensa (AI chat) isn&apos;t built yet -- this is
-          Home with your Safe-to-Spend snapshot and setup checklist; Cash Flow, Goals, and
-          Settings each have their own dedicated pages.
+          You&apos;re signed in as {user.email}. This is Home with your Safe-to-Spend snapshot,
+          setup checklist, and the Spensa launcher above; Cash Flow, Goals, and Settings each have
+          their own dedicated pages.
         </p>
         <form action={signOutAction}>
           <Button type="submit" variant="outline" size="touch">

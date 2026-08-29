@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
+    "@spencare/ai": "workspace:*",
     "@spencare/domain-application": "workspace:*",
     "@spencare/domain-core": "workspace:*",
     "@spencare/domain-infra": "workspace:*",
