@@ -12,7 +12,11 @@ import {
   startTotpEnrollment,
   updateAvatar,
   updateProfile,
+  createMcpSession,
+  listMcpSessions,
+  revokeMcpSession,
   type AuthContext,
+  type McpScope,
 } from "@spencare/domain-application";
 import type { ProfileUpdateInput } from "@spencare/validation";
 import { connectProvider, switchProvider, updateProviderKey, disconnectProvider, getProviderStatus } from "@spencare/ai";
@@ -143,4 +147,29 @@ export async function disconnectProviderAction() {
   await disconnectProvider(ctx);
   revalidatePath("/settings/ai");
   revalidatePath("/spensa");
+}
+
+/**
+ * MCP session management (Phase 18). `createMcpSessionAction` is the ONLY
+ * place a plaintext MCP token ever exists outside the user's own copy of
+ * it -- it crosses the Server Action boundary exactly once, in the
+ * response to this one call, and is never returned by
+ * `listMcpSessionsAction` or persisted anywhere in plaintext.
+ */
+export async function createMcpSessionAction(input: { clientName: string; scopes: McpScope[] }) {
+  const ctx = await requireAuthContext();
+  const result = await createMcpSession(ctx, input);
+  revalidatePath("/settings/mcp");
+  return result;
+}
+
+export async function listMcpSessionsAction() {
+  const ctx = await requireAuthContext();
+  return listMcpSessions(ctx);
+}
+
+export async function revokeMcpSessionAction(sessionId: string) {
+  const ctx = await requireAuthContext();
+  await revokeMcpSession(ctx, sessionId);
+  revalidatePath("/settings/mcp");
 }

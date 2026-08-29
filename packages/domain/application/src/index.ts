@@ -175,3 +175,84 @@ export {
 } from "@spencare/domain-core";
 
 export { getDashboardSummary, type DashboardSummary } from "./queries/dashboard.js";
+
+// Phase 18 (MCP Integration) relocation: the canonical propose/confirm
+// confirmation cascade now lives here, not in packages/ai, so both Spensa
+// and apps/mcp-server can share the one real implementation without
+// apps/mcp-server needing to depend on packages/ai (which it is
+// architecturally forbidden to do -- mcp-architecture.md §1).
+export {
+  proposeCommand,
+  confirmCommand,
+  cancelPendingCommand,
+  getProposal,
+  describeAmountForProvider,
+  type ProposalResult,
+  type ProposalPreviewField,
+  type ConfirmResult,
+  type ConfirmError,
+} from "./commands/confirmation.js";
+export type { ConfirmationSource } from "@spencare/domain-infra";
+
+// The credit-safe account-to-AI-summary mapping, likewise relocated here
+// so MCP's getAccounts tool and Spensa's context/tools use the identical
+// mapping -- never a second, potentially-diverging implementation.
+export { toAiAccountSummaryInput } from "./mappers/aiAccountSummary.js";
+
+// MCP session lifecycle + the one path to an MCP AuthContext (Phase 18).
+export {
+  createMcpSession,
+  listMcpSessions,
+  revokeMcpSession,
+  resolveMcpAuthContext,
+  hasMcpScope,
+  type CreateMcpSessionInput,
+  type CreateMcpSessionOutput,
+  type McpAuthContext,
+  type McpAuthResult,
+  type McpAuthFailureReason,
+} from "./commands/mcpSessions.js";
+export type { McpScope, McpSessionStatus } from "@spencare/domain-infra";
+export { logMcpScopeDenial } from "./commands/mcpAudit.js";
+
+// The narrow, provider-boundary redaction primitives (Phase 16, domain-core
+// `ai.ts`) re-exported here so apps/mcp-server -- an external boundary
+// exactly like Spensa's provider connection -- can apply the identical
+// Privacy-Mode-safe representation to its own tool outputs, without
+// needing to depend on @spencare/domain-core directly (which it
+// architecturally could, since domain-core sits below domain-application,
+// but re-exporting keeps "one place every AI-adjacent surface imports
+// from" consistent with how toAiAccountSummaryInput/describeAmountForProvider
+// are already re-exported here).
+export {
+  redactFinancialSnapshot,
+  redactBudgetSummaries,
+  redactGoalSummaries,
+  redactBillSummaries,
+  redactCashFlowSummary,
+  calculateCreditUtilization,
+  type PrivateAmount,
+  type MaybePrivateAmount,
+  type MaybePrivateRatio,
+  type AiAccountSummaryInput,
+  type AiAccountSummaryRedacted,
+  type AiFinancialSnapshotInput,
+  type AiFinancialSnapshotRedacted,
+  type AiBudgetSummaryInput,
+  type AiBudgetSummaryRedacted,
+  type AiGoalSummaryInput,
+  type AiGoalSummaryRedacted,
+  type AiBillSummaryInput,
+  type AiBillSummaryRedacted,
+  type AiCashFlowSummaryInput,
+  type AiCashFlowSummaryRedacted,
+} from "@spencare/domain-core";
+
+// Re-exported so apps/mcp-server (forbidden from importing
+// packages/domain/infra or @supabase/supabase-js directly -- see
+// mcp-architecture.md §6, testing-architecture.md §5, and this repo's own
+// .dependency-cruiser.cjs "no-mcp-direct-database"/"no-mcp-direct-infra"
+// rules) can still construct the one client it legitimately needs
+// (Phase 18 locked decision #1's service-role AuthContext), the same way
+// apps/web's own lib/supabase/service.ts already does.
+export { createServiceRoleClient, type TypedSupabaseClient } from "@spencare/domain-infra";

@@ -29,7 +29,7 @@ async function requireAuthContext(): Promise<AuthContext> {
  */
 export async function confirmCommandAction(confirmationId: string) {
   const ctx = await requireAuthContext();
-  const result = await confirmCommand(ctx, confirmationId);
+  const result = await confirmCommand(ctx, confirmationId, "spensa");
   if (result.ok) {
     revalidatePath("/cash-flow");
     revalidatePath("/goals");

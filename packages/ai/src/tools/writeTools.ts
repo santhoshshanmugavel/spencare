@@ -69,7 +69,7 @@ const proposeAddExpenseTool: WriteToolHandler = {
     const input = proposeAddExpenseSchema.parse(rawInput);
     const [accName, catName] = await Promise.all([accountName(ctx, input.accountId), categoryName(ctx, input.categoryId)]);
     const preview = buildExpenseIncomePreview("expense", accName, catName, input.amountMinor, privacyModeEnabled);
-    return proposeCommand(ctx, "createTransaction", { ...input, type: "expense" }, preview);
+    return proposeCommand(ctx, "spensa", "createTransaction", { ...input, type: "expense" }, preview);
   },
 };
 
@@ -83,7 +83,7 @@ const proposeAddIncomeTool: WriteToolHandler = {
     const input = proposeAddIncomeSchema.parse(rawInput);
     const [accName, catName] = await Promise.all([accountName(ctx, input.accountId), categoryName(ctx, input.categoryId)]);
     const preview = buildExpenseIncomePreview("income", accName, catName, input.amountMinor, privacyModeEnabled);
-    return proposeCommand(ctx, "createTransaction", { ...input, type: "income" }, preview);
+    return proposeCommand(ctx, "spensa", "createTransaction", { ...input, type: "income" }, preview);
   },
 };
 
@@ -97,7 +97,7 @@ const proposeGoalContributionTool: WriteToolHandler = {
     const input = proposeGoalContributionSchema.parse(rawInput);
     const [gName, accName] = await Promise.all([goalName(ctx, input.goalId), accountName(ctx, input.accountId)]);
     const amountText = describeAmountForProvider(input.amountMinor, "INR", privacyModeEnabled);
-    return proposeCommand(ctx, "addContribution", input, {
+    return proposeCommand(ctx, "spensa", "addContribution", input, {
       summary: `Contribute ${amountText} from ${accName} toward "${gName}".`,
       fields: [
         { label: "Goal", value: gName },
@@ -119,7 +119,7 @@ const proposeMarkBillPaidTool: WriteToolHandler = {
     const [accName, catName, predictions] = await Promise.all([accountName(ctx, input.accountId), categoryName(ctx, input.categoryId), listBillPredictions(ctx)]);
     const merchant = predictions.find((p) => p.id === input.predictionId)?.bill_definitions.merchant_pattern ?? "this bill";
     const amountText = describeAmountForProvider(input.amountMinor, "INR", privacyModeEnabled);
-    return proposeCommand(ctx, "markBillPaid", input, {
+    return proposeCommand(ctx, "spensa", "markBillPaid", input, {
       summary: `Mark "${merchant}" as paid: ${amountText} from ${accName}, category ${catName}.`,
       fields: [
         { label: "Bill", value: merchant },
@@ -141,7 +141,7 @@ const proposeCreateBudgetTool: WriteToolHandler = {
     const input = proposeCreateBudgetSchema.parse(rawInput);
     const catName = await categoryName(ctx, input.categoryId);
     const amountText = describeAmountForProvider(input.amountMinor, "INR", privacyModeEnabled);
-    return proposeCommand(ctx, "createBudget", input, {
+    return proposeCommand(ctx, "spensa", "createBudget", input, {
       summary: `Create a ${amountText} monthly budget for ${catName}.`,
       fields: [
         { label: "Category", value: catName },
@@ -161,7 +161,7 @@ const proposeCreateGoalTool: WriteToolHandler = {
     const input = proposeCreateGoalSchema.parse(rawInput);
     const accName = await accountName(ctx, input.fundingAccountId);
     const amountText = describeAmountForProvider(input.targetAmountMinor, "INR", privacyModeEnabled);
-    return proposeCommand(ctx, "createGoal", input, {
+    return proposeCommand(ctx, "spensa", "createGoal", input, {
       summary: `Create a new goal "${input.name}" with a target of ${amountText}, funded from ${accName}.`,
       fields: [
         { label: "Goal", value: input.name },

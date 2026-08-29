@@ -1,20 +1,24 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { FakeAiProviderAdapter } from "./adapters/fakeAdapter.js";
 
-vi.mock("@spencare/domain-application", () => ({
-  getProfile: vi.fn(),
-  getSafeToSpend: vi.fn(),
-  getDashboardSummary: vi.fn(),
-  listAccounts: vi.fn(),
-  listTransactions: vi.fn(),
-  listBudgetsWithUsage: vi.fn(),
-  listCategories: vi.fn(),
-  listGoals: vi.fn(),
-  calculateProgress: vi.fn(),
-  getUpcomingBills: vi.fn(),
-  getCashFlowOverview: vi.fn(),
-  listBillPredictions: vi.fn(),
-}));
+vi.mock("@spencare/domain-application", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@spencare/domain-application")>();
+  return {
+    getProfile: vi.fn(),
+    getSafeToSpend: vi.fn(),
+    getDashboardSummary: vi.fn(),
+    listAccounts: vi.fn(),
+    listTransactions: vi.fn(),
+    listBudgetsWithUsage: vi.fn(),
+    listCategories: vi.fn(),
+    listGoals: vi.fn(),
+    calculateProgress: vi.fn(),
+    getUpcomingBills: vi.fn(),
+    getCashFlowOverview: vi.fn(),
+    listBillPredictions: vi.fn(),
+    toAiAccountSummaryInput: actual.toAiAccountSummaryInput,
+  };
+});
 
 vi.mock("@spencare/domain-infra", () => ({
   createConversation: vi.fn(),

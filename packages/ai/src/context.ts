@@ -7,10 +7,10 @@ import {
   getUpcomingBills,
   getCashFlowOverview,
   getProfile,
+  toAiAccountSummaryInput,
   type AuthContext,
 } from "@spencare/domain-application";
 import { lastDayOfMonth, redactFinancialSnapshot, redactBudgetSummaries, redactGoalSummaries, redactBillSummaries, redactCashFlowSummary } from "@spencare/domain-core";
-import { toAiAccountSummaryInput } from "./accountMapping.js";
 import type {
   AiFinancialSnapshotRedacted,
   AiBudgetSummaryRedacted,

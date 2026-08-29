@@ -40,6 +40,20 @@ module.exports = {
       to: { path: ["^packages/domain/infra"] },
     },
     {
+      name: "no-mcp-imports-ai",
+      comment:
+        "MCP server must not depend on packages/ai at all (mcp-architecture.md §1's own layering diagram " +
+        "excludes it entirely -- packages/ai transitively depends on domain-infra, which apps/mcp-server may " +
+        "never reach). This direct-edge rule, combined with no-mcp-direct-infra/no-mcp-direct-database above, " +
+        "fully closes the transitive path a future contributor could otherwise take (apps/mcp-server -> " +
+        "packages/ai -> domain-infra -> supabase-js) without needing dependency-cruiser's reachability-rule " +
+        "syntax. The confirmation cascade and any AI-adjacent helper apps/mcp-server needs lives in " +
+        "packages/domain/application instead (Phase 18 locked decision #2).",
+      severity: "error",
+      from: { path: "^apps/mcp-server" },
+      to: { path: ["^packages/ai"] },
+    },
+    {
       name: "domain-core-is-pure",
       comment:
         "packages/domain/core must have zero dependency on React, Supabase, or any AI SDK " +

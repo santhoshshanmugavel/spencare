@@ -882,6 +882,187 @@ check "disconnect actually deletes the row -- no encrypted secret material survi
 
 echo
 
+# ============================================================================
+# Phase 18 -- MCP Integration.
+#
+# `apps/mcp-server` has no PostgREST-facing HTTP surface of its own (it's a
+# stdio-transport process -- see apps/mcp-server/src/index.ts's documented
+# transport choice), so unlike every REST-driven section above, most of
+# Phase 18's invariants (scope enforcement, propose-never-mutates, Privacy
+# Mode redaction, credit safety, Safe-to-Spend exclusion, the plaintext
+# token never being returned a second time) are pure in-process TypeScript
+# that this curl-based script has no live boundary to exercise -- they are
+# already covered exhaustively by apps/mcp-server's and domain-application's
+# own unit test suites (auth.test.ts, readTools.test.ts, writeTools.test.ts,
+# mcpSessions.test.ts, mcpAudit.test.ts, mcpToken.test.ts, mcpSessionsRepo.
+# test.ts). What DOES need a real Postgres to prove -- this script's whole
+# reason for existing (see the file header) -- is `mcp_sessions`/
+# `pending_confirmations`/`audit_log`'s actual RLS, ownership, and
+# `confirm_command` atomicity/concurrency behavior when `source`/`actor` is
+# `mcp`, which is what the sections below cover: the same canonical
+# mechanism Phase 16 built for Spensa (Decision 2 -- moved into
+# domain/application, never duplicated for MCP), now proven to behave
+# identically when MCP is the caller.
+# ============================================================================
+
+echo "== MCP: mcp_sessions ownership / IDOR + lifecycle (Phase 18) =="
+
+RAW_TOKEN1="spc_mcp_smoketest_${STAMP}_1"
+HASH1=$(python3 -c "import hashlib,sys;print(hashlib.sha256(sys.argv[1].encode()).hexdigest())" "$RAW_TOKEN1")
+
+MCPSESS=$(curl -s -X POST "$BASE/rest/v1/mcp_sessions" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"client_name\":\"Smoke Test Client\",\"token_hash\":\"$HASH1\",\"scopes\":[\"read\",\"write\"]}")
+MCPSESSID=$(echo "$MCPSESS" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+check "user1 can create their own mcp_sessions row (own RLS-scoped insert, exactly what createMcpSession does)" "True" "$([ -n "$MCPSESSID" ] && echo True || echo False)"
+
+R=$(echo "$MCPSESS" | python3 -c "import json,sys;d=json.load(sys.stdin)[0];print(d['scopes']==['read','write'] and d['token_hash']=='$HASH1')")
+check "scopes and token_hash round-trip exactly as inserted" "True" "$R"
+
+R=$(curl -s "$BASE/rest/v1/mcp_sessions?id=eq.$MCPSESSID&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's mcp_sessions row" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/mcp_sessions" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"client_name\":\"Spoofed\",\"token_hash\":\"deadbeef\",\"scopes\":[\"read\"]}")
+check "user2 cannot insert an mcp_sessions row impersonating user1 (RLS with check, HTTP 403)" "403" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/mcp_sessions?id=eq.$MCPSESSID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"revoked_at":"2026-08-29T00:00:00Z"}')
+check "user2 cannot revoke user1's mcp session (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/mcp_sessions?id=eq.$MCPSESSID&select=revoked_at" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['revoked_at'])")
+check "user1's session still active after user2's spoofed revoke attempt" "None" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/mcp_sessions?id=eq.$MCPSESSID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+check "even the real owner cannot hard-delete an mcp_sessions row (no delete policy -- revoke via revoked_at only, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/mcp_sessions?id=eq.$MCPSESSID&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "the session row still exists after the owner's attempted DELETE" "1" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/mcp_sessions?id=eq.$MCPSESSID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"revoked_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}")
+check "user1 (real owner) can revoke their own mcp session (own RLS-scoped update, exactly what revokeMcpSession does)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/mcp_sessions?id=eq.$MCPSESSID&select=revoked_at" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['revoked_at'] is not None)")
+check "the revocation actually persisted" "True" "$R"
+echo
+
+echo "== MCP: audit_log supports actor=mcp (Phase 18) =="
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/audit_log" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"actor\":\"mcp\",\"action\":\"scope_denied\",\"entity_type\":\"mcp_tool\"}")
+check "an authenticated client still cannot write audit_log directly, even claiming actor=mcp (service-role only)" "403" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/audit_log" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"actor\":\"mcp\",\"action\":\"scope_denied\",\"entity_type\":\"mcp_tool\",\"after\":{\"tool\":\"proposeAddExpense\",\"requiredScope\":\"write\",\"sessionScopes\":[\"read\"]}}")
+check "audit_actor enum accepts 'mcp' -- the service-role insert logMcpScopeDenial performs succeeds (HTTP 201)" "201" "$R"
+echo
+
+echo "== MCP: pending_confirmations / confirm_command with source=mcp, actor=mcp (Phase 18) =="
+
+MCPPC1=$(curl -s -X POST "$BASE/rest/v1/pending_confirmations" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source\":\"mcp\",\"command_type\":\"createTransaction\",\"payload\":{\"accountId\":\"$TXN_ACCID\",\"type\":\"expense\",\"amountMinor\":15000,\"categoryId\":\"$CATID\",\"occurredAt\":\"2026-08-28\"},\"preview\":{\"summary\":\"Record a 150 rupee expense\"},\"expires_at\":\"2026-12-31T00:00:00Z\"}")
+MCPPCID1=$(echo "$MCPPC1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s "$BASE/rest/v1/pending_confirmations?id=eq.$MCPPCID1&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's mcp-sourced pending confirmation" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/pending_confirmations?id=eq.$MCPPCID1" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"status":"cancelled"}')
+check "user2 cannot cancel user1's mcp-sourced pending confirmation (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID2\",\"p_confirmation_id\":\"$MCPPCID1\",\"p_actor\":\"mcp\"}")
+check "user2 cannot confirm user1's mcp-sourced confirmation by naming their own (real) user_id -- the row just isn't theirs" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"confirmation_not_found\"}HTTP:400" "$R"
+
+BALANCE_BEFORE_MCP_CONFIRM=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$MCPPCID1\",\"p_actor\":\"mcp\"}")
+check "user1 (real owner) can confirm their own mcp-sourced proposal via confirm_command with p_actor=mcp" "200" "$R"
+
+EXPECTED_BALANCE_AFTER_MCP_CONFIRM=$((BALANCE_BEFORE_MCP_CONFIRM - 15000))
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "confirming an mcp-sourced proposal applies the real domain mutation exactly once" "$EXPECTED_BALANCE_AFTER_MCP_CONFIRM" "$R"
+
+R=$(curl -s "$BASE/rest/v1/audit_log?entity_type=eq.transaction&action=eq.create_transaction&user_id=eq.$UID1&order=created_at.desc&limit=1&select=actor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['actor'])")
+check "the resulting audit_log row records actor='mcp', not 'web' or 'spensa'" "mcp" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$MCPPCID1\",\"p_actor\":\"mcp\"}")
+check "a replayed confirm on the same mcp-sourced confirmation is rejected -- not double-executable" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"confirmation_not_pending\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "the replayed mcp confirm attempt did not apply the balance delta a second time" "$EXPECTED_BALANCE_AFTER_MCP_CONFIRM" "$R"
+echo
+
+echo "== MCP: pending_confirmations expiry with source=mcp (Phase 18) =="
+
+MCPPC2=$(curl -s -X POST "$BASE/rest/v1/pending_confirmations" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source\":\"mcp\",\"command_type\":\"createTransaction\",\"payload\":{\"accountId\":\"$TXN_ACCID\",\"type\":\"expense\",\"amountMinor\":5000,\"categoryId\":\"$CATID\",\"occurredAt\":\"2026-08-28\"},\"preview\":{\"summary\":\"Record a 50 rupee expense\"},\"expires_at\":\"2020-01-01T00:00:00Z\"}")
+MCPPCID2=$(echo "$MCPPC2" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$MCPPCID2\",\"p_actor\":\"mcp\"}")
+check "an already-expired mcp-sourced confirmation cannot be confirmed" "{\"error\": \"confirmation_expired\"}HTTP:200" "$R"
+
+R=$(curl -s "$BASE/rest/v1/pending_confirmations?id=eq.$MCPPCID2&select=status" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['status'])")
+check "the rejected expired mcp confirmation is marked expired, not left dangling as pending" "expired" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "an expired mcp confirmation never applies its balance delta" "$EXPECTED_BALANCE_AFTER_MCP_CONFIRM" "$R"
+echo
+
+echo "== MCP: confirm_command concurrency with source=mcp (Phase 18) =="
+
+MCPPC3=$(curl -s -X POST "$BASE/rest/v1/pending_confirmations" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source\":\"mcp\",\"command_type\":\"createTransaction\",\"payload\":{\"accountId\":\"$TXN_ACCID\",\"type\":\"expense\",\"amountMinor\":8000,\"categoryId\":\"$CATID\",\"occurredAt\":\"2026-08-28\"},\"preview\":{\"summary\":\"Record an 80 rupee expense\"},\"expires_at\":\"2026-12-31T00:00:00Z\"}")
+MCPPCID3=$(echo "$MCPPC3" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+BALANCE_BEFORE_MCP_RACE=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+
+# Two simultaneous confirm_command calls for the SAME mcp-sourced
+# confirmation: the row's FOR UPDATE lock (confirm_command's own, same
+# mechanism proven for Spensa above) must serialize them so exactly one
+# succeeds -- regardless of which surface originated the proposal.
+curl -s -w "HTTP:%{http_code}\n" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$MCPPCID3\",\"p_actor\":\"mcp\"}" > /tmp/mcp_confirm_race_a.out &
+curl -s -w "HTTP:%{http_code}\n" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$MCPPCID3\",\"p_actor\":\"mcp\"}" > /tmp/mcp_confirm_race_b.out &
+wait
+
+MCP_RACE_SUCCESSES=$(grep -l "HTTP:200" /tmp/mcp_confirm_race_a.out /tmp/mcp_confirm_race_b.out 2>/dev/null | wc -l | tr -d ' ')
+check "exactly one of two concurrent confirm_command calls on the same mcp-sourced confirmation succeeds" "1" "$MCP_RACE_SUCCESSES"
+
+EXPECTED_BALANCE_AFTER_MCP_RACE=$((BALANCE_BEFORE_MCP_RACE - 8000))
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "the concurrent mcp confirm race applied the balance delta exactly once, not twice" "$EXPECTED_BALANCE_AFTER_MCP_RACE" "$R"
+
+rm -f /tmp/mcp_confirm_race_a.out /tmp/mcp_confirm_race_b.out
+echo
+
+echo "== MCP: confirm_command's direct audit_log insert also honors actor=mcp (createBudget branch, Phase 18) =="
+# createTransaction's audit_log row is written by the DELEGATED
+# create_transaction RPC (proven above); createBudget/createGoal instead
+# insert into audit_log directly inside confirm_command itself (see the
+# migration) -- a distinct code path worth proving separately.
+
+MCPPC4=$(curl -s -X POST "$BASE/rest/v1/pending_confirmations" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source\":\"mcp\",\"command_type\":\"createBudget\",\"payload\":{\"categoryId\":\"$BUDGET_CATID\",\"periodStart\":\"2026-10-01\",\"amountMinor\":400000},\"preview\":{\"summary\":\"Create an October budget\"},\"expires_at\":\"2026-12-31T00:00:00Z\"}")
+MCPPCID4=$(echo "$MCPPC4" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$MCPPCID4\",\"p_actor\":\"mcp\"}")
+check "user1 can confirm an mcp-sourced createBudget proposal" "200" "$R"
+
+R=$(curl -s "$BASE/rest/v1/audit_log?entity_type=eq.budget&action=eq.createBudget&user_id=eq.$UID1&order=created_at.desc&limit=1&select=actor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['actor'])")
+check "createBudget's own direct audit_log insert (inside confirm_command, not delegated to another RPC) also records actor='mcp'" "mcp" "$R"
+echo
+
 echo "== summary =="
 echo "  $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then

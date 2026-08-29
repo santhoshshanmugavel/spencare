@@ -1,16 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 import { Money } from "@spencare/domain-core";
 
-vi.mock("@spencare/domain-application", () => ({
-  getSafeToSpend: vi.fn(),
-  listAccounts: vi.fn(),
-  listBudgetsWithUsage: vi.fn(),
-  listCategories: vi.fn(),
-  listGoals: vi.fn(),
-  getUpcomingBills: vi.fn(),
-  getCashFlowOverview: vi.fn(),
-  getProfile: vi.fn(),
-}));
+vi.mock("@spencare/domain-application", async (importOriginal) => {
+  // toAiAccountSummaryInput is a real, pure, dependency-free mapping
+  // function (Phase 18 relocation) -- kept real here rather than mocked,
+  // since several tests below assert on its actual credit-safe output
+  // shape.
+  const actual = await importOriginal<typeof import("@spencare/domain-application")>();
+  return {
+    getSafeToSpend: vi.fn(),
+    listAccounts: vi.fn(),
+    listBudgetsWithUsage: vi.fn(),
+    listCategories: vi.fn(),
+    listGoals: vi.fn(),
+    getUpcomingBills: vi.fn(),
+    getCashFlowOverview: vi.fn(),
+    getProfile: vi.fn(),
+    toAiAccountSummaryInput: actual.toAiAccountSummaryInput,
+  };
+});
 
 const ctx = { userId: "u1", email: "a@b.com", supabase: {} as never, serviceRoleSupabase: {} as never };
 

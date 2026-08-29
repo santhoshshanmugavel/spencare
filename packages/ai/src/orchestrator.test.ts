@@ -4,20 +4,34 @@ import { FakeAiProviderAdapter } from "./adapters/fakeAdapter.js";
 import { MalformedProviderResponseError, ProviderOutageError, ProviderRateLimitError, type AiProviderAdapter, type ChatMessage, type ToolDefinition, type AiEvent } from "./provider.js";
 import { SPENSA_SYSTEM_PROMPT } from "./systemPrompt.js";
 
-vi.mock("@spencare/domain-application", () => ({
-  getProfile: vi.fn(),
-  getSafeToSpend: vi.fn(),
-  getDashboardSummary: vi.fn(),
-  listAccounts: vi.fn(),
-  listTransactions: vi.fn(),
-  listBudgetsWithUsage: vi.fn(),
-  listCategories: vi.fn(),
-  listGoals: vi.fn(),
-  calculateProgress: vi.fn(),
-  getUpcomingBills: vi.fn(),
-  getCashFlowOverview: vi.fn(),
-  listBillPredictions: vi.fn(),
-}));
+vi.mock("@spencare/domain-application", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@spencare/domain-application")>();
+  return {
+    getProfile: vi.fn(),
+    getSafeToSpend: vi.fn(),
+    getDashboardSummary: vi.fn(),
+    listAccounts: vi.fn(),
+    listTransactions: vi.fn(),
+    listBudgetsWithUsage: vi.fn(),
+    listCategories: vi.fn(),
+    listGoals: vi.fn(),
+    calculateProgress: vi.fn(),
+    getUpcomingBills: vi.fn(),
+    getCashFlowOverview: vi.fn(),
+    listBillPredictions: vi.fn(),
+    // Real (Phase 18 relocation, was previously packages/ai's own local
+    // implementation) -- these call into the already-mocked
+    // @spencare/domain-infra functions below (proposeConfirmation,
+    // callConfirmCommand, etc.), so keeping them real here preserves
+    // every existing assertion about propose/confirm behavior unchanged.
+    proposeCommand: actual.proposeCommand,
+    confirmCommand: actual.confirmCommand,
+    cancelPendingCommand: actual.cancelPendingCommand,
+    getProposal: actual.getProposal,
+    describeAmountForProvider: actual.describeAmountForProvider,
+    toAiAccountSummaryInput: actual.toAiAccountSummaryInput,
+  };
+});
 
 vi.mock("@spencare/domain-infra", () => ({
   createConversation: vi.fn(),

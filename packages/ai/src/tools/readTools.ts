@@ -9,12 +9,12 @@ import {
   calculateProgress,
   getUpcomingBills,
   getCashFlowOverview,
+  toAiAccountSummaryInput,
   type AuthContext,
 } from "@spencare/domain-application";
 import { lastDayOfMonth, redactFinancialSnapshot, redactBudgetSummaries, redactGoalSummaries, redactBillSummaries, redactCashFlowSummary } from "@spencare/domain-core";
 import { searchTransactionsToolSchema, getUpcomingBillsToolSchema } from "@spencare/validation";
 import type { ToolDefinition } from "../provider.js";
-import { toAiAccountSummaryInput } from "../accountMapping.js";
 
 const CURRENCY = "INR";
 

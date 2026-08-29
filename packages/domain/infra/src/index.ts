@@ -16,3 +16,4 @@ export * from "./statementParsers/registry.js";
 export * from "./aiConversationsRepo.js";
 export * from "./aiProviderCredentialsRepo.js";
 export * from "./pendingConfirmationsRepo.js";
+export * from "./mcpSessionsRepo.js";

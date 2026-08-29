@@ -84,6 +84,8 @@ export {
   type PeriodComparison,
 } from "./cashFlow.js";
 
+export { generateMcpToken, hashMcpToken } from "./mcpToken.js";
+
 export {
   redactFinancialSnapshot,
   redactBudgetSummaries,
