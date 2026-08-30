@@ -72,6 +72,19 @@ export {
 } from "./commands/goalImage.js";
 
 export {
+  registerOAuthClient,
+  createAuthorizationCode,
+  exchangeAuthorizationCode,
+  type RegisterOAuthClientInput,
+  type RegisterOAuthClientOutput,
+  type CreateAuthorizationCodeInput,
+  type CreateAuthorizationCodeOutput,
+  type ExchangeAuthorizationCodeInput,
+  type ExchangeAuthorizationCodeOutput,
+} from "./commands/oauth.js";
+export { getOAuthClientPublicInfo, type OAuthClientPublicInfo } from "./queries/oauth.js";
+
+export {
   createBill,
   updateBill,
   deleteBill,

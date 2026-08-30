@@ -120,4 +120,36 @@ describe("updateSession — self-authenticating API paths bypass the session/red
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toContain("/login");
   });
+
+  it("passes an unauthenticated /oauth/token request through -- a machine-to-machine grant exchange, never cookie-based (Phase 27)", async () => {
+    const { updateSession } = await import("./middleware.js");
+    const request = new NextRequest("http://localhost:3000/oauth/token", { method: "POST" });
+    const response = await updateSession(request);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("passes an unauthenticated /oauth/register request through -- dynamic client registration has no user session at all (Phase 27)", async () => {
+    const { updateSession } = await import("./middleware.js");
+    const request = new NextRequest("http://localhost:3000/oauth/register", { method: "POST" });
+    const response = await updateSession(request);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("passes an unauthenticated /.well-known/oauth-authorization-server request through -- public discovery metadata (Phase 27)", async () => {
+    const { updateSession } = await import("./middleware.js");
+    const request = new NextRequest("http://localhost:3000/.well-known/oauth-authorization-server");
+    const response = await updateSession(request);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("still redirects an unauthenticated /oauth/authorize request to /login -- the human consent screen goes through the normal session gate, deliberately NOT self-authenticating (Phase 27)", async () => {
+    const { updateSession } = await import("./middleware.js");
+    const request = new NextRequest("http://localhost:3000/oauth/authorize?client_id=abc");
+    const response = await updateSession(request);
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toContain("/login");
+    // The original destination (including its query string) must survive
+    // the round trip through login, or the OAuth request context is lost.
+    expect(response.headers.get("location")).toContain(encodeURIComponent("/oauth/authorize"));
+  });
 });

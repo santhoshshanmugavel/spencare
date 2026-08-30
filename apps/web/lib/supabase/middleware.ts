@@ -17,7 +17,16 @@ import type { Database } from "@spencare/domain-infra";
  * session client at all, so there is nothing else in this function for
  * them to do.
  */
-const SELF_AUTHENTICATING_API_PATHS = ["/api/cron", "/api/mcp"];
+// Phase 27: `/oauth/token`/`/oauth/register`/`/.well-known/oauth-*` are
+// machine-to-machine JSON endpoints with their own auth model (a client
+// secret-free public-client request, or none at all for discovery) --
+// never cookie/session based, so they must never be redirected to
+// `/login` the way a normal page request would be. `/oauth/authorize`
+// (the human consent screen) is deliberately NOT in this list: it is
+// supposed to go through the normal session gate below, so an
+// unauthenticated visitor is sent to `/login?redirect=/oauth/authorize?...`
+// exactly like any other protected page.
+const SELF_AUTHENTICATING_API_PATHS = ["/api/cron", "/api/mcp", "/oauth/token", "/oauth/register", "/.well-known"];
 
 const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth"];
 const MFA_EXEMPT_PATHS = ["/verify-2fa", "/auth", "/logout"];

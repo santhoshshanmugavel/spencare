@@ -108,6 +108,15 @@ export {
 export { generateMcpToken, hashMcpToken } from "./mcpToken.js";
 
 export {
+  generateAuthorizationCode,
+  hashAuthorizationCode,
+  generateOAuthClientId,
+  verifyPkceChallenge,
+  OAUTH_AUTHORIZATION_CODE_TTL_SECONDS,
+  OAUTH_ACCESS_TOKEN_TTL_SECONDS,
+} from "./oauth.js";
+
+export {
   redactFinancialSnapshot,
   redactBudgetSummaries,
   redactGoalSummaries,

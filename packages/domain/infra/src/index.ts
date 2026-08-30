@@ -18,6 +18,7 @@ export * from "./aiConversationsRepo.js";
 export * from "./aiProviderCredentialsRepo.js";
 export * from "./pendingConfirmationsRepo.js";
 export * from "./mcpSessionsRepo.js";
+export * from "./oauthRepo.js";
 export * from "./gmailApiClient.js";
 export * from "./gmailConnectionsRepo.js";
 export * from "./gmailFinancialCandidatesRepo.js";

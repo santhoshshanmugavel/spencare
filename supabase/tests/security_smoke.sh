@@ -1114,6 +1114,44 @@ R=$(curl -s "$BASE/rest/v1/audit_log?entity_type=eq.budget&action=eq.createBudge
 check "createBudget's own direct audit_log insert (inside confirm_command, not delegated to another RPC) also records actor='mcp'" "mcp" "$R"
 echo
 
+echo "== MCP OAuth: oauth_clients / oauth_authorization_codes are service-role-only (Phase 27) =="
+# The full authorize/PKCE/token-exchange FLOW is exercised end-to-end by
+# packages/domain/application's own oauth.test.ts (19 cases: valid
+# exchange, wrong PKCE verifier, code replay, redirect_uri/client_id
+# mismatch, expired code) plus live browser+curl verification during this
+# phase's own development -- neither fits this script's actual scope
+# (raw Postgres/PostgREST/RLS against the Supabase REST endpoint, never
+# the Next.js app's own /oauth/* routes on a different port). What DOES
+# belong here is the one thing only a real RLS check can prove: that
+# these two new tables are genuinely unreachable through a real user's
+# own JWT, exactly as migration 20260908000001_oauth_mcp_authorization.sql
+# intends (deliberately zero `authenticated`-role policies on either
+# table) -- every /oauth/* Route Handler reaches them exclusively via the
+# service-role client, after independently verifying the real user via
+# their own cookie-based session.
+
+R=$(curl -s -X POST "$BASE/rest/v1/oauth_clients" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"client_id\":\"spc_client_smoke_test\",\"client_name\":\"Spoofed\",\"redirect_uris\":[\"https://evil.example.com\"]}")
+check "an authenticated user's own JWT cannot register an OAuth client directly (RLS, no authenticated-role policy at all)" "{\"code\":\"42501\",\"details\":null,\"hint\":null,\"message\":\"new row violates row-level security policy for table \\\"oauth_clients\\\"\"}" "$R"
+
+R=$(curl -s "$BASE/rest/v1/oauth_clients?select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+check "an authenticated user's own JWT cannot list OAuth clients directly either (SELECT is equally locked down)" "[]" "$R"
+
+R=$(curl -s -X POST "$BASE/rest/v1/oauth_authorization_codes" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" \
+  -d "{\"code_hash\":\"deadbeef\",\"client_id\":\"spc_client_smoke_test\",\"user_id\":\"$UID1\",\"redirect_uri\":\"https://evil.example.com\",\"scopes\":[\"read\"],\"code_challenge\":\"x\",\"expires_at\":\"2026-12-31T00:00:00Z\"}")
+check "an authenticated user's own JWT cannot forge an authorization code directly (RLS)" "{\"code\":\"42501\",\"details\":null,\"hint\":null,\"message\":\"new row violates row-level security policy for table \\\"oauth_authorization_codes\\\"\"}" "$R"
+
+R=$(curl -s "$BASE/rest/v1/oauth_authorization_codes?select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+check "an authenticated user's own JWT cannot read any authorization code row directly either" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/oauth_clients" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"client_id\":\"spc_client_smoke_test\",\"client_name\":\"Smoke Test Client\",\"redirect_uris\":[\"https://smoke-test.example.com/callback\"]}")
+check "the service-role client (what /oauth/register actually uses) CAN register a client" "201" "$R"
+echo
+
 # ============================================================================
 # Phase 19 -- Google Auth + Gmail Financial Ingestion.
 #

@@ -4,6 +4,30 @@ import { registerReadTools, registerWriteTools, resolveMcpAuthContextFromToken, 
 import { checkRateLimit, RATE_LIMITS } from "@spencare/domain-application";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 
+/**
+ * Phase 27: points an MCP client at this server's OAuth discovery
+ * metadata on every 401 (RFC 9728's own recommended pattern) -- a client
+ * that doesn't already have a token can follow this header to
+ * `/.well-known/oauth-protected-resource` -> `/.well-known/oauth-
+ * authorization-server` -> `/oauth/authorize` without any of those URLs
+ * being hardcoded into the client. Purely additive: the existing
+ * bearer-token verification below is completely unchanged, and a client
+ * that already holds a valid manually-generated token never sees this at
+ * all.
+ *
+ * Derives origin from THIS request's own URL, not `next/headers()`'s
+ * `requestOrigin()` helper -- that helper reads from Next's async
+ * request-store, which Server Actions/Components run inside but a Route
+ * Handler invoked directly (including in this file's own unit tests,
+ * which call `POST()`/`GET()` as plain functions) does not; a Route
+ * Handler already has the real `Request` object, which is the correct,
+ * always-available source here.
+ */
+function wwwAuthenticateHeader(request: Request): string {
+  const origin = new URL(request.url).origin;
+  return `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"`;
+}
+
 /** Same best-effort client-IP-shaped key as apps/web/app/(auth)/actions.ts's clientIpKey -- a Route Handler reads the request's own headers directly rather than next/headers. */
 function clientIpKey(request: Request): string {
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -76,7 +100,10 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : null;
   if (!token) {
-    return Response.json({ error: "missing_token", message: "An Authorization: Bearer <token> header is required." }, { status: 401 });
+    return Response.json(
+      { error: "missing_token", message: "An Authorization: Bearer <token> header is required." },
+      { status: 401, headers: { "WWW-Authenticate": wwwAuthenticateHeader(request) } },
+    );
   }
 
   let ctx;
@@ -88,7 +115,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   } catch (err) {
     const reason = err instanceof McpAuthenticationError ? err.reason : "invalid_token";
     const message = err instanceof Error ? err.message : "That MCP token is not recognized.";
-    return Response.json({ error: reason, message }, { status: 401 });
+    return Response.json({ error: reason, message }, { status: 401, headers: { "WWW-Authenticate": wwwAuthenticateHeader(request) } });
   }
 
   const server = new McpServer({ name: "spencare", version: "0.0.1" });
