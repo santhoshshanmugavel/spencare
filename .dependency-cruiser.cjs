@@ -67,6 +67,7 @@ module.exports = {
           "@anthropic-ai",
           "openai",
           "@google/generative-ai",
+          "@google/genai",
         ],
       },
     },
@@ -93,7 +94,7 @@ module.exports = {
       severity: "error",
       from: { path: "^packages/ai/src", pathNot: "^packages/ai/src/adapters" },
       to: {
-        path: ["@anthropic-ai", "openai", "@google/generative-ai"],
+        path: ["@anthropic-ai", "openai", "@google/generative-ai", "@google/genai"],
       },
     },
   ],

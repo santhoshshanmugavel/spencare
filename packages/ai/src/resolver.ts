@@ -1,18 +1,24 @@
 import { decryptSecret, getActiveEncryptedCredential, type AiProvider } from "@spencare/domain-infra";
 import type { AuthContext } from "@spencare/domain-application";
 import { AnthropicAdapter } from "./adapters/anthropicAdapter.js";
+import { OpenAiAdapter } from "./adapters/openaiAdapter.js";
+import { GeminiAdapter } from "./adapters/geminiAdapter.js";
 import { NoProviderConfiguredError, ProviderNotImplementedError } from "./provider.js";
 import type { AiProviderAdapter } from "./provider.js";
 
 /**
  * Providers with a real, working adapter today (Phase 17 locked decision
- * #1). The other four members of the approved roster
- * (openai/google/openrouter/other) remain on the roster -- they are never
+ * #1, extended Phase 29 Section 12-16: Spensa is now genuinely
+ * provider-agnostic across Claude/OpenAI/Gemini, all built against the
+ * SAME `AiProviderAdapter` interface -- no separate AI system per
+ * provider). `openrouter`/`other` remain on the approved roster -- never
  * removed from the enum or the UI's provider list -- but are not
  * connectable yet. Adding one later is purely additive: a new adapter
- * file plus one entry here, no orchestration change (ADR-0008).
+ * file plus one entry here, no orchestration change (ADR-0008) -- exactly
+ * how openai/google were just added, with zero changes to
+ * orchestrator.ts, context.ts, or any tool.
  */
-export const IMPLEMENTED_PROVIDERS: readonly AiProvider[] = ["anthropic"];
+export const IMPLEMENTED_PROVIDERS: readonly AiProvider[] = ["anthropic", "openai", "google"];
 
 export function isProviderImplemented(provider: AiProvider): boolean {
   return IMPLEMENTED_PROVIDERS.includes(provider);
@@ -32,7 +38,9 @@ export function buildAdapterForProvider(provider: AiProvider, apiKey: string): A
     case "anthropic":
       return new AnthropicAdapter(apiKey);
     case "openai":
+      return new OpenAiAdapter(apiKey);
     case "google":
+      return new GeminiAdapter(apiKey);
     case "openrouter":
     case "other":
       throw new ProviderNotImplementedError(provider);

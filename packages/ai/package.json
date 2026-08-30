@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
+    "@google/genai": "^2.19.0",
+    "openai": "^7.8.0",
     "@spencare/domain-application": "workspace:*",
     "@spencare/domain-core": "workspace:*",
     "@spencare/domain-infra": "workspace:*",

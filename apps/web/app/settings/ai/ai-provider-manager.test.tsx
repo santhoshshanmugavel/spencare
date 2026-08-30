@@ -41,6 +41,31 @@ describe("<AiProviderManager> — empty/disconnected state", () => {
     expect(screen.getAllByText("Coming soon")).toHaveLength(4);
   });
 
+  it("Phase 29: with the real IMPLEMENTED_PROVIDERS roster, Claude/ChatGPT/Gemini are all enabled -- only OpenRouter/Other remain Coming soon", () => {
+    const REAL_IMPLEMENTED: readonly AiProviderValue[] = ["anthropic", "openai", "google"];
+    render(<AiProviderManager initialStatus={null} providers={ALL_PROVIDERS} implementedProviders={REAL_IMPLEMENTED} />);
+    expect(screen.getByRole("radio", { name: "Claude" })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /ChatGPT/ })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /Gemini/ })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /OpenRouter/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /^Other/ })).toBeDisabled();
+    expect(screen.getAllByText("Coming soon")).toHaveLength(2);
+  });
+
+  it("Phase 29: can select and submit a key for OpenAI/Gemini, not just Claude", async () => {
+    const REAL_IMPLEMENTED: readonly AiProviderValue[] = ["anthropic", "openai", "google"];
+    const user = userEvent.setup();
+    vi.mocked(connectProviderAction).mockResolvedValue({
+      ok: true,
+      status: { provider: "openai", keyLastFour: "5678", isActive: true, lastValidatedAt: "2026-09-03T00:00:00.000Z", lastValidationError: null },
+    });
+    render(<AiProviderManager initialStatus={null} providers={ALL_PROVIDERS} implementedProviders={REAL_IMPLEMENTED} />);
+    await user.click(screen.getByRole("radio", { name: /ChatGPT/ }));
+    await user.type(screen.getByLabelText("API Key"), "sk-openai-test-key");
+    await user.click(screen.getByRole("button", { name: "Activate Spensa brain" }));
+    await waitFor(() => expect(connectProviderAction).toHaveBeenCalledWith(expect.objectContaining({ provider: "openai", apiKey: "sk-openai-test-key" })));
+  });
+
   it("shows the key-entry form with an Activate button, and no connected-state UI", () => {
     render(<AiProviderManager initialStatus={null} providers={ALL_PROVIDERS} implementedProviders={IMPLEMENTED} />);
     expect(screen.getByLabelText("API Key")).toBeInTheDocument();
