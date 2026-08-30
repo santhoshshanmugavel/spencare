@@ -2,6 +2,7 @@ import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } fr
 import {
   getProfile,
   getSafeToSpend,
+  getNetWorth,
   listAccounts,
   listBudgetsWithUsage,
   listGoals,
@@ -13,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { signOutAction } from "../(auth)/actions";
-import { HomeContent, type SafeToSpendPlain } from "./home-content";
+import { HomeContent, type SafeToSpendPlain, type NetWorthPlain } from "./home-content";
 
 function currentPeriodStart(): string {
   const now = new Date();
@@ -24,10 +25,13 @@ function currentPeriodStart(): string {
  * Phase 14 (Dashboard/Home, DD-01 approved): adds the one net-new element
  * information-architecture.md's CF-D01 resolution calls for -- a
  * persistent Safe-to-Spend header -- plus SP-051's setup-nudge grid.
- * Deliberately still NOT a monolithic dashboard: Net Worth, Income vs
- * Expenses, Recent Transactions, and Accounts/Goals/Bills all remain on
- * their own dedicated screens per the locked scope (out of scope this
- * phase: `getDashboardSummary`, Net Worth, the Privacy Mode toggle).
+ *
+ * Phase 29 Section 7/29 revisits the original "deliberately NOT a
+ * monolithic dashboard, no Net Worth" scope: Home now also shows
+ * Available Credit / Investments / Net Worth via the same shared
+ * `<FinancialLayersCard>` Cash Flow Overview uses, composing `getNetWorth`
+ * and the same investment-total aggregation `cash-flow/page.tsx` already
+ * does -- no second implementation of either.
  */
 export default async function HomePage() {
   const supabase = await createServerSupabaseClient();
@@ -49,9 +53,10 @@ export default async function HomePage() {
   // reused byte-for-byte; `listAccounts`/`listBudgetsWithUsage`/`listGoals`
   // only drive which SP-051 nudge cards to show, the same composition
   // idiom already used by cash-flow/page.tsx and goals/page.tsx.
-  const [profile, safeToSpendResult, accounts, budgetUsages, goals] = await Promise.all([
+  const [profile, safeToSpendResult, netWorthResult, accounts, budgetUsages, goals] = await Promise.all([
     getProfile(ctx),
     getSafeToSpend(ctx),
+    getNetWorth(ctx),
     listAccounts(ctx),
     listBudgetsWithUsage(ctx, currentPeriodStart()),
     listGoals(ctx),
@@ -65,7 +70,20 @@ export default async function HomePage() {
     state: safeToSpendResult.state,
     amountMinor: Number(safeToSpendResult.amount.amountMinorUnits),
     currency: safeToSpendResult.amount.currencyCode,
+    ownedSpendableMinor: Number(safeToSpendResult.ownedSpendableTotal.amountMinorUnits),
+    creditAvailableMinor: Number(safeToSpendResult.creditAvailableTotal.amountMinorUnits),
+    goalReservedMinor: Number(safeToSpendResult.goalReservedTotal.amountMinorUnits),
+    upcomingBillsMinor: Number(safeToSpendResult.upcomingBillsTotal.amountMinorUnits),
   };
+  const netWorth: NetWorthPlain = {
+    netWorthMinor: Number(netWorthResult.netWorth.amountMinorUnits),
+    totalAssetsMinor: Number(netWorthResult.totalAssets.amountMinorUnits),
+    totalLiabilitiesMinor: Number(netWorthResult.totalLiabilities.amountMinorUnits),
+    currency: netWorthResult.netWorth.currencyCode,
+  };
+  const investmentTotalMinor = accounts
+    .filter((a) => a.type === "investment")
+    .reduce((sum, a) => sum + (a.market_value_minor ?? 0), 0);
 
   return (
     <AppShell
@@ -90,6 +108,8 @@ export default async function HomePage() {
         <HomeContent
           displayName={profile?.display_name ?? null}
           safeToSpend={safeToSpend}
+          netWorth={netWorth}
+          investmentTotalMinor={investmentTotalMinor}
           masked={profile?.privacy_mode_enabled ?? false}
           hasAccounts={accounts.length > 0}
           hasBudget={budgetUsages.length > 0}

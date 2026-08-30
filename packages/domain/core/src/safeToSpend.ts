@@ -34,26 +34,30 @@ export type SafeToSpendState = "no_accounts" | "balance_only" | "budget_only" | 
 
 export interface SafeToSpendContext {
   /**
-   * Pre-assembled spending-capacity amounts by the caller, per the active
-   * account filter. As of the Phase 28 PRODUCT DECISION OVERRIDE ("Credit
-   * Card is included in Safe-to-Spend"), this is no longer bank+cash-only:
-   * the caller (`getSafeToSpend`) now also includes each eligible credit
-   * card's AVAILABLE credit (`limit - used`, never the limit itself) here.
-   * Investment is still never included -- see `ownedSpendableTotal` /
-   * `creditAvailableTotal` below for the breakdown the override requires
-   * the UI to show, so a blended figure is never presented without
-   * composition context. This function's own arithmetic is completely
-   * unchanged by the override -- only what the caller assembles changed.
+   * Pre-assembled OWNED-MONEY balances by the caller, per the active
+   * account filter -- Bank + Cash only. Phase 28 briefly made the caller
+   * (`getSafeToSpend`) include each credit card's AVAILABLE credit here
+   * too; Phase 29 REVERSES that ("Credit must NOT be treated as owned
+   * cash" -- the authoritative Spencare/Spensa specs are explicit, and
+   * summing owned cash with borrowed capacity into one number was exactly
+   * the "dangerous financial UX" the reversal corrects). Investment is
+   * still never included. `creditAvailableTotal` below still carries a
+   * credit card's available credit through to the UI -- just never
+   * folded into this array or into `amount`. This function's own
+   * arithmetic is unchanged by either phase's decision -- only what the
+   * caller assembles into this array changed.
    */
   cashBalances: Money[];
   /**
-   * Optional Phase 28 breakdown of `cashBalances` into owned money
-   * (Bank+Cash) vs. borrowed spending capacity (Credit Card available
-   * credit) -- purely additive, passed straight through to the result for
-   * the UI to render as "Bank + Cash ₹X / Credit Available ₹Y" rather than
-   * a single blended number. When omitted, both default to the full
-   * `availableBalance` / zero respectively, preserving every pre-Phase-28
-   * caller's exact existing behavior.
+   * `ownedSpendableTotal` is now always equal to `Money.sum(cashBalances)`
+   * (Bank+Cash) -- kept as an explicit field rather than removed so every
+   * consumer can keep reading it by name regardless of which phase's
+   * assembly logic is current. `creditAvailableTotal` (Credit Card
+   * available credit, never the limit) is ADDITIVE display-only data: it
+   * is never summed into `amount`, only passed through so the UI can show
+   * "Available Credit ₹Y" as its own, separately-labeled figure. When
+   * omitted, both default to the full `availableBalance` / zero
+   * respectively.
    */
   ownedSpendableTotal?: Money;
   creditAvailableTotal?: Money;
@@ -75,9 +79,9 @@ export interface SafeToSpendResult {
   budgetRemaining?: Money;
   goalReservedTotal: Money;
   upcomingBillsTotal: Money;
-  /** Phase 28: the owned-money (Bank+Cash) share of `availableBalance` -- see `SafeToSpendContext.ownedSpendableTotal`. */
+  /** Bank+Cash owned money -- as of Phase 29, this always equals `availableBalance` (Credit Card no longer contributes to either). */
   ownedSpendableTotal: Money;
-  /** Phase 28: the borrowed-capacity (Credit Card available credit) share of `availableBalance` -- never the credit limit. Zero for a pre-Phase-28 caller. */
+  /** Credit Card available credit (limit minus used, never the limit) -- display-only, NEVER included in `amount`/`availableBalance`. Zero when the user has no credit cards. */
   creditAvailableTotal: Money;
 }
 

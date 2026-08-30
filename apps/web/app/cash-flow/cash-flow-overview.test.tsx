@@ -76,6 +76,8 @@ function safeToSpend(overrides: Partial<SafeToSpendPlain> = {}): SafeToSpendPlai
     currency: "INR",
     ownedSpendableMinor: 100000,
     creditAvailableMinor: 0,
+    goalReservedMinor: 0,
+    upcomingBillsMinor: 0,
     ...overrides,
   };
 }
@@ -281,21 +283,47 @@ describe("<CashFlowOverview> — account filter and month stepper", () => {
     expect(screen.getByText(/Available Credit -- Amex/)).toBeInTheDocument();
   });
 
-  it("Phase 28 PRODUCT DECISION OVERRIDE: shows the Bank+Cash / Credit Available composition breakdown, never a blended figure alone", () => {
+  it("Phase 29 REVERSAL: shows an 'Owned money' breakdown line under the hero, never a 'Bank + Cash / Credit Available' composition implying credit is part of the number", () => {
     render(
       <CashFlowOverview
         {...baseProps}
-        safeToSpend={safeToSpend({ state: "budget_and_goals", amountMinor: 9500000, ownedSpendableMinor: 5500000, creditAvailableMinor: 4000000 })}
+        safeToSpend={safeToSpend({ state: "budget_and_goals", amountMinor: 5500000, ownedSpendableMinor: 5500000, creditAvailableMinor: 4000000 })}
       />,
     );
     expect(screen.getByText("Safe to Spend")).toBeInTheDocument();
-    expect(screen.getByText(/Bank \+ Cash/)).toBeInTheDocument();
-    expect(screen.getByText(/Credit Available/)).toBeInTheDocument();
+    expect(screen.getByText(/Owned money/)).toBeInTheDocument();
+    expect(screen.queryByText(/Bank \+ Cash ₹/)).not.toBeInTheDocument();
   });
 
-  it("does not show a composition breakdown when no credit is contributing (pre-Phase-28 shape)", () => {
+  it("Phase 29: shows Available Credit as its OWN separate card, explicitly labeled as not included in Safe to Spend", () => {
+    render(
+      <CashFlowOverview
+        {...baseProps}
+        safeToSpend={safeToSpend({ state: "budget_and_goals", amountMinor: 5500000, ownedSpendableMinor: 5500000, creditAvailableMinor: 4000000 })}
+      />,
+    );
+    expect(screen.getByText("Available Credit")).toBeInTheDocument();
+    expect(screen.getByText(/Not included in Safe to Spend/)).toBeInTheDocument();
+  });
+
+  it("does not show the Available Credit card when the user has no credit cards", () => {
     render(<CashFlowOverview {...baseProps} safeToSpend={safeToSpend({ state: "budget_and_goals", creditAvailableMinor: 0 })} />);
-    expect(screen.queryByText(/Credit Available/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Available Credit")).not.toBeInTheDocument();
+  });
+
+  it("Phase 29: shows 'Reserved for goals' and 'Upcoming bills' breakdown lines when they're non-zero, never when zero", () => {
+    const { rerender } = render(
+      <CashFlowOverview {...baseProps} safeToSpend={safeToSpend({ state: "budget_and_goals", goalReservedMinor: 800000, upcomingBillsMinor: 700000 })} />,
+    );
+    expect(screen.getByText(/Reserved for goals/)).toBeInTheDocument();
+    // "Upcoming bills" also names the unrelated preview tab elsewhere on
+    // this page -- when the breakdown line is showing, there are two
+    // matches instead of the tab's one.
+    expect(screen.getAllByText(/Upcoming bills/)).toHaveLength(2);
+
+    rerender(<CashFlowOverview {...baseProps} safeToSpend={safeToSpend({ state: "balance_only", goalReservedMinor: 0, upcomingBillsMinor: 0 })} />);
+    expect(screen.queryByText(/Reserved for goals/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Upcoming bills/)).toHaveLength(1);
   });
 
   it("Phase 28 Part 15/16: shows Investments and Net Worth as separate figures from Safe to Spend, never summed into it", () => {

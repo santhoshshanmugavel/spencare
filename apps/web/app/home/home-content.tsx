@@ -2,41 +2,34 @@
 
 import Link from "next/link";
 import { Landmark, PiggyBank, Sparkles, Target } from "lucide-react";
-import { Money as DomainMoney } from "@spencare/domain-core";
-import type { SafeToSpendState } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Money } from "@/components/spencare/money";
+import {
+  SafeToSpendHeroCard,
+  FinancialLayersCard,
+  type SafeToSpendPlain,
+  type NetWorthPlain,
+} from "@/components/spencare/financial-overview-cards";
 
-/**
- * Plain-data mirror of `SafeToSpendResult`, matching the Phase 13 pattern
- * established in `cash-flow/cash-flow-overview.tsx` -- `Money` class
- * instances carry a `toJSON` method that crashes the Next.js Server->Client
- * boundary, so the server page converts to this shape and this component
- * reconstructs a `Money` from the plain minor-unit number itself. This is
- * a NEW boundary crossing (home/page.tsx never called `getSafeToSpend`
- * before), so the fix must be applied here from the start rather than
- * discovered live a second time.
- */
-export interface SafeToSpendPlain {
-  state: SafeToSpendState;
-  amountMinor: number;
-  currency: string;
-}
+export type { SafeToSpendPlain, NetWorthPlain };
 
 /**
  * <HomeContent> -- DD-01 (approved): the one net-new Home element, a
  * persistent Safe-to-Spend header, plus SP-051's setup-nudge grid for
  * whichever of {accounts, budget, goals} the user hasn't set up yet.
- * Deliberately narrow per the locked Phase 14 scope: no Net Worth, no
- * Income vs Expenses, no Recent Transactions, no Accounts/Goals/Bills
- * duplication -- information-architecture.md's resolution is that those
- * already live on their own dedicated screens and must not be repeated
- * here.
+ *
+ * Phase 29 Section 7/29/39 revisits the Phase 14 "deliberately narrow, no
+ * Net Worth" locked decision: the current, explicit product direction is
+ * that Home must present the SAME financial layers Cash Flow does ("does
+ * Home match Cash Flow?" must be yes), using the exact same shared
+ * `<SafeToSpendHeroCard>`/`<FinancialLayersCard>` components and data
+ * shapes -- not a second, hand-maintained copy of that UI.
  */
 export function HomeContent({
   displayName,
   safeToSpend,
+  netWorth,
+  investmentTotalMinor,
   masked,
   hasAccounts,
   hasBudget,
@@ -44,6 +37,8 @@ export function HomeContent({
 }: {
   displayName: string | null;
   safeToSpend: SafeToSpendPlain;
+  netWorth: NetWorthPlain;
+  investmentTotalMinor: number;
   masked: boolean;
   hasAccounts: boolean;
   hasBudget: boolean;
@@ -53,49 +48,13 @@ export function HomeContent({
 
   return (
     <div className="space-y-6">
-      {/*
-        Persistent Safe-to-Spend header (DD-01, approved) -- the single
-        net-new UI element for this phase. "no_accounts" is rendered
-        honestly (system-model.md §25 / api-architecture.md §8.4: never
-        fabricate a value when prerequisites are unavailable) rather than
-        showing a misleading ₹0.00. `size="hero"` is already the
-        design-tokens.md token reserved for exactly this figure
-        (information-architecture.md §4: "must be visibly the largest
-        financial figure on its screen").
-      */}
-      <Card>
-        <CardContent className="space-y-1 py-6">
-          {safeToSpend.state === "no_accounts" ? (
-            <>
-              <span className="text-sm font-medium text-muted-foreground">Safe to Spend</span>
-              <p className="text-lg text-muted-foreground">
-                Add an account to see how much you can safely spend.
-              </p>
-            </>
-          ) : (
-            <>
-              <span className="text-sm font-medium text-muted-foreground">
-                {safeToSpend.state === "balance_only" ? "Available Balance" : "Safe to Spend"}
-              </span>
-              <div>
-                <Money
-                  value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.amountMinor), safeToSpend.currency as never)}
-                  masked={masked}
-                  size="hero"
-                  tone="auto"
-                  // Phase 27 fix: a bare text-5xl overflowed its card at
-                  // 320-375px (found live, not just here -- the same gap
-                  // existed on Budgets/Cash Flow's hero figures, all
-                  // fixed the same way). Scales down at narrow widths,
-                  // restores the original text-5xl from sm: up --
-                  // desktop is unchanged.
-                  className="text-3xl min-[375px]:text-4xl sm:text-5xl"
-                />
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <SafeToSpendHeroCard safeToSpend={safeToSpend} masked={masked} heroClassName="text-3xl min-[375px]:text-4xl sm:text-5xl" />
+      <FinancialLayersCard
+        creditAvailableMinor={safeToSpend.creditAvailableMinor}
+        investmentTotalMinor={investmentTotalMinor}
+        netWorth={netWorth}
+        masked={masked}
+      />
 
       <h1 className="text-2xl font-semibold text-foreground">
         Welcome{displayName ? `, ${displayName}` : ""}

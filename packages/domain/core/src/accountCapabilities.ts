@@ -48,11 +48,20 @@
  *   require an investment-specific "sell/liquidate" operation this
  *   codebase does not have; inventing one would be exactly the
  *   fabrication the mandate forbids. Credit Card: no.
- * - `safeToSpendEligible`: does this account's spendable capacity count
- *   toward Safe-to-Spend? Per the Phase 28 PRODUCT DECISION OVERRIDE:
- *   Bank/Cash/Credit Card all TRUE (Credit Card via its *available*
- *   credit, never its limit -- see `getSpendableAmount` below).
- *   Investment: FALSE, unchanged.
+ * - `safeToSpendEligible`: does this account's balance count toward the
+ *   Safe-to-Spend NUMBER itself? Bank/Cash: TRUE (owned liquid money).
+ *   Credit Card: FALSE as of Phase 29 -- a REVERSAL of the short-lived
+ *   Phase 28 override, which had made this TRUE. Phase 29's own
+ *   authoritative source documents (Spencare MVP spec, Spensa AI spec)
+ *   are explicit: "Credit must NOT be treated as owned cash" and
+ *   Safe-to-Spend must answer "how much can I safely use from money I
+ *   OWN" -- combining owned cash with borrowed capacity into one number
+ *   was exactly the "dangerous financial UX" this reversal corrects.
+ *   Credit Card's available credit (limit minus used) is still computed
+ *   and surfaced everywhere (via `getSpendableMinor` and
+ *   `SafeToSpendResult.creditAvailableTotal`), just never summed into
+ *   the headline Safe-to-Spend amount -- always displayed as its own,
+ *   separately-labeled figure. Investment: FALSE, unchanged throughout.
  * - `netWorthAsset` / `netWorthLiability`: Bank/Cash/Investment balances
  *   are assets; Credit Card's credit_used is a liability (subtracted).
  *   Net Worth and Safe-to-Spend are deliberately separate concepts (the
@@ -104,7 +113,7 @@ export const ACCOUNT_CAPABILITIES: Record<AccountType, AccountCapability> = {
     transferDestination: true,
     goalFunding: false,
     goalContributionSource: false,
-    safeToSpendEligible: true,
+    safeToSpendEligible: false,
     netWorthAsset: false,
     netWorthLiability: true,
   },

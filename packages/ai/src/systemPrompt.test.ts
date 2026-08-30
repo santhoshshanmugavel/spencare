@@ -45,9 +45,11 @@ describe("SPENSA_SYSTEM_PROMPT — required content", () => {
     expect(SPENSA_SYSTEM_PROMPT).toMatch(/never.{0,80}spendable cash/i);
   });
 
-  it("Phase 28: instructs describing Safe-to-Spend's owned-vs-credit composition separately, and excluding available credit from Net Worth", () => {
+  it("Phase 29 REVERSAL: Safe-to-Spend is Bank+Cash only again -- credit is a separate figure, never summed in, never part of Net Worth as an asset", () => {
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/safe-to-spend is bank \+ cash only/i);
     expect(SPENSA_SYSTEM_PROMPT).toMatch(/ownedSpendable/);
     expect(SPENSA_SYSTEM_PROMPT).toMatch(/creditAvailable/);
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/never add them together/i);
     expect(SPENSA_SYSTEM_PROMPT).toMatch(/Net Worth.{0,40}never includes available credit/i);
   });
 

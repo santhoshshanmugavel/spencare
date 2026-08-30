@@ -127,11 +127,14 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
         state: safeToSpendResult.state,
         amountMinor: Number(safeToSpendResult.amount.amountMinorUnits),
         currency: safeToSpendResult.amount.currencyCode,
-        // Phase 28: composition breakdown (owned Bank+Cash vs. borrowed
-        // Credit Card available credit) so the UI never presents a
-        // blended figure without showing what it's made of.
+        // Phase 29: composition breakdown -- owned Bank+Cash money (the
+        // ONLY thing Safe-to-Spend is made of, per the Phase 29 reversal)
+        // plus what was reserved out of it, and Credit Card's available
+        // credit shown as its own separate figure, never summed in.
         ownedSpendableMinor: Number(safeToSpendResult.ownedSpendableTotal.amountMinorUnits),
         creditAvailableMinor: Number(safeToSpendResult.creditAvailableTotal.amountMinorUnits),
+        goalReservedMinor: Number(safeToSpendResult.goalReservedTotal.amountMinorUnits),
+        upcomingBillsMinor: Number(safeToSpendResult.upcomingBillsTotal.amountMinorUnits),
       }
     : null;
   const selectedAccount = accountId ? (accounts.find((a) => a.id === accountId) ?? null) : null;

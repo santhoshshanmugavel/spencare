@@ -37,7 +37,7 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
     "getSafeToSpend",
     {
       description:
-        "Get the user's current Safe-to-Spend amount and which calculation state produced it. Phase 28: this figure now includes Credit Card AVAILABLE credit alongside Bank/Cash -- see ownedSpendable (owned money) vs creditAvailable (borrowed capacity) to describe the composition; never describe the total amount as 'cash in your accounts'.",
+        "Get the user's current Safe-to-Spend amount and which calculation state produced it. This figure is Bank + Cash ONLY (owned money) -- it does NOT include Credit Card available credit or Investment value. creditAvailable is given separately (a credit card's limit minus used, borrowed capacity, never owned money) -- always describe it as a distinct figure, never add it to the Safe-to-Spend amount.",
       inputSchema: {},
     },
     async () =>

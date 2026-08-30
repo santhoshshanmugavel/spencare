@@ -2,16 +2,22 @@ import { render, screen } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { describe, expect, it } from "vitest";
 import type { SafeToSpendState } from "@spencare/domain-application";
-import { HomeContent, type SafeToSpendPlain } from "./home-content";
+import { HomeContent, type SafeToSpendPlain, type NetWorthPlain } from "./home-content";
 
 function safeToSpend(overrides: Partial<SafeToSpendPlain> = {}): SafeToSpendPlain {
   return {
     state: "balance_only" as SafeToSpendState,
     amountMinor: 500000,
     currency: "INR",
+    ownedSpendableMinor: 500000,
+    creditAvailableMinor: 0,
+    goalReservedMinor: 0,
+    upcomingBillsMinor: 0,
     ...overrides,
   };
 }
+
+const netWorth: NetWorthPlain = { netWorthMinor: 500000, totalAssetsMinor: 500000, totalLiabilitiesMinor: 0, currency: "INR" };
 
 const baseProps = {
   displayName: "Asha",
@@ -20,6 +26,8 @@ const baseProps = {
   hasBudget: true,
   hasGoals: true,
   safeToSpend: safeToSpend(),
+  netWorth,
+  investmentTotalMinor: 0,
 };
 
 describe("<HomeContent> — Safe-to-Spend header (DD-01)", () => {
@@ -42,14 +50,36 @@ describe("<HomeContent> — Safe-to-Spend header (DD-01)", () => {
 
   it("never fabricates a value for the no_accounts state -- shows an honest prompt instead", () => {
     render(<HomeContent {...baseProps} hasAccounts={false} safeToSpend={safeToSpend({ state: "no_accounts", amountMinor: 0 })} />);
-    expect(screen.getByText(/add an account to see how much you can safely spend/i)).toBeInTheDocument();
+    expect(screen.getByText(/add a bank or cash account to see how much you can safely spend/i)).toBeInTheDocument();
     expect(screen.queryByText("₹0.00")).not.toBeInTheDocument();
   });
 
-  it("masks the header figure when Privacy Mode is on", () => {
-    render(<HomeContent {...baseProps} masked safeToSpend={safeToSpend({ amountMinor: 123456 })} />);
+  it("masks the header figure (and its breakdown) when Privacy Mode is on", () => {
+    render(<HomeContent {...baseProps} masked safeToSpend={safeToSpend({ amountMinor: 123456, ownedSpendableMinor: 123456 })} />);
     expect(screen.queryByText("₹1,234.56")).not.toBeInTheDocument();
-    expect(screen.getByText("₹***")).toBeInTheDocument();
+    expect(screen.getAllByText("₹***").length).toBeGreaterThan(0);
+  });
+});
+
+describe("<HomeContent> — Phase 29: Home matches Cash Flow's financial layers", () => {
+  it("shows Available Credit, Investments, and Net Worth via the same shared FinancialLayersCard Cash Flow uses", () => {
+    render(
+      <HomeContent
+        {...baseProps}
+        safeToSpend={safeToSpend({ creditAvailableMinor: 4000000 })}
+        investmentTotalMinor={30000000}
+        netWorth={{ netWorthMinor: 33500000, totalAssetsMinor: 35500000, totalLiabilitiesMinor: 2000000, currency: "INR" }}
+      />,
+    );
+    expect(screen.getByText("Available Credit")).toBeInTheDocument();
+    expect(screen.getByText(/Not included in Safe to Spend/)).toBeInTheDocument();
+    expect(screen.getByText("Investments")).toBeInTheDocument();
+    expect(screen.getByText("Net Worth")).toBeInTheDocument();
+  });
+
+  it("shows no Available Credit / Investments / Net Worth card for a user with none of them", () => {
+    render(<HomeContent {...baseProps} investmentTotalMinor={0} netWorth={{ netWorthMinor: 0, totalAssetsMinor: 0, totalLiabilitiesMinor: 0, currency: "INR" }} />);
+    expect(screen.queryByText("Net Worth")).not.toBeInTheDocument();
   });
 });
 

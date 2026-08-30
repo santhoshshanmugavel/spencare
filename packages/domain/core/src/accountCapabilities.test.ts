@@ -30,7 +30,7 @@ describe("ACCOUNT_CAPABILITIES", () => {
     });
   });
 
-  it("Credit Card: expense-only, transfer-destination-only, never goal funding, eligible for Safe-to-Spend, a Net Worth liability", () => {
+  it("Credit Card: expense-only, transfer-destination-only, never goal funding, EXCLUDED from Safe-to-Spend (Phase 29 reversal), a Net Worth liability", () => {
     expect(ACCOUNT_CAPABILITIES.credit_card).toEqual({
       expenseSource: true,
       incomeTarget: false,
@@ -38,7 +38,7 @@ describe("ACCOUNT_CAPABILITIES", () => {
       transferDestination: true,
       goalFunding: false,
       goalContributionSource: false,
-      safeToSpendEligible: true,
+      safeToSpendEligible: false,
       netWorthAsset: false,
       netWorthLiability: true,
     });
@@ -85,6 +85,7 @@ describe("hasCapability / filterByCapability", () => {
   it("hasCapability reads the matrix directly", () => {
     expect(hasCapability("credit_card", "expenseSource")).toBe(true);
     expect(hasCapability("credit_card", "goalFunding")).toBe(false);
+    expect(hasCapability("credit_card", "safeToSpendEligible")).toBe(false);
     expect(hasCapability("investment", "safeToSpendEligible")).toBe(false);
   });
 
@@ -98,7 +99,8 @@ describe("hasCapability / filterByCapability", () => {
     expect(filterByCapability(accounts, "expenseSource").map((a) => a.id)).toEqual(["1", "2", "4"]);
     expect(filterByCapability(accounts, "goalFunding").map((a) => a.id)).toEqual(["1", "3", "4"]);
     expect(filterByCapability(accounts, "goalContributionSource").map((a) => a.id)).toEqual(["1", "4"]);
-    expect(filterByCapability(accounts, "safeToSpendEligible").map((a) => a.id)).toEqual(["1", "2", "4"]);
+    // Phase 29 reversal: only Bank/Cash are Safe-to-Spend-eligible now.
+    expect(filterByCapability(accounts, "safeToSpendEligible").map((a) => a.id)).toEqual(["1", "4"]);
   });
 });
 
