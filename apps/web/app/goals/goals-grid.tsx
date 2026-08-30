@@ -30,12 +30,16 @@ export function GoalsGrid({
   initialGoals,
   accounts,
   fundingEligibleAccounts,
+  contributionEligibleAccounts,
   masked,
   imageSignedUrls,
 }: {
   initialGoals: GoalRow[];
   accounts: AccountRow[];
+  /** Bank/Cash/Investment -- Phase 28: eligible to be SET as a goal's funding account (pure metadata, never moves money). Used by Add/Edit only. */
   fundingEligibleAccounts: AccountRow[];
+  /** Bank/Cash only -- eligible as the FROM account for a real +Add Cash contribution or withdrawal (calls the balance-mutating RPC). Investment is deliberately excluded here even though it IS funding-eligible above -- no "sell investment to fund a goal" operation exists in this codebase. Used by Contribute/Withdraw only. */
+  contributionEligibleAccounts: AccountRow[];
   masked: boolean;
   /** goalId -> signed URL, resolved server-side by the page (see `resolveGoalImageUrls`); absent entries render the no-image fallback. */
   imageSignedUrls: Record<string, string>;
@@ -121,7 +125,7 @@ export function GoalsGrid({
       {contributing ? (
         <ContributeSheet
           goal={contributing}
-          accounts={fundingEligibleAccounts}
+          accounts={contributionEligibleAccounts}
           open={!!contributing}
           onOpenChange={(o) => !o && setContributing(null)}
           onContributed={() => {
@@ -134,7 +138,7 @@ export function GoalsGrid({
       {withdrawing ? (
         <WithdrawSheet
           goal={withdrawing}
-          accounts={fundingEligibleAccounts}
+          accounts={contributionEligibleAccounts}
           open={!!withdrawing}
           onOpenChange={(o) => !o && setWithdrawing(null)}
           onWithdrawn={() => {

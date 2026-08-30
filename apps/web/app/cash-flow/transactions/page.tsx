@@ -1,5 +1,6 @@
 import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
 import { getProfile, listAccounts, listCategories, listTransactions, type AuthContext } from "@spencare/domain-application";
+import { hasCapability } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { CashFlowTabs } from "@/components/spencare/cash-flow-tabs";
@@ -36,7 +37,18 @@ export default async function TransactionsPage() {
     listCategories(ctx),
     getProfile(ctx),
   ]);
-  const spendEligibleAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
+  // Phase 28: any account that can participate in SOME transaction/transfer
+  // role (Bank/Cash/Credit Card) -- the kind-specific narrowing (Expense
+  // vs. Income vs. Transfer From/To) happens inside AddTransactionSheet/
+  // EditTransactionSheet via the same shared capability model. Investment
+  // is excluded entirely: it is not a normal-transaction account.
+  const spendEligibleAccounts = accounts.filter(
+    (a) =>
+      hasCapability(a.type, "expenseSource") ||
+      hasCapability(a.type, "incomeTarget") ||
+      hasCapability(a.type, "transferSource") ||
+      hasCapability(a.type, "transferDestination"),
+  );
 
   return (
     <AppShell
@@ -50,7 +62,6 @@ export default async function TransactionsPage() {
               label: "Cash Flow",
               icon: <ArrowLeftRight className="size-5" />,
               href: "/cash-flow",
-              active: true,
             },
             { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             {

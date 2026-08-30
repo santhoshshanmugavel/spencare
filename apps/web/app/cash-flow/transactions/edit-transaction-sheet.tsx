@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { updateTransactionSchema, type UpdateTransactionInput } from "@spencare/validation";
 import type { AccountRow, CategoryRow, TransactionRow } from "@spencare/domain-application";
+import { ACCOUNT_TYPE_LABELS, filterByCapability } from "@spencare/domain-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -42,6 +43,20 @@ export function EditTransactionSheet({
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
+  // Phase 28: reassignment must respect the SAME capability rule
+  // create/update_transaction enforces server-side -- an income
+  // transaction can never be reassigned to a credit card (it isn't an
+  // income target), while an expense can move to/from Bank/Cash/Credit
+  // Card. The transaction's own current account is always kept in the
+  // list even if it wouldn't otherwise qualify, so the pre-selected value
+  // is never silently hidden from its own selector.
+  const eligibleAccounts = filterByCapability(
+    accounts,
+    transaction.type === "income" ? "incomeTarget" : "expenseSource",
+  );
+  const accountOptions = eligibleAccounts.some((a) => a.id === transaction.account_id)
+    ? eligibleAccounts
+    : [...eligibleAccounts, ...accounts.filter((a) => a.id === transaction.account_id)];
   const [display, setDisplay] = useState(String(Math.trunc(transaction.amount_minor / 100)));
   const {
     control,
@@ -86,7 +101,11 @@ export function EditTransactionSheet({
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger id="edit-txn-account"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                    {accountOptions.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} · {ACCOUNT_TYPE_LABELS[a.type]}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}

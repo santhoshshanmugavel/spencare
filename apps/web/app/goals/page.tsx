@@ -1,5 +1,6 @@
 import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
 import { getProfile, listAccounts, listGoals, resolveGoalImageUrls, type AuthContext } from "@spencare/domain-application";
+import { filterByCapability } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -27,7 +28,13 @@ export default async function GoalsPage() {
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
   const [goals, accounts, profile] = await Promise.all([listGoals(ctx), listAccounts(ctx), getProfile(ctx)]);
-  const fundingEligibleAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
+  // Phase 28 Part 9: funding-account eligibility (Bank/Cash/Investment,
+  // never Credit Card) is separate from contribution-account eligibility
+  // (Bank/Cash only -- a real "+Add Cash" money movement, which has no
+  // supported Investment operation) -- see goals-grid.tsx's own doc
+  // comment on why these two lists must not be merged.
+  const fundingEligibleAccounts = filterByCapability(accounts, "goalFunding");
+  const contributionEligibleAccounts = filterByCapability(accounts, "goalContributionSource");
   // Resolved AFTER goals are known (needs their `image_url` paths), not
   // parallelized with the fetch above -- signing depends on the list.
   const imageSignedUrls = await resolveGoalImageUrls(ctx, goals);
@@ -45,7 +52,7 @@ export default async function GoalsPage() {
               icon: <ArrowLeftRight className="size-5" />,
               href: "/cash-flow",
             },
-            { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals", active: true },
+            { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             {
               key: "settings",
               label: "Settings",
@@ -61,6 +68,7 @@ export default async function GoalsPage() {
           initialGoals={goals}
           accounts={accounts}
           fundingEligibleAccounts={fundingEligibleAccounts}
+          contributionEligibleAccounts={contributionEligibleAccounts}
           masked={profile?.privacy_mode_enabled ?? false}
           imageSignedUrls={imageSignedUrls}
         />

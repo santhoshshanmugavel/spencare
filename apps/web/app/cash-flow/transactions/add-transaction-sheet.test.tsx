@@ -47,6 +47,34 @@ const accounts: AccountRow[] = [
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },
+  {
+    id: "8cad1f12-3b01-4a55-9aa9-3ce1fef58491",
+    user_id: "u1",
+    type: "credit_card",
+    name: "ICICI Credit Card",
+    currency: "INR",
+    balance_minor: 0,
+    credit_limit_minor: 10_000_000,
+    credit_used_minor: 3_500_000,
+    market_value_minor: null,
+    is_archived: false,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
+  {
+    id: "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+    user_id: "u1",
+    type: "investment",
+    name: "Mutual Fund",
+    currency: "INR",
+    balance_minor: 0,
+    credit_limit_minor: null,
+    credit_used_minor: null,
+    market_value_minor: 30_000_000,
+    is_archived: false,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
 ];
 
 const categories: CategoryRow[] = [{ id: "289f5e56-21a8-4ee0-865f-c02c11f4d874", user_id: null, name: "Dining", icon: null, is_system: true }];
@@ -89,7 +117,7 @@ describe("<AddTransactionSheet> — expense tab (default)", () => {
     const user = userEvent.setup();
     render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={onCreated} accounts={accounts} categories={categories} />);
     await user.click(screen.getByRole("combobox", { name: "Paid from" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     await user.click(screen.getByRole("combobox", { name: "Category" }));
     await user.click(screen.getByRole("option", { name: "Dining" }));
     await user.type(screen.getByLabelText("Amount (INR ₹)"), "450");
@@ -108,9 +136,9 @@ describe("<AddTransactionSheet> — transfer tab", () => {
     render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
     await user.click(screen.getByRole("tab", { name: "Transfer" }));
     await user.click(screen.getByRole("combobox", { name: "From" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     await user.click(screen.getByRole("combobox", { name: "To" }));
-    await user.click(screen.getByRole("option", { name: "Cash" }));
+    await user.click(screen.getByRole("option", { name: "Cash · Cash" }));
     await user.type(screen.getByLabelText("Amount (INR ₹)"), "1000");
     await user.click(screen.getByRole("button", { name: "Transfer" }));
     expect(transferAction).toHaveBeenCalledWith(
@@ -125,9 +153,9 @@ describe("<AddTransactionSheet> — transfer tab", () => {
     render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
     await user.click(screen.getByRole("tab", { name: "Transfer" }));
     await user.click(screen.getByRole("combobox", { name: "From" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     await user.click(screen.getByRole("combobox", { name: "To" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     await user.type(screen.getByLabelText("Amount (INR ₹)"), "1000");
     await user.click(screen.getByRole("button", { name: "Transfer" }));
     expect(transferAction).not.toHaveBeenCalled();
@@ -141,11 +169,66 @@ describe("<AddTransactionSheet> — income tab", () => {
     render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
     await user.click(screen.getByRole("tab", { name: "Income" }));
     await user.click(screen.getByRole("combobox", { name: "Received into" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     await user.click(screen.getByRole("combobox", { name: "Category" }));
     await user.click(screen.getByRole("option", { name: "Dining" }));
     await user.type(screen.getByLabelText("Amount (INR ₹)"), "2000000");
     await user.click(screen.getByRole("button", { name: "Add income" }));
     expect(createTransactionAction).toHaveBeenCalledWith(expect.objectContaining({ kind: "income" }));
+  });
+});
+
+describe("<AddTransactionSheet> — Phase 28 account-type capability filtering", () => {
+  it("Expense tab shows Credit Card as a valid source, clearly labeled by type", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    await user.click(screen.getByRole("combobox", { name: "Paid from" }));
+    expect(screen.getByRole("option", { name: "ICICI Credit Card · Credit Card" })).toBeInTheDocument();
+  });
+
+  it("Expense tab never shows Investment as a source -- not a normal daily-spending account", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    await user.click(screen.getByRole("combobox", { name: "Paid from" }));
+    expect(screen.queryByRole("option", { name: /Mutual Fund/ })).not.toBeInTheDocument();
+  });
+
+  it("Income tab never shows Credit Card as a target -- a credit card cannot receive income", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    await user.click(screen.getByRole("tab", { name: "Income" }));
+    await user.click(screen.getByRole("combobox", { name: "Received into" }));
+    expect(screen.queryByRole("option", { name: /ICICI Credit Card/ })).not.toBeInTheDocument();
+  });
+
+  it("Transfer tab: Credit Card is a valid destination (repayment) but never a valid source", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    await user.click(screen.getByRole("tab", { name: "Transfer" }));
+    await user.click(screen.getByRole("combobox", { name: "From" }));
+    expect(screen.queryByRole("option", { name: /ICICI Credit Card/ })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("combobox", { name: "To" }));
+    expect(screen.getByRole("option", { name: "ICICI Credit Card · Credit Card" })).toBeInTheDocument();
+  });
+
+  it("submits a credit-card repayment via the Transfer tab", async () => {
+    const { transferAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    await user.click(screen.getByRole("tab", { name: "Transfer" }));
+    await user.click(screen.getByRole("combobox", { name: "From" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
+    await user.click(screen.getByRole("combobox", { name: "To" }));
+    await user.click(screen.getByRole("option", { name: "ICICI Credit Card · Credit Card" }));
+    await user.type(screen.getByLabelText("Amount (INR ₹)"), "1500");
+    await user.click(screen.getByRole("button", { name: "Transfer" }));
+    expect(transferAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromAccountId: "ea690459-1cda-4b03-860a-9fb65dec3406",
+        toAccountId: "8cad1f12-3b01-4a55-9aa9-3ce1fef58491",
+        amountMinor: 150000,
+      }),
+    );
   });
 });

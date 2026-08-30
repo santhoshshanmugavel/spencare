@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { AlertTriangle, Loader2, Repeat2 } from "lucide-react";
-import { Money as DomainMoney, LOW_CONFIDENCE_THRESHOLD } from "@spencare/domain-core";
+import { Money as DomainMoney, LOW_CONFIDENCE_THRESHOLD, ACCOUNT_TYPE_LABELS } from "@spencare/domain-core";
 import type {
   AccountRow,
   CategoryRow,
@@ -147,7 +147,11 @@ export function ImportWizard({ accounts, categories }: { accounts: AccountRow[];
     commandType: "confirmImport",
     summary: `Import ${willImportCount} transaction${willImportCount === 1 ? "" : "s"} into ${selectedAccount?.name ?? "this account"}`,
     fields: [
-      { label: "Destination account", value: selectedAccount?.name ?? "—", emphasis: true },
+      {
+        label: "Destination account",
+        value: selectedAccount ? `${selectedAccount.name} (${ACCOUNT_TYPE_LABELS[selectedAccount.type]})` : "—",
+        emphasis: true,
+      },
       { label: "Transactions to import", value: String(willImportCount) },
       { label: "Total income", value: formatMoneyString(incomeTotal) },
       { label: "Total expenses", value: formatMoneyString(expenseTotal) },
@@ -232,13 +236,14 @@ function UploadStep({
   isPending: boolean;
 }) {
   const [fileError, setFileError] = useState<string | null>(null);
+  const selectedAccount = accounts.find((a) => a.id === accountId) ?? null;
 
   return (
     <Card>
       <CardContent className="space-y-4 py-6">
         {accounts.length === 0 ? (
           <div className="space-y-3 text-center">
-            <p className="text-sm text-muted-foreground">Add a bank or cash account before importing a statement.</p>
+            <p className="text-sm text-muted-foreground">Add a bank, cash, or credit card account before importing a statement.</p>
             <Button asChild size="touch">
               <Link href="/settings/accounts">Add an account</Link>
             </Button>
@@ -275,12 +280,19 @@ function UploadStep({
                 <SelectContent>
                   {accounts.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
-                      {a.name}
+                      {a.name} · {ACCOUNT_TYPE_LABELS[a.type]}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </FormField>
+            {selectedAccount?.type === "credit_card" ? (
+              <p className="text-xs text-muted-foreground">
+                This is a credit card statement -- rows will be imported as credit card spending (increasing what you
+                owe), never as bank spending. Any row this statement marks as income or a refund can&apos;t be
+                imported here; remove those rows before confirming.
+              </p>
+            ) : null}
             <FormField
               id="import-file"
               label="Statement file"

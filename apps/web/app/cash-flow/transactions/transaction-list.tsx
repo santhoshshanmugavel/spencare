@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from "lucide-react";
-import { Money as DomainMoney } from "@spencare/domain-core";
+import { Money as DomainMoney, ACCOUNT_TYPE_LABELS } from "@spencare/domain-core";
 import type { AccountRow, CategoryRow, TransactionRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,6 +75,18 @@ function iconFor(type: TransactionRow["type"]) {
   return <ArrowLeftRight className="size-4 text-muted-foreground" aria-hidden="true" />;
 }
 
+/**
+ * Phase 28 Part 12: every account reference in the transaction list is
+ * tagged with its real type ("HDFC Savings · Bank") -- never left to look
+ * bank-only-by-default. This also means a bank-debit-into-a-credit-card
+ * repayment or a bank->investment transfer leg is never mislabeled as if
+ * it came from the OTHER account in the pair: each leg shows its own
+ * account's own type, exactly as recorded.
+ */
+function accountTag(account: AccountRow | undefined): string | undefined {
+  return account ? `${account.name} · ${ACCOUNT_TYPE_LABELS[account.type]}` : undefined;
+}
+
 function rowAriaLabel(
   t: TransactionRow,
   account: AccountRow | undefined,
@@ -85,7 +97,7 @@ function rowAriaLabel(
   const amount = masked
     ? "amount hidden"
     : formatMinorUnitsPlain(t.amount_minor, t.currency);
-  const parts = [title, category?.name, account?.name, amount].filter(Boolean);
+  const parts = [title, category?.name, accountTag(account), amount].filter(Boolean);
   return parts.join(", ");
 }
 
@@ -177,7 +189,7 @@ export function TransactionList({
                       title={t.merchant || t.description || (t.type === "transfer" ? "Transfer" : "Transaction")}
                       metadata={[
                         category ? <span key="cat">{category.name}</span> : null,
-                        account ? <span key="acct">{account.name}</span> : null,
+                        account ? <span key="acct">{accountTag(account)}</span> : null,
                       ].filter(Boolean)}
                       trailing={trailingFor(t, masked)}
                       onClick={() => setDetail(t)}

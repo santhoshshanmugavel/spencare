@@ -1,5 +1,6 @@
 import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
 import { listAccounts, listCategories, type AuthContext } from "@spencare/domain-application";
+import { filterByCapability } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -30,7 +31,12 @@ export default async function ImportPage() {
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
   const [accounts, categories] = await Promise.all([listAccounts(ctx), listCategories(ctx)]);
-  const eligibleAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
+  // Phase 28 Part 8: Credit Card is a valid import destination (expense
+  // rows only -- confirm_import_batch itself rejects a batch containing
+  // any income row against a credit card, never a silent partial
+  // import). Investment is excluded: it is not a normal transaction
+  // account and no statement-import format for it is supported here.
+  const eligibleAccounts = filterByCapability(accounts, "expenseSource");
 
   return (
     <AppShell
@@ -44,7 +50,6 @@ export default async function ImportPage() {
               label: "Cash Flow",
               icon: <ArrowLeftRight className="size-5" />,
               href: "/cash-flow",
-              active: true,
             },
             { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             { key: "settings", label: "Settings", icon: <SettingsIcon className="size-5" />, href: "/settings/profile" },

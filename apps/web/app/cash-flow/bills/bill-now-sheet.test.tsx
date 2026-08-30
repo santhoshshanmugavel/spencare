@@ -106,7 +106,7 @@ describe("<BillNowSheet> — behavior", () => {
       <BillNowSheet prediction={prediction()} accounts={accounts} categories={categories} open onOpenChange={() => {}} onPaid={() => {}} />,
     );
     await user.click(screen.getByRole("combobox", { name: "Paid from" }));
-    expect(screen.getByRole("option", { name: "HDFC Bank" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "HDFC Bank · Bank" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Amex" })).not.toBeInTheDocument();
   });
 
@@ -120,7 +120,7 @@ describe("<BillNowSheet> — behavior", () => {
     await user.clear(amountInput);
     await user.type(amountInput, "520");
     await user.click(screen.getByRole("combobox", { name: "Paid from" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     await user.click(screen.getByRole("combobox", { name: "Category" }));
     await user.click(screen.getByRole("option", { name: "Bills & Utilities" }));
     await user.click(screen.getByRole("button", { name: "Confirm payment" }));
@@ -166,7 +166,7 @@ describe("<BillNowSheet> — behavior", () => {
       <BillNowSheet prediction={prediction()} accounts={accounts} categories={categories} open onOpenChange={() => {}} onPaid={onPaid} />,
     );
     await user.click(screen.getByRole("combobox", { name: "Paid from" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     await user.click(screen.getByRole("combobox", { name: "Category" }));
     await user.click(screen.getByRole("option", { name: "Bills & Utilities" }));
     await user.click(screen.getByRole("button", { name: "Confirm payment" }));

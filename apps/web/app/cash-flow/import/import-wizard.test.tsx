@@ -38,6 +38,16 @@ const account: AccountRow = {
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };
+const creditCardAccount: AccountRow = {
+  ...account,
+  id: "acc-2",
+  type: "credit_card",
+  name: "ICICI Credit Card",
+  balance_minor: 0,
+  credit_limit_minor: 10_000_000,
+  credit_used_minor: 3_500_000,
+};
+
 const categories: CategoryRow[] = [{ id: "cat-1", user_id: null, name: "Dining", icon: null, is_system: true }];
 
 function batch(overrides: Partial<ImportBatchRow> = {}): ImportBatchRow {
@@ -135,6 +145,21 @@ describe("<ImportWizard> — upload step", () => {
 
     expect(await screen.findByText(/don't match a supported statement format/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upload and process" })).toBeInTheDocument();
+  });
+
+  it("Phase 28: offers a Credit Card as an import destination, clearly labeled by type", async () => {
+    render(<ImportWizard accounts={[account, creditCardAccount]} categories={categories} />);
+    await userEvent.setup().click(screen.getByRole("combobox", { name: "Which account is this statement for?" }));
+    expect(screen.getByRole("option", { name: "ICICI Credit Card · Credit Card" })).toBeInTheDocument();
+  });
+
+  it("Phase 28: warns that a credit-card statement's income rows can't be imported here, once a credit card is selected", async () => {
+    const user = userEvent.setup();
+    render(<ImportWizard accounts={[account, creditCardAccount]} categories={categories} />);
+    expect(screen.queryByText(/can't be imported here/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Which account is this statement for?" }));
+    await user.click(screen.getByRole("option", { name: "ICICI Credit Card · Credit Card" }));
+    expect(screen.getByText(/can't be imported here/i)).toBeInTheDocument();
   });
 });
 

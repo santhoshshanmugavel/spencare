@@ -38,6 +38,25 @@ const category: CategoryRow = {
   is_system: true,
 };
 
+const creditCardAccount: AccountRow = {
+  ...account,
+  id: "8cad1f12-3b01-4a55-9aa9-3ce1fef58491",
+  type: "credit_card",
+  name: "ICICI Credit Card",
+  balance_minor: 0,
+  credit_limit_minor: 10_000_000,
+  credit_used_minor: 3_500_000,
+};
+
+const investmentAccount: AccountRow = {
+  ...account,
+  id: "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  type: "investment",
+  name: "Mutual Fund",
+  balance_minor: 0,
+  market_value_minor: 30_000_000,
+};
+
 const expenseTxn: TransactionRow = {
   id: "txn-1",
   user_id: "u1",
@@ -56,6 +75,47 @@ const expenseTxn: TransactionRow = {
   created_at: "2026-08-25T00:00:00Z",
   updated_at: "2026-08-25T00:00:00Z",
 };
+
+const incomeTxn: TransactionRow = { ...expenseTxn, id: "txn-2", type: "income" };
+
+describe("<EditTransactionSheet> — Phase 28 account-type capability filtering", () => {
+  it("an expense can be reassigned to a Credit Card, clearly labeled by type", async () => {
+    const { updateTransactionAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(
+      <EditTransactionSheet
+        transaction={expenseTxn}
+        accounts={[account, creditCardAccount, investmentAccount]}
+        categories={[category]}
+        open
+        onOpenChange={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Account" }));
+    expect(screen.getByRole("option", { name: "ICICI Credit Card · Credit Card" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Mutual Fund/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "ICICI Credit Card · Credit Card" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(updateTransactionAction).toHaveBeenCalledWith("txn-1", expect.objectContaining({ accountId: creditCardAccount.id }));
+  });
+
+  it("an income transaction never offers a Credit Card as its account -- a credit card cannot receive income", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditTransactionSheet
+        transaction={incomeTxn}
+        accounts={[account, creditCardAccount]}
+        categories={[category]}
+        open
+        onOpenChange={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Account" }));
+    expect(screen.queryByRole("option", { name: /ICICI Credit Card/ })).not.toBeInTheDocument();
+  });
+});
 
 describe("<EditTransactionSheet> — accessibility", () => {
   it("has no axe violations", async () => {

@@ -80,12 +80,12 @@ describe("<TransactionList> — populated", () => {
 
   it("gives each clickable row a real, spaced accessible name (not raw concatenated text content)", () => {
     render(<TransactionList initialTransactions={[expense()]} accounts={[account]} categories={[category]} masked={false} />);
-    expect(screen.getByRole("button", { name: "Swiggy, Dining, HDFC Bank, ₹450.00" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Swiggy, Dining, HDFC Bank · Bank, ₹450.00" })).toBeInTheDocument();
   });
 
   it("masks the accessible name's amount too, not just the visible figure", () => {
     render(<TransactionList initialTransactions={[expense()]} accounts={[account]} categories={[category]} masked />);
-    expect(screen.getByRole("button", { name: "Swiggy, Dining, HDFC Bank, amount hidden" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Swiggy, Dining, HDFC Bank · Bank, amount hidden" })).toBeInTheDocument();
   });
 
   it("excludes a transfer from the day's income/expense subtotal (invariant #4)", () => {

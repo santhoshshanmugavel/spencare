@@ -116,7 +116,7 @@ describe("<EditGoalSheet> — behavior", () => {
     const user = userEvent.setup();
     render(<EditGoalSheet goal={goal} accounts={accounts} open onOpenChange={() => {}} onUpdated={onUpdated} />);
     await user.click(screen.getByLabelText("Funding account"));
-    await user.click(await screen.findByRole("option", { name: "ICICI Savings" }));
+    await user.click(await screen.findByRole("option", { name: "ICICI Savings · Bank" }));
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     expect(updateGoalAction).toHaveBeenCalledWith(
       goal.id,

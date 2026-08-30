@@ -38,6 +38,15 @@ const account: AccountRow = {
   updated_at: "2026-01-01T00:00:00Z",
 };
 
+const investmentAccount: AccountRow = {
+  ...account,
+  id: "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+  type: "investment",
+  name: "Mutual Fund",
+  balance_minor: 0,
+  market_value_minor: 30_000_000,
+};
+
 const goal: GoalRow = {
   id: "8cad1f12-3b01-4a55-9aa9-3ce1fef58491",
   user_id: "u1",
@@ -57,18 +66,18 @@ const goal: GoalRow = {
 describe("<GoalsGrid> — empty state", () => {
   it("has no axe violations", async () => {
     const { container } = render(
-      <GoalsGrid initialGoals={[]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />,
+      <GoalsGrid initialGoals={[]} accounts={[account]} fundingEligibleAccounts={[account]} contributionEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />,
     );
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it("shows an honest empty state, not a fabricated goal", () => {
-    render(<GoalsGrid initialGoals={[]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
+    render(<GoalsGrid initialGoals={[]} accounts={[account]} fundingEligibleAccounts={[account]} contributionEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     expect(screen.getByText(/no goals yet/i)).toBeInTheDocument();
   });
 
   it("disables Create goal when there is no eligible funding account", () => {
-    render(<GoalsGrid initialGoals={[]} accounts={[]} fundingEligibleAccounts={[]} masked={false} imageSignedUrls={{}} />);
+    render(<GoalsGrid initialGoals={[]} accounts={[]} fundingEligibleAccounts={[]} contributionEligibleAccounts={[]} masked={false} imageSignedUrls={{}} />);
     expect(screen.getByRole("button", { name: "+ Create goal" })).toBeDisabled();
   });
 });
@@ -76,14 +85,14 @@ describe("<GoalsGrid> — empty state", () => {
 describe("<GoalsGrid> — populated", () => {
   it("has no axe violations", async () => {
     const { container } = render(
-      <GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />,
+      <GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} contributionEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />,
     );
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it("opens Edit Goal from the card's actions menu, not the view-detail dialog too (no unintended double-open)", async () => {
     const user = userEvent.setup();
-    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
+    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} contributionEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     await user.click(screen.getByRole("button", { name: `Actions for ${goal.name}` }));
     await user.click(screen.getByRole("menuitem", { name: "Edit Goal" }));
     expect(screen.getByRole("heading", { name: `Edit ${goal.name}` })).toBeInTheDocument();
@@ -93,22 +102,58 @@ describe("<GoalsGrid> — populated", () => {
 
   it("opens the detail dialog when the card's name is clicked (the image area is now a real upload target, not a detail-view trigger -- Phase 26)", async () => {
     const user = userEvent.setup();
-    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
+    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} contributionEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     await user.click(screen.getByRole("button", { name: goal.name }));
     expect(await screen.findByText("Contributions")).toBeInTheDocument();
   });
 
   it("opens the Contribute sheet from the card's persistent Add Cash button", async () => {
     const user = userEvent.setup();
-    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
+    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} contributionEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     await user.click(screen.getByRole("button", { name: "Add Cash" }));
     expect(screen.getByRole("heading", { name: `Add cash to ${goal.name}` })).toBeInTheDocument();
   });
 
   it("opens Create goal from the header button", async () => {
     const user = userEvent.setup();
-    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
+    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} contributionEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     await user.click(screen.getByRole("button", { name: "+ Create goal" }));
     expect(screen.getByRole("heading", { name: "Create goal" })).toBeInTheDocument();
+  });
+});
+
+describe("<GoalsGrid> — Phase 28: funding vs. contribution account eligibility are separate lists", () => {
+  it("Create goal offers Investment as a funding account", async () => {
+    const user = userEvent.setup();
+    render(
+      <GoalsGrid
+        initialGoals={[goal]}
+        accounts={[account, investmentAccount]}
+        fundingEligibleAccounts={[account, investmentAccount]}
+        contributionEligibleAccounts={[account]}
+        masked={false}
+        imageSignedUrls={{}}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "+ Create goal" }));
+    await user.click(screen.getByRole("combobox", { name: "Funding account" }));
+    expect(screen.getByRole("option", { name: "Mutual Fund · Investment" })).toBeInTheDocument();
+  });
+
+  it("Add Cash (a real contribution) never offers Investment -- no fabricated investment-accounting operation exists", async () => {
+    const user = userEvent.setup();
+    render(
+      <GoalsGrid
+        initialGoals={[goal]}
+        accounts={[account, investmentAccount]}
+        fundingEligibleAccounts={[account, investmentAccount]}
+        contributionEligibleAccounts={[account]}
+        masked={false}
+        imageSignedUrls={{}}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Add Cash" }));
+    await user.click(screen.getByRole("combobox", { name: "From account" }));
+    expect(screen.queryByRole("option", { name: /Mutual Fund/ })).not.toBeInTheDocument();
   });
 });

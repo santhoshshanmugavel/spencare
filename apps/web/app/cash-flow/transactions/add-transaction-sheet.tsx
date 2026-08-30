@@ -10,6 +10,7 @@ import {
   type CreateTransactionInput,
 } from "@spencare/validation";
 import type { AccountRow, CategoryRow } from "@spencare/domain-application";
+import { ACCOUNT_TYPE_LABELS, filterByCapability } from "@spencare/domain-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -70,7 +71,7 @@ function AccountSelect({
         <SelectContent>
           {accounts.map((a) => (
             <SelectItem key={a.id} value={a.id}>
-              {a.name}
+              {a.name} · {ACCOUNT_TYPE_LABELS[a.type]}
             </SelectItem>
           ))}
         </SelectContent>
@@ -117,6 +118,13 @@ function ExpenseIncomeForm({
   categories: CategoryRow[];
   onDone: () => void;
 }) {
+  // Phase 28: Credit Card is a valid EXPENSE source but never an income
+  // target (a credit card is borrowed credit, not something that receives
+  // income) -- filtered here via the shared capability model rather than
+  // trusting the caller to have already narrowed `accounts` correctly.
+  // Investment is excluded from both by the same model (not a
+  // normal-transaction account).
+  const eligibleAccounts = filterByCapability(accounts, kind === "expense" ? "expenseSource" : "incomeTarget");
   const money = useMoneyField();
   const schema = kind === "expense" ? createExpenseSchema : createIncomeSchema;
   const {
@@ -155,7 +163,7 @@ function ExpenseIncomeForm({
         render={({ field }) => (
           <AccountSelect
             id="txn-account"
-            accounts={accounts}
+            accounts={eligibleAccounts}
             value={field.value}
             onChange={field.onChange}
             label={kind === "expense" ? "Paid from" : "Received into"}
@@ -198,6 +206,12 @@ function ExpenseIncomeForm({
 }
 
 function TransferForm({ accounts, onDone }: { accounts: AccountRow[]; onDone: () => void }) {
+  // Phase 28: a credit card can be a transfer DESTINATION (a repayment --
+  // reduces credit used) but never a SOURCE (borrowed credit can't fund a
+  // transfer out). Investment participates in neither direction -- no
+  // Investment<->Bank transfer operation exists in this codebase.
+  const fromEligible = filterByCapability(accounts, "transferSource");
+  const toEligible = filterByCapability(accounts, "transferDestination");
   const money = useMoneyField();
   const {
     register,
@@ -232,17 +246,20 @@ function TransferForm({ accounts, onDone }: { accounts: AccountRow[]; onDone: ()
         control={control}
         name="fromAccountId"
         render={({ field }) => (
-          <AccountSelect id="txn-from" accounts={accounts} value={field.value} onChange={field.onChange} label="From" />
+          <AccountSelect id="txn-from" accounts={fromEligible} value={field.value} onChange={field.onChange} label="From" />
         )}
       />
       <Controller
         control={control}
         name="toAccountId"
         render={({ field }) => (
-          <AccountSelect id="txn-to" accounts={accounts} value={field.value} onChange={field.onChange} label="To" />
+          <AccountSelect id="txn-to" accounts={toEligible} value={field.value} onChange={field.onChange} label="To" />
         )}
       />
       {errors.toAccountId ? <p className="text-xs text-destructive" role="alert">{errors.toAccountId.message}</p> : null}
+      <p className="text-xs text-muted-foreground">
+        Paying off a credit card? Choose it as the destination -- this reduces what you owe, it isn&apos;t counted as separate spending.
+      </p>
       <FormField id="txn-transfer-amount" label="Amount (INR ₹)" error={errors.amountMinor?.message}>
         <Controller
           control={control}

@@ -61,7 +61,7 @@ describe("<AddGoalSheet> — behavior", () => {
     await user.type(screen.getByLabelText("Goal name"), "Emergency Fund");
     await user.type(screen.getByLabelText("Target amount (INR ₹)"), "100000");
     await user.click(screen.getByRole("combobox", { name: "Funding account" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     await user.click(screen.getByRole("button", { name: "Create goal" }));
     expect(createGoalAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -85,7 +85,7 @@ describe("<AddGoalSheet> — behavior", () => {
     await user.type(screen.getByLabelText("Goal name"), "Test");
     await user.type(screen.getByLabelText("Target amount (INR ₹)"), "1000");
     await user.click(screen.getByRole("combobox", { name: "Funding account" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     await user.click(screen.getByRole("button", { name: "Create goal" }));
     expect(onCreated).not.toHaveBeenCalled();
   });

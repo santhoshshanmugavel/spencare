@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { addContributionSchema, type AddContributionInput } from "@spencare/validation";
 import type { AccountRow, GoalRow } from "@spencare/domain-application";
+import { ACCOUNT_TYPE_LABELS } from "@spencare/domain-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -95,7 +96,7 @@ export function ContributeSheet({
                   <SelectContent>
                     {accounts.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
-                        {a.name}
+                        {a.name} · {ACCOUNT_TYPE_LABELS[a.type]}
                       </SelectItem>
                     ))}
                   </SelectContent>

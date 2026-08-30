@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { markPaidSchema, type MarkPaidInput } from "@spencare/validation";
 import type { AccountRow, BillPredictionWithDefinition, CategoryRow } from "@spencare/domain-application";
+import { ACCOUNT_TYPE_LABELS, filterByCapability } from "@spencare/domain-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -71,7 +72,7 @@ export function BillNowSheet({
   onOpenChange: (open: boolean) => void;
   onPaid: () => void;
 }) {
-  const eligibleAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
+  const eligibleAccounts = filterByCapability(accounts, "expenseSource"); // Phase 28: Credit Card is now a valid bill-payment source (mark_bill_paid delegates to create_transaction, which already supports it)
   const money = useMoneyField(
     prediction.expected_amount_minor != null ? String(Math.round(prediction.expected_amount_minor / 100)) : "",
   );
@@ -128,7 +129,7 @@ export function BillNowSheet({
                   <SelectContent>
                     {eligibleAccounts.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
-                        {a.name}
+                        {a.name} · {ACCOUNT_TYPE_LABELS[a.type]}
                       </SelectItem>
                     ))}
                   </SelectContent>
