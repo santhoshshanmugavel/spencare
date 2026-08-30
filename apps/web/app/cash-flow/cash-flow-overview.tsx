@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, CalendarClock } from "lucide-react";
-import { Money as DomainMoney } from "@spencare/domain-core";
+import { Money as DomainMoney, ACCOUNT_TYPE_LABELS, filterByCapability, getSpendableMinor } from "@spencare/domain-core";
 import type {
   AccountRow,
   BillPredictionWithDefinition,
@@ -84,6 +84,23 @@ export interface SafeToSpendPlain {
   state: SafeToSpendState;
   amountMinor: number;
   currency: string;
+  /** Phase 28: the owned-money (Bank+Cash) share -- see SafeToSpendResult.ownedSpendableTotal. */
+  ownedSpendableMinor: number;
+  /** Phase 28: the borrowed-capacity (Credit Card available credit) share -- never the credit limit. */
+  creditAvailableMinor: number;
+}
+
+/**
+ * Plain-data mirror of `NetWorthResult` (same `Money`-crosses-the-
+ * boundary convention as `SafeToSpendPlain`). Deliberately its own type,
+ * never merged into `SafeToSpendPlain` -- Net Worth and Safe-to-Spend are
+ * different concepts per the Phase 28 override.
+ */
+export interface NetWorthPlain {
+  netWorthMinor: number;
+  totalAssetsMinor: number;
+  totalLiabilitiesMinor: number;
+  currency: string;
 }
 
 function toDonutSlices(slices: CategorySlice[], categories: CategoryRow[]): DonutChartSlice[] {
@@ -109,6 +126,8 @@ export function CashFlowOverview({
   upcomingBills,
   budgetUsages,
   safeToSpend,
+  netWorth,
+  investmentTotalMinor,
 }: {
   periodStart: string;
   accounts: AccountRow[];
@@ -123,13 +142,21 @@ export function CashFlowOverview({
   upcomingBills: BillPredictionWithDefinition[];
   budgetUsages: BudgetWithUsage[];
   safeToSpend: SafeToSpendPlain | null;
+  /** Phase 28 Part 15/16: kept SEPARATE from safeToSpend -- Net Worth and Safe-to-Spend are different concepts, never merged into one figure. */
+  netWorth: NetWorthPlain;
+  investmentTotalMinor: number;
 }) {
   const router = useRouter();
   const [previewTab, setPreviewTab] = useState<"transactions" | "bills">("transactions");
   const [donutMode, setDonutMode] = useState<"expense" | "income">("expense");
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
-  const cashAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
+  // Phase 28: extended to include Credit Card, keeping this filter's own
+  // documented invariant intact -- "the same cash-eligible universe
+  // Safe-to-Spend itself uses" (see the comment on the Select below).
+  // Investment remains excluded: still no per-account decomposition the
+  // architecture supports for it here.
+  const cashAccounts = filterByCapability(accounts, "safeToSpendEligible");
   const hasAnyAccounts = accounts.length > 0;
   const hasBudget = budgetUsages.length > 0;
 
@@ -188,12 +215,13 @@ export function CashFlowOverview({
       </div>
 
       {/*
-        Account filter: bank/cash only, per the Phase 13 locked decision --
-        Safe-to-Spend's own budget/goal-aware states (3/4/5) have no
-        per-account decomposition the architecture supports, so this
-        filter is deliberately scoped to the same "cash-eligible" universe
-        Safe-to-Spend itself uses, rather than inventing undefined
-        semantics for a filtered credit-card or investment view (SP-092's
+        Account filter: Bank/Cash/Credit Card, per the Phase 13 locked
+        decision -- Safe-to-Spend's own budget/goal-aware states (3/4/5)
+        have no per-account decomposition the architecture supports, so
+        this filter is deliberately scoped to the same "Safe-to-Spend-
+        eligible" universe Safe-to-Spend itself uses (Phase 28: that
+        universe now includes Credit Card), rather than inventing
+        undefined semantics for a filtered investment view (SP-092's
         Accounts rollup panel is explicitly out of scope this phase).
       */}
       <Select value={selectedAccountId ?? "all"} onValueChange={onAccountChange}>
@@ -204,7 +232,7 @@ export function CashFlowOverview({
           <SelectItem value="all">All accounts</SelectItem>
           {cashAccounts.map((a) => (
             <SelectItem key={a.id} value={a.id}>
-              {a.name}
+              {a.name} · {ACCOUNT_TYPE_LABELS[a.type]}
             </SelectItem>
           ))}
         </SelectContent>
@@ -223,10 +251,23 @@ export function CashFlowOverview({
         <CardContent className="space-y-1 py-5">
           {selectedAccount ? (
             <>
-              <span className="text-sm font-medium text-muted-foreground">Available Balance -- {selectedAccount.name}</span>
+              <span className="text-sm font-medium text-muted-foreground">
+                {selectedAccount.type === "credit_card" ? "Available Credit" : "Available Balance"} --{" "}
+                {selectedAccount.name}
+              </span>
               <div>
                 <Money
-                  value={DomainMoney.fromMinorUnits(BigInt(selectedAccount.balance_minor), selectedAccount.currency as never)}
+                  value={DomainMoney.fromMinorUnits(
+                    BigInt(
+                      getSpendableMinor({
+                        type: selectedAccount.type,
+                        balanceMinor: selectedAccount.balance_minor,
+                        creditLimitMinor: selectedAccount.credit_limit_minor,
+                        creditUsedMinor: selectedAccount.credit_used_minor,
+                      }) ?? 0,
+                    ),
+                    selectedAccount.currency as never,
+                  )}
                   masked={masked}
                   size="hero"
                   tone="neutral"
@@ -248,10 +289,76 @@ export function CashFlowOverview({
                   className="text-3xl min-[375px]:text-4xl"
                 />
               </div>
+              {/*
+                Phase 28 PRODUCT DECISION OVERRIDE: never present this
+                figure as if it were pure cash -- show what it's made of
+                whenever Credit Card availability is actually contributing
+                to it. Zero credit-available (a pre-Phase-28 caller, or a
+                user with no credit cards) renders nothing extra here.
+              */}
+              {safeToSpend.creditAvailableMinor > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Bank + Cash{" "}
+                  <Money
+                    value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.ownedSpendableMinor), safeToSpend.currency as never)}
+                    masked={masked}
+                    size="numeric"
+                    tone="neutral"
+                    className="text-xs"
+                  />{" "}
+                  · Credit Available{" "}
+                  <Money
+                    value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.creditAvailableMinor), safeToSpend.currency as never)}
+                    masked={masked}
+                    size="numeric"
+                    tone="neutral"
+                    className="text-xs"
+                  />
+                </p>
+              ) : null}
             </>
           ) : null}
         </CardContent>
       </Card>
+
+      {/*
+        Phase 28 Part 15/16: Investments and Net Worth, shown separately
+        from -- never summed into -- Safe to Spend. Investment value is
+        not spendable balance; Net Worth is a distinct concept from
+        spending capacity (the override's own explicit instruction).
+        Only rendered on the "All accounts" view -- a single filtered
+        account already has its own clearly-labeled figure above.
+      */}
+      {!selectedAccount && (investmentTotalMinor > 0 || netWorth.totalLiabilitiesMinor > 0) ? (
+        <Card>
+          <CardContent className="flex flex-wrap gap-x-6 gap-y-2 py-4">
+            {investmentTotalMinor > 0 ? (
+              <div>
+                <span className="text-xs font-medium text-muted-foreground">Investments</span>
+                <div>
+                  <Money
+                    value={DomainMoney.fromMinorUnits(BigInt(investmentTotalMinor), netWorth.currency as never)}
+                    masked={masked}
+                    size="body"
+                    tone="neutral"
+                  />
+                </div>
+              </div>
+            ) : null}
+            <div>
+              <span className="text-xs font-medium text-muted-foreground">Net Worth</span>
+              <div>
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(netWorth.netWorthMinor), netWorth.currency as never)}
+                  masked={masked}
+                  size="body"
+                  tone="neutral"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">

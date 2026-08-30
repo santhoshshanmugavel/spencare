@@ -1,6 +1,7 @@
 import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
 import {
   getCashFlowByCategory,
+  getNetWorth,
   getProfile,
   getRecentTransactions,
   getSafeToSpend,
@@ -69,7 +70,7 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
 
-  const [accounts, categories, profile, comparison, expenseByCategory, incomeByCategory, recentTransactions, upcomingBills, budgetUsages] =
+  const [accounts, categories, profile, comparison, expenseByCategory, incomeByCategory, recentTransactions, upcomingBills, budgetUsages, netWorthResult] =
     await Promise.all([
       listAccounts(ctx),
       listCategories(ctx),
@@ -84,7 +85,22 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
       getRecentTransactions(ctx, { accountId, limit: 5 }),
       getUpcomingBills(ctx, 5),
       listBudgetsWithUsage(ctx, periodStart),
+      getNetWorth(ctx),
     ]);
+
+  // Phase 28 Part 15/16: Net Worth is a SEPARATE concept from Safe-to-
+  // Spend (the override's own repeated instruction -- "do not merge
+  // these concepts") -- passed as its own plain shape, same `Money`-
+  // crosses-the-Server/Client-boundary convention as `safeToSpend` below.
+  const netWorth = {
+    netWorthMinor: Number(netWorthResult.netWorth.amountMinorUnits),
+    totalAssetsMinor: Number(netWorthResult.totalAssets.amountMinorUnits),
+    totalLiabilitiesMinor: Number(netWorthResult.totalLiabilities.amountMinorUnits),
+    currency: netWorthResult.netWorth.currencyCode,
+  };
+  const investmentTotalMinor = accounts
+    .filter((a) => a.type === "investment")
+    .reduce((sum, a) => sum + (a.market_value_minor ?? 0), 0);
 
   // Locked decision #5: only "All accounts" gets the real, global
   // Safe-to-Spend (calculateSafeToSpend/getSafeToSpend are NOT extended
@@ -107,7 +123,16 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
   // convention instead of being a first, accidental exception.
   const safeToSpendResult = accountId ? null : await getSafeToSpend(ctx);
   const safeToSpend = safeToSpendResult
-    ? { state: safeToSpendResult.state, amountMinor: Number(safeToSpendResult.amount.amountMinorUnits), currency: safeToSpendResult.amount.currencyCode }
+    ? {
+        state: safeToSpendResult.state,
+        amountMinor: Number(safeToSpendResult.amount.amountMinorUnits),
+        currency: safeToSpendResult.amount.currencyCode,
+        // Phase 28: composition breakdown (owned Bank+Cash vs. borrowed
+        // Credit Card available credit) so the UI never presents a
+        // blended figure without showing what it's made of.
+        ownedSpendableMinor: Number(safeToSpendResult.ownedSpendableTotal.amountMinorUnits),
+        creditAvailableMinor: Number(safeToSpendResult.creditAvailableTotal.amountMinorUnits),
+      }
     : null;
   const selectedAccount = accountId ? (accounts.find((a) => a.id === accountId) ?? null) : null;
 
@@ -123,7 +148,6 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
               label: "Cash Flow",
               icon: <ArrowLeftRight className="size-5" />,
               href: "/cash-flow",
-              active: true,
             },
             { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             {
@@ -154,6 +178,8 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
           upcomingBills={upcomingBills}
           budgetUsages={budgetUsages}
           safeToSpend={safeToSpend}
+          netWorth={netWorth}
+          investmentTotalMinor={investmentTotalMinor}
         />
       </div>
     </AppShell>

@@ -74,6 +74,8 @@ function safeToSpend(overrides: Partial<SafeToSpendPlain> = {}): SafeToSpendPlai
     state: "balance_only" as SafeToSpendState,
     amountMinor: 100000,
     currency: "INR",
+    ownedSpendableMinor: 100000,
+    creditAvailableMinor: 0,
     ...overrides,
   };
 }
@@ -92,6 +94,8 @@ const baseProps = {
   upcomingBills: [] as BillPredictionWithDefinition[],
   budgetUsages: [] as BudgetWithUsage[],
   safeToSpend: safeToSpend(),
+  netWorth: { netWorthMinor: 100000, totalAssetsMinor: 100000, totalLiabilitiesMinor: 0, currency: "INR" },
+  investmentTotalMinor: 0,
 };
 
 describe("<CashFlowOverview> — no accounts (empty state)", () => {
@@ -241,7 +245,7 @@ describe("<CashFlowOverview> — account filter and month stepper", () => {
     const user = userEvent.setup();
     render(<CashFlowOverview {...baseProps} />);
     await user.click(screen.getByRole("combobox", { name: "Filter by account" }));
-    await user.click(screen.getByRole("option", { name: "HDFC Bank" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
     expect(push).toHaveBeenCalledWith("/cash-flow?month=2026-08-01&account=acc-1");
   });
 
@@ -252,13 +256,77 @@ describe("<CashFlowOverview> — account filter and month stepper", () => {
     expect(push).toHaveBeenCalledWith("/cash-flow?month=2026-09-01");
   });
 
-  it("only offers bank/cash accounts in the filter -- SP-092's credit/investment rollup is out of scope", async () => {
+  it("Phase 28: offers Credit Card in the filter too (now Safe-to-Spend-eligible) but never Investment -- SP-092's full rollup panel is still out of scope", async () => {
     const user = userEvent.setup();
     const creditCard: AccountRow = { ...bankAccount, id: "cc-1", type: "credit_card", name: "Amex" };
-    render(<CashFlowOverview {...baseProps} accounts={[bankAccount, creditCard]} />);
+    const investment: AccountRow = { ...bankAccount, id: "inv-1", type: "investment", name: "Mutual Fund", balance_minor: 0, market_value_minor: 30_000_000 };
+    render(<CashFlowOverview {...baseProps} accounts={[bankAccount, creditCard, investment]} />);
     await user.click(screen.getByRole("combobox", { name: "Filter by account" }));
-    expect(screen.getByRole("option", { name: "HDFC Bank" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Amex" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "HDFC Bank · Bank" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Amex · Credit Card" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Mutual Fund/ })).not.toBeInTheDocument();
+  });
+
+  it("Phase 28: selecting a Credit Card shows 'Available Credit' (limit minus used), never a meaningless balance", () => {
+    const creditCard: AccountRow = {
+      ...bankAccount,
+      id: "cc-1",
+      type: "credit_card",
+      name: "Amex",
+      balance_minor: 0,
+      credit_limit_minor: 10_000_000,
+      credit_used_minor: 3_500_000,
+    };
+    render(<CashFlowOverview {...baseProps} accounts={[bankAccount, creditCard]} selectedAccountId="cc-1" selectedAccount={creditCard} safeToSpend={null} />);
+    expect(screen.getByText(/Available Credit -- Amex/)).toBeInTheDocument();
+  });
+
+  it("Phase 28 PRODUCT DECISION OVERRIDE: shows the Bank+Cash / Credit Available composition breakdown, never a blended figure alone", () => {
+    render(
+      <CashFlowOverview
+        {...baseProps}
+        safeToSpend={safeToSpend({ state: "budget_and_goals", amountMinor: 9500000, ownedSpendableMinor: 5500000, creditAvailableMinor: 4000000 })}
+      />,
+    );
+    expect(screen.getByText("Safe to Spend")).toBeInTheDocument();
+    expect(screen.getByText(/Bank \+ Cash/)).toBeInTheDocument();
+    expect(screen.getByText(/Credit Available/)).toBeInTheDocument();
+  });
+
+  it("does not show a composition breakdown when no credit is contributing (pre-Phase-28 shape)", () => {
+    render(<CashFlowOverview {...baseProps} safeToSpend={safeToSpend({ state: "budget_and_goals", creditAvailableMinor: 0 })} />);
+    expect(screen.queryByText(/Credit Available/)).not.toBeInTheDocument();
+  });
+
+  it("Phase 28 Part 15/16: shows Investments and Net Worth as separate figures from Safe to Spend, never summed into it", () => {
+    render(
+      <CashFlowOverview
+        {...baseProps}
+        investmentTotalMinor={30_000_000}
+        netWorth={{ netWorthMinor: 33_500_000, totalAssetsMinor: 35_500_000, totalLiabilitiesMinor: 2_000_000, currency: "INR" }}
+      />,
+    );
+    expect(screen.getByText("Investments")).toBeInTheDocument();
+    expect(screen.getByText("Net Worth")).toBeInTheDocument();
+  });
+
+  it("does not show the Investments/Net Worth card for a user with no investments and no liabilities", () => {
+    render(<CashFlowOverview {...baseProps} investmentTotalMinor={0} netWorth={{ netWorthMinor: 0, totalAssetsMinor: 0, totalLiabilitiesMinor: 0, currency: "INR" }} />);
+    expect(screen.queryByText("Net Worth")).not.toBeInTheDocument();
+  });
+
+  it("hides the Investments/Net Worth card when a single account is filtered (it already has its own clearly-labeled figure)", () => {
+    render(
+      <CashFlowOverview
+        {...baseProps}
+        selectedAccountId="acc-1"
+        selectedAccount={bankAccount}
+        safeToSpend={null}
+        investmentTotalMinor={30_000_000}
+        netWorth={{ netWorthMinor: 33_500_000, totalAssetsMinor: 35_500_000, totalLiabilitiesMinor: 2_000_000, currency: "INR" }}
+      />,
+    );
+    expect(screen.queryByText("Net Worth")).not.toBeInTheDocument();
   });
 });
 
