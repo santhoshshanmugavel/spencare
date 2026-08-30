@@ -1,5 +1,6 @@
 import {
   getSafeToSpend,
+  getNetWorth,
   listAccounts,
   listBudgetsWithUsage,
   listCategories,
@@ -32,9 +33,24 @@ export interface RecentActivitySummary {
   createdAt: string;
 }
 
+export interface AiNetWorthRedacted {
+  netWorth: { private: true } | { amountMinor: number; currency: string };
+  totalAssets: { private: true } | { amountMinor: number; currency: string };
+  totalLiabilities: { private: true } | { amountMinor: number; currency: string };
+}
+
 export interface AiContext {
   identity: { userId: string; preferredCurrency: string };
   financialSnapshot: AiFinancialSnapshotRedacted;
+  /**
+   * Phase 28: resolved -- the Net Worth formula was unresolved as of this
+   * file's earlier phase (see the removed doc comment on `buildAiContext`
+   * below); the Phase 28 override gives an unambiguous formula (assets:
+   * Bank+Cash+Investment; liability: Credit Card's `credit_used_minor`).
+   * Deliberately a SEPARATE field from `financialSnapshot.safeToSpend` --
+   * never merge these two concepts.
+   */
+  netWorth: AiNetWorthRedacted;
   budgets: AiBudgetSummaryRedacted[];
   goals: AiGoalSummaryRedacted[];
   bills: AiBillSummaryRedacted[];
@@ -63,19 +79,16 @@ export interface AiContext {
  * queries above still return real `Money` values internally) -- it is a
  * narrow guarantee specific to what crosses the Spensa/provider boundary.
  *
- * `netWorth` (present in ai-architecture.md's illustrative AiContext
- * sketch) is deliberately OMITTED: Phase 14's reconnaissance found the
- * Net Worth formula itself unresolved (does it subtract
- * `credit_used_minor` as a liability? -- an open product question, never
- * decided) and no `getNetWorth`/`getDashboardSummary` query exists to
- * compute it. Per this phase's own locked instruction not to invent a
- * financial calculation, this field is left out entirely rather than
- * fabricated -- flagged in the final report, not silently added.
+ * `netWorth`: Phase 28 resolves what was previously an open product
+ * question (see git history) via `getNetWorth` -- composed independently
+ * of `getSafeToSpend`, no shared state, per the override's explicit "these
+ * are different concepts" instruction.
  */
 export async function buildAiContext(ctx: AuthContext, uiContext?: AiContext["uiContext"]): Promise<AiContext> {
-  const [profile, safeToSpendResult, accounts, budgetUsages, categories, goals, upcomingBills] = await Promise.all([
+  const [profile, safeToSpendResult, netWorthResult, accounts, budgetUsages, categories, goals, upcomingBills] = await Promise.all([
     getProfile(ctx),
     getSafeToSpend(ctx),
+    getNetWorth(ctx),
     listAccounts(ctx),
     listBudgetsWithUsage(ctx, currentPeriodStart()),
     listCategories(ctx),
@@ -95,6 +108,8 @@ export async function buildAiContext(ctx: AuthContext, uiContext?: AiContext["ui
         state: safeToSpendResult.state,
         amountMinor: Number(safeToSpendResult.amount.amountMinorUnits),
         currency: safeToSpendResult.amount.currencyCode,
+        ownedSpendableMinor: Number(safeToSpendResult.ownedSpendableTotal.amountMinorUnits),
+        creditAvailableMinor: Number(safeToSpendResult.creditAvailableTotal.amountMinorUnits),
       },
       // Every account type is represented -- credit_card/investment are
       // NEVER excluded (Spensa Spec v1.0 Correction Pass, Conflict-1: the
@@ -139,9 +154,18 @@ export async function buildAiContext(ctx: AuthContext, uiContext?: AiContext["ui
     privacyModeEnabled,
   );
 
+  const netWorth: AiNetWorthRedacted = privacyModeEnabled
+    ? { netWorth: { private: true }, totalAssets: { private: true }, totalLiabilities: { private: true } }
+    : {
+        netWorth: { amountMinor: Number(netWorthResult.netWorth.amountMinorUnits), currency: netWorthResult.netWorth.currencyCode },
+        totalAssets: { amountMinor: Number(netWorthResult.totalAssets.amountMinorUnits), currency: netWorthResult.totalAssets.currencyCode },
+        totalLiabilities: { amountMinor: Number(netWorthResult.totalLiabilities.amountMinorUnits), currency: netWorthResult.totalLiabilities.currencyCode },
+      };
+
   return {
     identity: { userId: ctx.userId, preferredCurrency: profile?.preferred_currency ?? CURRENCY },
     financialSnapshot,
+    netWorth,
     budgets,
     goals: goalSummaries,
     bills: billSummaries,

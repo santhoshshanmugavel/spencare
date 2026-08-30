@@ -35,12 +35,25 @@ const CURRENCY = "INR";
 export function registerReadTools(server: McpServer, ctx: McpAuthContext): void {
   server.registerTool(
     "getSafeToSpend",
-    { description: "Get the user's current Safe-to-Spend amount and which calculation state produced it.", inputSchema: {} },
+    {
+      description:
+        "Get the user's current Safe-to-Spend amount and which calculation state produced it. Phase 28: this figure now includes Credit Card AVAILABLE credit alongside Bank/Cash -- see ownedSpendable (owned money) vs creditAvailable (borrowed capacity) to describe the composition; never describe the total amount as 'cash in your accounts'.",
+      inputSchema: {},
+    },
     async () =>
       runScopedTool(ctx, "getSafeToSpend", "read", async () => {
         const [result, privacyModeEnabled] = await Promise.all([getSafeToSpend(ctx), isPrivacyModeEnabled(ctx)]);
         return redactFinancialSnapshot(
-          { safeToSpend: { state: result.state, amountMinor: Number(result.amount.amountMinorUnits), currency: result.amount.currencyCode }, accounts: [] },
+          {
+            safeToSpend: {
+              state: result.state,
+              amountMinor: Number(result.amount.amountMinorUnits),
+              currency: result.amount.currencyCode,
+              ownedSpendableMinor: Number(result.ownedSpendableTotal.amountMinorUnits),
+              creditAvailableMinor: Number(result.creditAvailableTotal.amountMinorUnits),
+            },
+            accounts: [],
+          },
           privacyModeEnabled,
         ).safeToSpend;
       }),
@@ -64,9 +77,26 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
         const [summary, privacyModeEnabled] = await Promise.all([getDashboardSummary(ctx), isPrivacyModeEnabled(ctx)]);
         return {
           safeToSpend: redactFinancialSnapshot(
-            { safeToSpend: { state: summary.safeToSpend.state, amountMinor: Number(summary.safeToSpend.amount.amountMinorUnits), currency: summary.safeToSpend.amount.currencyCode }, accounts: [] },
+            {
+              safeToSpend: {
+                state: summary.safeToSpend.state,
+                amountMinor: Number(summary.safeToSpend.amount.amountMinorUnits),
+                currency: summary.safeToSpend.amount.currencyCode,
+                ownedSpendableMinor: Number(summary.safeToSpend.ownedSpendableTotal.amountMinorUnits),
+                creditAvailableMinor: Number(summary.safeToSpend.creditAvailableTotal.amountMinorUnits),
+              },
+              accounts: [],
+            },
             privacyModeEnabled,
           ).safeToSpend,
+          netWorth: privacyModeEnabled
+            ? { private: true }
+            : {
+                netWorthMinor: Number(summary.netWorth.netWorth.amountMinorUnits),
+                totalAssetsMinor: Number(summary.netWorth.totalAssets.amountMinorUnits),
+                totalLiabilitiesMinor: Number(summary.netWorth.totalLiabilities.amountMinorUnits),
+                currency: summary.netWorth.netWorth.currencyCode,
+              },
           accounts: redactFinancialSnapshot({ safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: summary.accounts.map(toAiAccountSummaryInput) }, privacyModeEnabled).accounts,
           goals: redactGoalSummaries(summary.goals.map((g) => ({ id: g.id, name: g.name, targetAmountMinor: g.target_amount_minor, savedAmountMinor: g.saved_amount_minor, currency: CURRENCY })), privacyModeEnabled),
           upcomingBills: redactBillSummaries(

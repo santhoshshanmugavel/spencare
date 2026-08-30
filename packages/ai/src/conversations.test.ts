@@ -6,6 +6,7 @@ vi.mock("@spencare/domain-application", async (importOriginal) => {
   return {
     getProfile: vi.fn(),
     getSafeToSpend: vi.fn(),
+    getNetWorth: vi.fn(),
     getDashboardSummary: vi.fn(),
     listAccounts: vi.fn(),
     listTransactions: vi.fn(),
@@ -44,7 +45,17 @@ async function setupBaseMocks() {
   const infra = await import("@spencare/domain-infra");
 
   vi.mocked(app.getProfile).mockResolvedValue({ privacy_mode_enabled: false, preferred_currency: "INR" } as never);
-  vi.mocked(app.getSafeToSpend).mockResolvedValue({ state: "no_accounts", amount: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
+  vi.mocked(app.getSafeToSpend).mockResolvedValue({
+    state: "no_accounts",
+    amount: { amountMinorUnits: 0n, currencyCode: "INR" },
+    ownedSpendableTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
+    creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
+  } as never);
+  vi.mocked(app.getNetWorth).mockResolvedValue({
+    netWorth: { amountMinorUnits: 0n, currencyCode: "INR" },
+    totalAssets: { amountMinorUnits: 0n, currencyCode: "INR" },
+    totalLiabilities: { amountMinorUnits: 0n, currencyCode: "INR" },
+  } as never);
   vi.mocked(app.listAccounts).mockResolvedValue([] as never);
   vi.mocked(app.listBudgetsWithUsage).mockResolvedValue([] as never);
   vi.mocked(app.listCategories).mockResolvedValue([] as never);

@@ -9,6 +9,7 @@ vi.mock("@spencare/domain-application", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@spencare/domain-application")>();
   return {
     getSafeToSpend: vi.fn(),
+    getNetWorth: vi.fn(),
     listAccounts: vi.fn(),
     listBudgetsWithUsage: vi.fn(),
     listCategories: vi.fn(),
@@ -31,6 +32,13 @@ async function setupMocks(privacyModeEnabled: boolean) {
     availableBalance: Money.fromMinorUnits(500000n, "INR"),
     goalReservedTotal: Money.zero("INR"),
     upcomingBillsTotal: Money.zero("INR"),
+    ownedSpendableTotal: Money.fromMinorUnits(500000n, "INR"),
+    creditAvailableTotal: Money.zero("INR"),
+  } as never);
+  vi.mocked(mod.getNetWorth).mockResolvedValue({
+    netWorth: Money.fromMinorUnits(1500000n, "INR"),
+    totalAssets: Money.fromMinorUnits(1500000n, "INR"),
+    totalLiabilities: Money.zero("INR"),
   } as never);
   vi.mocked(mod.listAccounts).mockResolvedValue([
     { id: "a1", user_id: "u1", type: "bank", name: "HDFC Bank", currency: "INR", balance_minor: 1000000, credit_limit_minor: null, credit_used_minor: null, market_value_minor: null, is_archived: false, created_at: "", updated_at: "" },
@@ -131,11 +139,22 @@ describe("buildAiContext — Privacy Mode ON (the critical security guarantee)",
     expect(context.goals[0]!.name).toBe("Emergency Fund");
   });
 
-  it("does not include a netWorth field (formula unresolved, never fabricated)", async () => {
+  it("Phase 28: masks netWorth under Privacy Mode the same as every other monetary field, never a side channel", async () => {
     await setupMocks(true);
     const { buildAiContext } = await import("./context.js");
     const context = await buildAiContext(ctx);
-    expect(context).not.toHaveProperty("netWorth");
-    expect((context.financialSnapshot as unknown as Record<string, unknown>).netWorth).toBeUndefined();
+    expect(context.netWorth.netWorth).toEqual({ private: true });
+    expect(context.netWorth.totalAssets).toEqual({ private: true });
+    expect(context.netWorth.totalLiabilities).toEqual({ private: true });
+  });
+});
+
+describe("buildAiContext — Phase 28: Net Worth (separate concept from Safe-to-Spend)", () => {
+  it("exposes real Net Worth figures when Privacy Mode is off, independent of the safeToSpend figure", async () => {
+    await setupMocks(false);
+    const { buildAiContext } = await import("./context.js");
+    const context = await buildAiContext(ctx);
+    expect(context.netWorth.netWorth).toEqual({ amountMinor: 1500000, currency: "INR" });
+    expect(context.netWorth.totalLiabilities).toEqual({ amountMinor: 0, currency: "INR" });
   });
 });

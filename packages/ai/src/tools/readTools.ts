@@ -44,11 +44,25 @@ export interface ReadToolHandler {
  */
 
 const getSafeToSpendTool: ReadToolHandler = {
-  definition: { name: "getSafeToSpend", description: "Get the user's current Safe-to-Spend amount and which calculation state produced it.", inputSchema: { type: "object", properties: {} } },
+  definition: {
+    name: "getSafeToSpend",
+    description:
+      "Get the user's current Safe-to-Spend amount and which calculation state produced it. Phase 28: this figure now includes Credit Card AVAILABLE credit alongside Bank/Cash -- use ownedSpendable (owned money) vs creditAvailable (borrowed capacity) to describe the composition; never describe the total amount as 'cash in your accounts'.",
+    inputSchema: { type: "object", properties: {} },
+  },
   execute: async ({ ctx, privacyModeEnabled }) => {
     const result = await getSafeToSpend(ctx);
     const redacted = redactFinancialSnapshot(
-      { safeToSpend: { state: result.state, amountMinor: Number(result.amount.amountMinorUnits), currency: result.amount.currencyCode }, accounts: [] },
+      {
+        safeToSpend: {
+          state: result.state,
+          amountMinor: Number(result.amount.amountMinorUnits),
+          currency: result.amount.currencyCode,
+          ownedSpendableMinor: Number(result.ownedSpendableTotal.amountMinorUnits),
+          creditAvailableMinor: Number(result.creditAvailableTotal.amountMinorUnits),
+        },
+        accounts: [],
+      },
       privacyModeEnabled,
     );
     return redacted.safeToSpend;
@@ -56,14 +70,34 @@ const getSafeToSpendTool: ReadToolHandler = {
 };
 
 const getDashboardSummaryTool: ReadToolHandler = {
-  definition: { name: "getDashboardSummary", description: "Get a holistic snapshot: Safe-to-Spend, accounts, goals, upcoming bills, and this month's cash flow.", inputSchema: { type: "object", properties: {} } },
+  definition: { name: "getDashboardSummary", description: "Get a holistic snapshot: Safe-to-Spend, Net Worth, accounts, goals, upcoming bills, and this month's cash flow.", inputSchema: { type: "object", properties: {} } },
   execute: async ({ ctx, privacyModeEnabled }) => {
     const summary = await getDashboardSummary(ctx);
     return {
       safeToSpend: redactFinancialSnapshot(
-        { safeToSpend: { state: summary.safeToSpend.state, amountMinor: Number(summary.safeToSpend.amount.amountMinorUnits), currency: summary.safeToSpend.amount.currencyCode }, accounts: [] },
+        {
+          safeToSpend: {
+            state: summary.safeToSpend.state,
+            amountMinor: Number(summary.safeToSpend.amount.amountMinorUnits),
+            currency: summary.safeToSpend.amount.currencyCode,
+            ownedSpendableMinor: Number(summary.safeToSpend.ownedSpendableTotal.amountMinorUnits),
+            creditAvailableMinor: Number(summary.safeToSpend.creditAvailableTotal.amountMinorUnits),
+          },
+          accounts: [],
+        },
         privacyModeEnabled,
       ).safeToSpend,
+      // Phase 28: Net Worth is a SEPARATE concept from Safe-to-Spend (the
+      // override's own explicit instruction) -- a credit card's available
+      // credit must never be counted as a Net Worth asset here.
+      netWorth: privacyModeEnabled
+        ? { private: true }
+        : {
+            netWorthMinor: Number(summary.netWorth.netWorth.amountMinorUnits),
+            totalAssetsMinor: Number(summary.netWorth.totalAssets.amountMinorUnits),
+            totalLiabilitiesMinor: Number(summary.netWorth.totalLiabilities.amountMinorUnits),
+            currency: summary.netWorth.netWorth.currencyCode,
+          },
       accounts: redactFinancialSnapshot(
         { safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: summary.accounts.map(toAiAccountSummaryInput) },
         privacyModeEnabled,
@@ -74,7 +108,6 @@ const getDashboardSummaryTool: ReadToolHandler = {
         privacyModeEnabled,
       ),
       cashFlow: redactCashFlowSummary({ incomeMinor: summary.cashFlow.incomeMinor, expenseMinor: summary.cashFlow.expenseMinor, netMinor: summary.cashFlow.netMinor, currency: CURRENCY }, privacyModeEnabled),
-      note: "Net Worth is not yet available (its formula is an open product decision).",
     };
   },
 };

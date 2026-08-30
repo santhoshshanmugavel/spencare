@@ -45,6 +45,12 @@ describe("SPENSA_SYSTEM_PROMPT — required content", () => {
     expect(SPENSA_SYSTEM_PROMPT).toMatch(/never.{0,80}spendable cash/i);
   });
 
+  it("Phase 28: instructs describing Safe-to-Spend's owned-vs-credit composition separately, and excluding available credit from Net Worth", () => {
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/ownedSpendable/);
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/creditAvailable/);
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/Net Worth.{0,40}never includes available credit/i);
+  });
+
   it("states the document/import-as-data rule", () => {
     expect(SPENSA_SYSTEM_PROMPT).toMatch(/DATA/);
     expect(SPENSA_SYSTEM_PROMPT).toMatch(/never an instruction/i);

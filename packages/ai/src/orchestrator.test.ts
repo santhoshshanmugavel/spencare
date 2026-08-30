@@ -9,6 +9,7 @@ vi.mock("@spencare/domain-application", async (importOriginal) => {
   return {
     getProfile: vi.fn(),
     getSafeToSpend: vi.fn(),
+    getNetWorth: vi.fn(),
     getDashboardSummary: vi.fn(),
     listAccounts: vi.fn(),
     listTransactions: vi.fn(),
@@ -60,6 +61,13 @@ async function setupBaseMocks() {
     availableBalance: Money.fromMinorUnits(500000n, "INR"),
     goalReservedTotal: Money.zero("INR"),
     upcomingBillsTotal: Money.zero("INR"),
+    ownedSpendableTotal: Money.fromMinorUnits(500000n, "INR"),
+    creditAvailableTotal: Money.zero("INR"),
+  } as never);
+  vi.mocked(app.getNetWorth).mockResolvedValue({
+    netWorth: Money.fromMinorUnits(500000n, "INR"),
+    totalAssets: Money.fromMinorUnits(500000n, "INR"),
+    totalLiabilities: Money.zero("INR"),
   } as never);
   vi.mocked(app.listAccounts).mockResolvedValue([
     { id: "a1", user_id: "u1", type: "bank", name: "HDFC Bank", currency: "INR", balance_minor: 1000000, credit_limit_minor: null, credit_used_minor: null, market_value_minor: null, is_archived: false, created_at: "", updated_at: "" },

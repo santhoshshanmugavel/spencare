@@ -48,7 +48,7 @@ describe("registerReadTools — scope enforcement", () => {
   it("a read-scoped session can call a read tool successfully", async () => {
     const domainApp = await import("@spencare/domain-application");
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
-    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" } } as never);
+    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
 
     const { registerReadTools } = await import("./readTools.js");
     const server = fakeServer();
@@ -77,7 +77,7 @@ describe("registerReadTools — Privacy Mode", () => {
   it("redacts the Safe-to-Spend figure when Privacy Mode is enabled", async () => {
     const domainApp = await import("@spencare/domain-application");
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: true } as never);
-    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" } } as never);
+    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
     vi.mocked(domainApp.redactFinancialSnapshot).mockImplementation((input) => ({
       safeToSpend: { state: (input as { safeToSpend: { state: string } }).safeToSpend.state, amount: { private: true } },
       accounts: [],
