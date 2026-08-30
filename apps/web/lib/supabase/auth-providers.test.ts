@@ -54,11 +54,12 @@ describe("isGoogleSignInEnabled (Phase 22 forensic fix)", () => {
   });
 
   it("sends the anon key as the apikey header, never a service-role or other secret", async () => {
-    const fetchSpy = vi.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, json: async () => ({ external: { google: true } }) }));
-    global.fetch = fetchSpy as unknown as typeof fetch;
+    const fetchSpy = vi.fn<typeof fetch>();
+    fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ external: { google: true } }) } as Response);
+    global.fetch = fetchSpy;
     await isGoogleSignInEnabled();
     const [url, init] = fetchSpy.mock.calls[0]!;
     expect(url).toBe("http://127.0.0.1:54321/auth/v1/settings");
-    expect(init?.headers).toMatchObject({ apikey: "anon-key" });
+    expect((init as RequestInit)?.headers).toMatchObject({ apikey: "anon-key" });
   });
 });

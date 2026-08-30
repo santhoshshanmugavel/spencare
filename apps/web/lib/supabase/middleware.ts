@@ -2,6 +2,23 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@spencare/domain-infra";
 
+/**
+ * Machine-to-machine API routes that authenticate themselves independently
+ * (an `Authorization: Bearer <token>` MCP session token; a `CRON_SECRET`
+ * bearer token) and never carry a browser session cookie at all -- a real
+ * caller (Vercel Cron, a remote MCP client) has no Spencare login session
+ * to present. Phase 22 forensic finding: `/api/cron/gmail-sync` (built in
+ * Phase 21) and `/api/mcp` (built in Phase 22) were BOTH silently broken
+ * by this middleware's default "redirect to /login when there's no user"
+ * behavior -- a real Vercel Cron invocation or MCP client request would
+ * have been 307-redirected to `/login` before ever reaching either
+ * route's own auth check. These paths skip the entire session/redirect
+ * pipeline below (not just the redirect step) -- they need no Supabase
+ * session client at all, so there is nothing else in this function for
+ * them to do.
+ */
+const SELF_AUTHENTICATING_API_PATHS = ["/api/cron", "/api/mcp"];
+
 const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth"];
 const MFA_EXEMPT_PATHS = ["/verify-2fa", "/auth", "/logout"];
 // Reachable regardless of onboarding-completion state -- /onboarding
@@ -22,6 +39,11 @@ function safeRedirectTarget(candidate: string | null): string | null {
 }
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
+  const path = request.nextUrl.pathname;
+  if (SELF_AUTHENTICATING_API_PATHS.some((p) => path === p || path.startsWith(`${p}/`))) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
@@ -50,7 +72,6 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
   const isPublicPath = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
   const isMfaExempt = MFA_EXEMPT_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
   const isOnboardingExempt = ONBOARDING_EXEMPT_PATHS.some(

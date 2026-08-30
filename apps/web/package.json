@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@spencare/ai": "workspace:*",
     "@spencare/domain-application": "workspace:*",
     "@spencare/domain-core": "workspace:*",
     "@spencare/domain-infra": "workspace:*",
+    "@spencare/mcp-server": "workspace:*",
     "@spencare/validation": "workspace:*",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
