@@ -270,6 +270,17 @@ describe("<GmailConnectionManager> — review queue", () => {
     render(<GmailConnectionManager initialStatus={status()} initialCandidates={[candidate({ subject: "Debit Alert" })]} accounts={ACCOUNTS} categories={CATEGORIES} />);
     expect(screen.getByText(/From alerts@hdfcbank.net/)).toBeInTheDocument();
   });
+
+  it("shows the real candidate amount when Privacy Mode is off (default)", () => {
+    render(<GmailConnectionManager initialStatus={status()} initialCandidates={[candidate({ normalizedAmountMinor: 50000, currency: "INR" })]} accounts={ACCOUNTS} categories={CATEGORIES} />);
+    expect(screen.getByText("₹500.00")).toBeInTheDocument();
+  });
+
+  it("masks the candidate amount when the caller passes masked=true (Phase 21 Privacy Mode audit fix) -- Gmail candidates are real financial data and must never bypass the same masking every other money display honors", () => {
+    render(<GmailConnectionManager initialStatus={status()} initialCandidates={[candidate({ normalizedAmountMinor: 50000, currency: "INR" })]} accounts={ACCOUNTS} categories={CATEGORIES} masked />);
+    expect(screen.queryByText("₹500.00")).not.toBeInTheDocument();
+    expect(screen.getByText("₹***")).toBeInTheDocument();
+  });
 });
 
 describe("<GmailConnectionManager> — accessibility", () => {

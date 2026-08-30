@@ -64,6 +64,7 @@ export function GmailConnectionManager({
   connected,
   cancelled,
   oauthError,
+  masked = false,
 }: {
   initialStatus: GmailConnectionStatus | null;
   initialCandidates: GmailCandidateRow[];
@@ -72,6 +73,13 @@ export function GmailConnectionManager({
   connected?: boolean;
   cancelled?: boolean;
   oauthError?: string;
+  /** Privacy Mode (Phase 21 audit fix): candidate amounts are real financial
+   * data pulled from the user's own inbox -- they must be masked exactly
+   * like every other monetary surface when the user's profile has privacy
+   * mode on. Previously missing here (this file rendered amounts
+   * unconditionally), the one confirmed gap the Phase 21 Privacy Mode
+   * audit found. */
+  masked?: boolean;
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [candidates, setCandidates] = useState(initialCandidates);
@@ -257,6 +265,7 @@ export function GmailConnectionManager({
                   categories={categories}
                   busy={actioningId === candidate.id}
                   editing={editingId === candidate.id}
+                  masked={masked}
                   onStartEdit={() => setEditingId(candidate.id)}
                   onCancelEdit={() => setEditingId(null)}
                   onAccept={() => onAccept(candidate.id)}
@@ -290,6 +299,7 @@ function GmailCandidateCard({
   categories,
   busy,
   editing,
+  masked,
   onStartEdit,
   onCancelEdit,
   onAccept,
@@ -302,6 +312,7 @@ function GmailCandidateCard({
   categories: CategoryOption[];
   busy: boolean;
   editing: boolean;
+  masked: boolean;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onAccept: () => void;
@@ -327,7 +338,7 @@ function GmailCandidateCard({
             <Badge variant="secondary">{candidate.direction ?? candidate.candidateType}</Badge>
             {candidate.confidenceScore < 0.7 ? <Badge variant="outline">Low confidence</Badge> : null}
           </div>
-          {money ? <Money value={money} tone={candidate.direction === "income" ? "positive" : "neutral"} /> : <span className="text-sm text-muted-foreground">Amount unknown</span>}
+          {money ? <Money value={money} masked={masked} tone={candidate.direction === "income" ? "positive" : "neutral"} /> : <span className="text-sm text-muted-foreground">Amount unknown</span>}
         </div>
 
         <p className="text-xs text-muted-foreground">

@@ -1,5 +1,5 @@
 import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
-import { getGmailStatus, listGmailCandidatesQuery, listAccounts, listCategories, type AuthContext } from "@spencare/domain-application";
+import { getGmailStatus, listGmailCandidatesQuery, listAccounts, listCategories, getProfile, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { SettingsShell } from "@/components/spencare/settings-nav";
@@ -43,11 +43,12 @@ export default async function GmailSettingsPage(props: PageProps<"/settings/gmai
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
 
-  const [status, candidates, accounts, categories] = await Promise.all([
+  const [status, candidates, accounts, categories, profile] = await Promise.all([
     getGmailStatus(ctx),
     listGmailCandidatesQuery(ctx),
     listAccounts(ctx),
     listCategories(ctx),
+    getProfile(ctx),
   ]);
 
   return (
@@ -89,6 +90,7 @@ export default async function GmailSettingsPage(props: PageProps<"/settings/gmai
               connected={connected}
               cancelled={cancelled}
               oauthError={oauthError}
+              masked={profile?.privacy_mode_enabled ?? false}
             />
           </CardContent>
         </Card>
