@@ -72,7 +72,7 @@ function prediction(overrides: Partial<BillPredictionWithDefinition> = {}): Bill
     matched_at: null,
     created_at: "2026-08-01T00:00:00Z",
     updated_at: "2026-08-01T00:00:00Z",
-    bill_definitions: { merchant_pattern: "Netflix", category_id: null, recurrence_interval: "monthly" },
+    bill_definitions: { merchant_pattern: "Netflix", category_id: null, recurrence_interval: "monthly", deleted_at: null },
     matched_transaction: null,
     ...overrides,
   };

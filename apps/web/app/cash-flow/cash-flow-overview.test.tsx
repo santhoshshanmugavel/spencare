@@ -197,7 +197,7 @@ describe("<CashFlowOverview> — in-page tab switcher (Recent Transactions / Upc
             matched_at: null,
             created_at: "",
             updated_at: "",
-            bill_definitions: { merchant_pattern: "Netflix", category_id: null, recurrence_interval: "monthly" },
+            bill_definitions: { merchant_pattern: "Netflix", category_id: null, recurrence_interval: "monthly", deleted_at: null },
             matched_transaction: null,
           },
         ]}
@@ -225,7 +225,7 @@ describe("<CashFlowOverview> — in-page tab switcher (Recent Transactions / Upc
             matched_at: null,
             created_at: "",
             updated_at: "",
-            bill_definitions: { merchant_pattern: "Netflix", category_id: null, recurrence_interval: "monthly" },
+            bill_definitions: { merchant_pattern: "Netflix", category_id: null, recurrence_interval: "monthly", deleted_at: null },
             matched_transaction: null,
           },
         ]}

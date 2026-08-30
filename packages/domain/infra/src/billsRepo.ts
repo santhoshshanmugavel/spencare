@@ -224,12 +224,44 @@ export interface BillPredictionRow {
  * open/overdue prediction, which has no linked transaction yet.
  */
 export interface BillPredictionWithDefinition extends BillPredictionRow {
-  bill_definitions: Pick<BillDefinitionRow, "merchant_pattern" | "category_id" | "recurrence_interval">;
+  bill_definitions: Pick<BillDefinitionRow, "merchant_pattern" | "category_id" | "recurrence_interval" | "deleted_at">;
   matched_transaction: { amount_minor: number } | null;
 }
 
 const BILL_PREDICTION_COLUMNS_WITH_DEFINITION =
-  "id, bill_definition_id, user_id, expected_date, expected_amount_minor, status, matched_transaction_id, matched_at, created_at, updated_at, bill_definitions(merchant_pattern, category_id, recurrence_interval), matched_transaction:transactions!bill_predictions_matched_transaction_fk(amount_minor)";
+  "id, bill_definition_id, user_id, expected_date, expected_amount_minor, status, matched_transaction_id, matched_at, created_at, updated_at, bill_definitions(merchant_pattern, category_id, recurrence_interval, deleted_at), matched_transaction:transactions!bill_predictions_matched_transaction_fk(amount_minor)";
+
+/**
+ * Phase 24 forensic finding, live-reproduced: deleting a bill definition
+ * (`deleteBillDefinition` above) is a soft delete that deliberately never
+ * cascades to `bill_predictions` -- but nothing downstream ever excluded
+ * a DELETED bill's still-OPEN/OVERDUE predictions from "Upcoming" lists.
+ * A deleted bill's unpaid prediction kept showing as Upcoming forever,
+ * and every action on it (Edit/Delete/Bill Now) silently failed because
+ * `getBill` correctly excludes deleted definitions -- confirmed live via
+ * a real reproduction (`getBillAction` genuinely returning `null` for a
+ * definition visibly still listed as Upcoming). Worse: this exact
+ * function backs `getUpcomingBillsTotal`'s Safe-to-Spend reservation, so
+ * a deleted-but-still-open bill kept silently reducing the user's
+ * reported Safe-to-Spend indefinitely.
+ *
+ * The fix preserves the ALREADY-DOCUMENTED intent immediately above
+ * ("a prediction's own row... survives the bill definition's deletion
+ * untouched") for HISTORY -- a `matched`/`skipped` prediction for a
+ * deleted bill still appears, exactly as before. Only a still-`open`/
+ * `overdue` prediction (one that would otherwise keep being presented as
+ * something the user should expect/pay/see reserved) is hidden once its
+ * bill is deleted -- matching the disconnect-style confirmation copy
+ * already shown at delete time ("this bill will no longer be tracked or
+ * predicted").
+ */
+function excludeOpenPredictionsForDeletedBills<T extends Pick<BillPredictionRow, "status"> & { bill_definitions: { deleted_at: string | null } | null }>(rows: T[]): T[] {
+  return rows.filter((row) => {
+    const billDeleted = row.bill_definitions?.deleted_at != null;
+    const stillPending = row.status === "open" || row.status === "overdue";
+    return !(billDeleted && stillPending);
+  });
+}
 
 export interface ListBillPredictionsOptions {
   /** Defaults to all statuses (open/overdue/matched/skipped) -- SP-091's populated list shows past matched rows alongside upcoming ones (CF-D11's visual distinction is how they're told apart, not filtering). */
@@ -245,7 +277,7 @@ export async function listBillPredictions(
   if (options.status && options.status.length > 0) query = query.in("status", options.status);
   const { data, error } = await query.order("expected_date", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as unknown as BillPredictionWithDefinition[];
+  return excludeOpenPredictionsForDeletedBills((data ?? []) as unknown as BillPredictionWithDefinition[]);
 }
 
 export async function getBillPrediction(
@@ -344,9 +376,15 @@ export async function callMatchBillTransaction(
 export async function getUpcomingBillsTotal(client: TypedSupabaseClient, userId: string): Promise<number> {
   const { data, error } = await client
     .from("bill_predictions")
-    .select("expected_amount_minor")
+    .select("expected_amount_minor, bill_definitions(deleted_at)")
     .eq("user_id", userId)
     .in("status", ["open", "overdue"]);
   if (error) throw error;
-  return (data ?? []).reduce((sum, row) => sum + ((row.expected_amount_minor as number | null) ?? 0), 0);
+  // Phase 24 fix (see excludeOpenPredictionsForDeletedBills's doc comment
+  // above): every row here is already open/overdue by construction, so a
+  // deleted bill's prediction must be excluded outright -- it would
+  // otherwise keep silently reducing Safe-to-Spend forever.
+  return (data ?? [])
+    .filter((row) => (row.bill_definitions as { deleted_at: string | null } | null)?.deleted_at == null)
+    .reduce((sum, row) => sum + ((row.expected_amount_minor as number | null) ?? 0), 0);
 }
