@@ -40,18 +40,38 @@ export const createGoalSchema = z.object({
 export type CreateGoalInput = z.infer<typeof createGoalSchema>;
 
 /**
- * Update excludes `fundingAccountId` -- domain-architecture.md §7 models it
- * as fixed per goal (the "default" account for a goal isn't meant to be
- * reassigned casually; changing it is closer to "create a different goal"
- * than editing this one, matching the same reasoning already applied to
- * Budgets' `categoryId`/`periodStart`).
+ * Phase 26: `fundingAccountId` is now editable, superseding the prior
+ * "fixed per goal" decision documented above and in
+ * `goalsRepo.ts`/`edit-goal-sheet.tsx`'s history -- explicitly requested
+ * so a goal like "Europe Vacation" can move from one savings account to
+ * another without recreating it. This changes only which account future
+ * contributions default to; it never touches past `transactions` rows,
+ * `saved_amount_minor`, or any account balance (see `UpdateGoalPatch` in
+ * goalsRepo.ts). Same bank/cash-type + ownership check `createGoal`
+ * already performs is re-applied in the command, not duplicated here.
  */
 export const updateGoalSchema = z.object({
   name: z.string().trim().min(1, "Give this goal a name.").max(120, "That name is too long.").optional(),
   targetAmountMinor: targetAmountMinorSchema.optional(),
   targetDate: targetDateSchema,
+  fundingAccountId: z.string().uuid().optional(),
 });
 export type UpdateGoalInput = z.infer<typeof updateGoalSchema>;
+
+/**
+ * Goal image upload -- identical shape and limits to
+ * `packages/validation/src/auth.ts`'s `avatarUploadSchema` (same private-
+ * bucket security posture, same 5MB/PNG-JPEG-WebP allowance), kept as its
+ * own schema (not a shared import) because it belongs to a different
+ * domain object and the two are free to diverge later without coupling.
+ */
+export const goalImageUploadSchema = z.object({
+  mimeType: z.enum(["image/png", "image/jpeg", "image/webp"], {
+    message: "Only PNG, JPEG, or WebP images are supported.",
+  }),
+  sizeBytes: z.number().int().positive().max(5 * 1024 * 1024, "Image must be under 5MB."),
+});
+export type GoalImageUploadInput = z.infer<typeof goalImageUploadSchema>;
 
 export const addContributionSchema = z.object({
   goalId: z.string().uuid(),

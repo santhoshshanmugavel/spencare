@@ -14,6 +14,7 @@ import {
   callWithdrawContribution,
   completeGoal as completeGoalRow,
   createGoal as createGoalRow,
+  deleteAllGoalImageObjects,
   deleteGoal as deleteGoalRow,
   getAccount as getAccountRow,
   getGoal as getGoalRow,
@@ -85,6 +86,19 @@ export const updateGoal: Command<UpdateGoalCommandInput, GoalRow> = {
     const parsed = updateGoalSchema.safeParse(rest);
     if (!parsed.success) {
       return err({ code: "validation_error", message: parsed.error.issues[0]?.message ?? "Invalid goal details." });
+    }
+    // Phase 26: changing the funding account re-runs the exact same
+    // bank/cash-type + ownership check `createGoal` performs above --
+    // never trust that a client-supplied account id is even this user's
+    // own, let alone an eligible type, just because it parsed as a UUID.
+    if (parsed.data.fundingAccountId !== undefined) {
+      const account = await getAccountRow(ctx.supabase, ctx.userId, parsed.data.fundingAccountId);
+      if (!account) {
+        return err({ code: "validation_error", message: "That account doesn't exist." });
+      }
+      if (account.type !== "bank" && account.type !== "cash") {
+        return err({ code: "validation_error", message: "Goals can only be funded from a bank or cash account." });
+      }
     }
     try {
       const row = await updateGoalRow(ctx.supabase, ctx.userId, goalId, parsed.data);
@@ -177,6 +191,18 @@ export const deleteGoal: Command<DeleteGoalInput, void> = {
     if (!existing) return err({ code: "not_found", message: "That goal no longer exists." });
     try {
       await deleteGoalRow(ctx.supabase, ctx.userId, input.goalId);
+      // Phase 26: clean up any uploaded image so it doesn't linger in
+      // Storage for a goal that's gone. Best-effort and AFTER the (already
+      // atomic, single-row) soft delete succeeds -- a Storage hiccup here
+      // must never block or roll back the delete itself, and the deleted
+      // goal is unreachable through the app either way.
+      try {
+        await deleteAllGoalImageObjects(ctx.supabase, ctx.userId, input.goalId);
+      } catch {
+        // Non-fatal: the goal is already deleted; an orphaned image object
+        // is a cleanup nicety, not a correctness or security issue (RLS
+        // still scopes it to this user, and nothing links to it anymore).
+      }
       return ok(undefined);
     } catch {
       return err({ code: "delete_failed", message: "Couldn't delete this goal. Try again." });

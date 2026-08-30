@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Money } from "@/components/spencare/money";
+import { GoalImageUploader } from "@/components/spencare/goal-image-uploader";
 import { formatMinorUnits } from "@/lib/currency-format";
 
 /**
@@ -24,13 +25,18 @@ import { formatMinorUnits } from "@/lib/currency-format";
  * (where ListRow WAS the cited primitive). Not forcing Goals into
  * ListRow, per the Phase 7 AccountCard lesson.
  *
+ * Image: Phase 26 adds a genuine USER-UPLOADED photo (via
+ * `GoalImageUploader`) -- this is NOT the AI-generated/stock hero image
+ * SP-193 explicitly declined to fabricate; that decision stands, and this
+ * is a different, legitimate feature (the same category as the
+ * already-shipped avatar upload). A goal with no uploaded image still
+ * renders the exact OBSERVED "no-image fallback" (component-inventory.md
+ * §7: "solid lavender fill + centered bold name, no photo") --
+ * `GoalImageUploader` itself renders that fallback when there's nothing
+ * to show, so this component doesn't duplicate it.
+ *
  * NOT built (explicitly out of scope, Spensa/AI-only in source):
- * - real hero photo / AI-generated image (SP-193) -- every card renders
- *   the OBSERVED "no-image fallback" state (component-inventory.md §7:
- *   "solid lavender fill + centered bold name, no photo"), honestly,
- *   never a fabricated placeholder photo.
- * - "next image" carousel chevron, "change image" hover icon, sparkle/
- *   AI insight icon.
+ * - "next image" carousel chevron, sparkle/AI insight icon.
  *
  * Mobile-safe (Phase 11 §8): SP-184's "Add Cash" action is hover-only in
  * source with no documented touch equivalent (its own open question) --
@@ -53,6 +59,7 @@ export function GoalCard({
   progress,
   fundingAccount,
   masked,
+  imageSignedUrl,
   onContribute,
   onWithdraw,
   onEdit,
@@ -64,6 +71,8 @@ export function GoalCard({
   progress: GoalProgress;
   fundingAccount: AccountRow | undefined;
   masked: boolean;
+  /** Resolved by the page (see `resolveGoalImageUrls`), never derived here -- `goal.image_url` is a private Storage path, not a displayable URL. */
+  imageSignedUrl: string | null;
   onContribute: () => void;
   onWithdraw: () => void;
   onEdit: () => void;
@@ -77,14 +86,7 @@ export function GoalCard({
 
   return (
     <Card className="gap-0 overflow-hidden p-0">
-      <button
-        type="button"
-        onClick={onViewDetail}
-        aria-label={`${goal.name}, view goal details`}
-        className="flex aspect-[3/2] w-full items-center justify-center bg-primary/10 text-left hover:bg-primary/15"
-      >
-        <span className="px-4 text-center text-lg font-bold text-primary">{goal.name}</span>
-      </button>
+      <GoalImageUploader goalId={goal.id} goalName={goal.name} initialSignedUrl={imageSignedUrl} />
 
       <div className="space-y-2 p-4">
         <div className="flex items-start justify-between gap-2">

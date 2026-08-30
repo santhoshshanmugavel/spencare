@@ -91,9 +91,17 @@ describe("updateGoalSchema", () => {
     expect(updateGoalSchema.safeParse({ targetDate: null }).success).toBe(true);
   });
 
-  it("has no fundingAccountId field -- not editable after creation", () => {
-    const shape = updateGoalSchema.shape as Record<string, unknown>;
-    expect(shape.fundingAccountId).toBeUndefined();
+  /**
+   * Phase 26: reverses the prior "fixed per goal, not editable" decision
+   * -- `fundingAccountId` is now an accepted, optional field on update.
+   */
+  it("accepts an optional fundingAccountId (Phase 26: goals' funding account is now editable)", () => {
+    const result = updateGoalSchema.safeParse({ fundingAccountId: accountId });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a malformed fundingAccountId on update, same as create", () => {
+    expect(updateGoalSchema.safeParse({ fundingAccountId: "not-a-uuid" }).success).toBe(false);
   });
 
   it("rejects a zero/negative target amount same as create", () => {

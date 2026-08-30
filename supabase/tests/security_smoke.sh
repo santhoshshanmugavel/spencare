@@ -166,6 +166,57 @@ rm -f /tmp/security-smoke-big.png
 rm -f "$TMP_IMG"
 echo
 
+echo "== goal-images storage: path-scoped isolation (Phase 26) =="
+# Path scheme is {user_id}/{goal_id}/{filename} -- the RLS policy only
+# ever checks the FIRST segment against auth.uid(), same shape as
+# avatars', so a placeholder "goal-id" second segment is sufficient to
+# exercise the actual storage.objects policy without needing a real row
+# in the `goals` table first (ownership of the SPECIFIC goal id is an
+# application-layer check in updateGoalImage/removeGoalImage, not a
+# thing storage.objects RLS can express -- see migration
+# 20260907000001_goal_images.sql's own comment).
+TMP_GOAL_IMG=$(mktemp /tmp/goal-image-XXXX.png)
+printf '\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82' > "$TMP_GOAL_IMG"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/storage/v1/object/goal-images/$UID1/goal-1/image.png" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: image/png" --data-binary "@$TMP_GOAL_IMG")
+check "user1 can upload to their own goal-image path" "200" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/storage/v1/object/goal-images/$UID1/goal-1/image.png" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's goal-image object directly" "400" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/storage/v1/object/goal-images/$UID1/goal-1/image.png" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: image/png" --data-binary "@$TMP_GOAL_IMG")
+check "user2 cannot overwrite user1's goal-image object" "400" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/storage/v1/object/goal-images/$UID1/goal-1/image.png" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot delete user1's goal-image object" "400" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/storage/v1/object/goal-images/$UID1/goal-1/image.png" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+check "user1 can read their own goal-image object" "200" "$R"
+
+# user2 also cannot write under user1's prefix even naming a DIFFERENT
+# goal id -- the policy denies on the first path segment alone, so this
+# would fail even before any application-layer goal-ownership check runs.
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/storage/v1/object/goal-images/$UID1/some-other-goal/image.png" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: image/png" --data-binary "@$TMP_GOAL_IMG")
+check "user2 cannot write under user1's prefix even for a goal id user2 invents" "400" "$R"
+
+echo "not an image" > /tmp/security-smoke-fake-goal.txt
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/storage/v1/object/goal-images/$UID1/goal-1/fake.txt" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: text/plain" --data-binary "@/tmp/security-smoke-fake-goal.txt")
+check "goal-images bucket rejects a disallowed MIME type (text/plain) regardless of ownership" "400" "$R"
+rm -f /tmp/security-smoke-fake-goal.txt
+
+head -c 6291456 /dev/urandom > /tmp/security-smoke-big-goal.png
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/storage/v1/object/goal-images/$UID1/goal-1/big.png" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: image/png" --data-binary "@/tmp/security-smoke-big-goal.png")
+check "goal-images bucket rejects a file over the 5MB limit" "400" "$R"
+rm -f /tmp/security-smoke-big-goal.png
+
+rm -f "$TMP_GOAL_IMG"
+echo
+
 echo "== accounts: ownership / IDOR (Phase 7) =="
 ACC=$(curl -s -X POST "$BASE/rest/v1/accounts" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
   -H "Content-Type: application/json" -H "Prefer: return=representation" \

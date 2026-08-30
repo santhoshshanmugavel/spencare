@@ -11,8 +11,10 @@ import {
   listAccounts,
   listContributions,
   listGoals,
+  removeGoalImage,
   restoreGoal,
   updateGoal,
+  updateGoalImage,
   withdrawContribution,
   type AuthContext,
 } from "@spencare/domain-application";
@@ -107,6 +109,30 @@ export async function addContributionAction(input: AddContributionInput) {
 export async function withdrawContributionAction(input: WithdrawContributionInput) {
   const ctx = await requireAuthContext();
   const result = await withdrawContribution.execute(ctx, input);
+  if (result.ok) revalidatePath("/goals");
+  return result;
+}
+
+/** Same FormData-extraction shape as `settings/actions.ts`'s `updateAvatarAction` -- never trusts the client's declared MIME type alone (the command re-sniffs the actual bytes). */
+export async function updateGoalImageAction(goalId: string, formData: FormData) {
+  const ctx = await requireAuthContext();
+  const file = formData.get("image");
+  if (!(file instanceof File)) {
+    return { ok: false as const, error: { code: "no_file", message: "Choose an image first." } };
+  }
+  const fileBytes = new Uint8Array(await file.arrayBuffer());
+  const result = await updateGoalImage.execute(ctx, {
+    goalId,
+    fileBytes,
+    declaredMimeType: file.type,
+  });
+  if (result.ok) revalidatePath("/goals");
+  return result;
+}
+
+export async function removeGoalImageAction(goalId: string) {
+  const ctx = await requireAuthContext();
+  const result = await removeGoalImage.execute(ctx, { goalId });
   if (result.ok) revalidatePath("/goals");
   return result;
 }

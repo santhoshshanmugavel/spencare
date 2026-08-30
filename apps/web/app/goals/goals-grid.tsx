@@ -31,11 +31,14 @@ export function GoalsGrid({
   accounts,
   fundingEligibleAccounts,
   masked,
+  imageSignedUrls,
 }: {
   initialGoals: GoalRow[];
   accounts: AccountRow[];
   fundingEligibleAccounts: AccountRow[];
   masked: boolean;
+  /** goalId -> signed URL, resolved server-side by the page (see `resolveGoalImageUrls`); absent entries render the no-image fallback. */
+  imageSignedUrls: Record<string, string>;
 }) {
   const router = useRouter();
   const goals = initialGoals;
@@ -79,6 +82,7 @@ export function GoalsGrid({
                 progress={progress}
                 fundingAccount={accountById.get(goal.funding_account_id)}
                 masked={masked}
+                imageSignedUrl={imageSignedUrls[goal.id] ?? null}
                 onContribute={() => setContributing(goal)}
                 onWithdraw={() => setWithdrawing(goal)}
                 onEdit={() => setEditing(goal)}
@@ -104,6 +108,7 @@ export function GoalsGrid({
       {editing ? (
         <EditGoalSheet
           goal={editing}
+          accounts={fundingEligibleAccounts}
           open={!!editing}
           onOpenChange={(o) => !o && setEditing(null)}
           onUpdated={() => {
@@ -168,6 +173,7 @@ export function GoalsGrid({
           goal={viewing}
           fundingAccount={accountById.get(viewing.funding_account_id)}
           masked={masked}
+          imageSignedUrl={imageSignedUrls[viewing.id] ?? null}
           open={!!viewing}
           onOpenChange={(o) => !o && setViewing(null)}
           onContribute={() => {

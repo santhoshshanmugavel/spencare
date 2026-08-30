@@ -62,6 +62,18 @@ export interface UpdateGoalPatch {
   name?: string;
   targetAmountMinor?: number;
   targetDate?: string | null;
+  /**
+   * Phase 26: reassigns which account a goal is funded from going
+   * forward. A plain, single-column patch -- exactly like `name`/
+   * `targetAmountMinor` above -- so it touches only this one row's
+   * `funding_account_id` and cascades nowhere. It never rewrites
+   * `transactions.account_id` for this goal's PAST contributions (those
+   * rows keep pointing at whichever account they actually moved money
+   * through), never moves money between accounts, and never touches
+   * `saved_amount_minor`. Changing the funding account is a change to the
+   * goal's CURRENT association only, not a historical correction.
+   */
+  fundingAccountId?: string;
 }
 
 export async function updateGoal(
@@ -76,7 +88,33 @@ export async function updateGoal(
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.targetAmountMinor !== undefined ? { target_amount_minor: patch.targetAmountMinor } : {}),
       ...(patch.targetDate !== undefined ? { target_date: patch.targetDate } : {}),
+      ...(patch.fundingAccountId !== undefined ? { funding_account_id: patch.fundingAccountId } : {}),
     })
+    .eq("id", goalId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .select(GOAL_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as GoalRow;
+}
+
+/**
+ * Single-column pointer update, same shape as `profilesRepo.ts`'s
+ * `updateAvatarUrl` -- scoped by BOTH `userId` and `goalId` (unlike the
+ * profile's one-row-per-user update) since a user owns many goals; this
+ * is the ownership check that prevents a caller from pointing another
+ * user's goal (or their own different goal) at an uploaded image path.
+ */
+export async function updateGoalImageUrl(
+  client: TypedSupabaseClient,
+  userId: string,
+  goalId: string,
+  imageUrl: string | null,
+): Promise<GoalRow> {
+  const { data, error } = await client
+    .from("goals")
+    .update({ image_url: imageUrl })
     .eq("id", goalId)
     .eq("user_id", userId)
     .is("deleted_at", null)

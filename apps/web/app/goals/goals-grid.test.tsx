@@ -19,6 +19,8 @@ vi.mock("./actions", () => ({
   addContributionAction: vi.fn(async () => ({ ok: true, value: {} })),
   withdrawContributionAction: vi.fn(async () => ({ ok: true, value: {} })),
   listContributionsAction: vi.fn(async () => []),
+  updateGoalImageAction: vi.fn(async () => ({ ok: true, value: { signedUrl: "https://signed.example/new.png" } })),
+  removeGoalImageAction: vi.fn(async () => ({ ok: true, value: {} })),
 }));
 
 const account: AccountRow = {
@@ -55,18 +57,18 @@ const goal: GoalRow = {
 describe("<GoalsGrid> — empty state", () => {
   it("has no axe violations", async () => {
     const { container } = render(
-      <GoalsGrid initialGoals={[]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} />,
+      <GoalsGrid initialGoals={[]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />,
     );
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it("shows an honest empty state, not a fabricated goal", () => {
-    render(<GoalsGrid initialGoals={[]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} />);
+    render(<GoalsGrid initialGoals={[]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     expect(screen.getByText(/no goals yet/i)).toBeInTheDocument();
   });
 
   it("disables Create goal when there is no eligible funding account", () => {
-    render(<GoalsGrid initialGoals={[]} accounts={[]} fundingEligibleAccounts={[]} masked={false} />);
+    render(<GoalsGrid initialGoals={[]} accounts={[]} fundingEligibleAccounts={[]} masked={false} imageSignedUrls={{}} />);
     expect(screen.getByRole("button", { name: "+ Create goal" })).toBeDisabled();
   });
 });
@@ -74,14 +76,14 @@ describe("<GoalsGrid> — empty state", () => {
 describe("<GoalsGrid> — populated", () => {
   it("has no axe violations", async () => {
     const { container } = render(
-      <GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} />,
+      <GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />,
     );
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it("opens Edit Goal from the card's actions menu, not the view-detail dialog too (no unintended double-open)", async () => {
     const user = userEvent.setup();
-    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} />);
+    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     await user.click(screen.getByRole("button", { name: `Actions for ${goal.name}` }));
     await user.click(screen.getByRole("menuitem", { name: "Edit Goal" }));
     expect(screen.getByRole("heading", { name: `Edit ${goal.name}` })).toBeInTheDocument();
@@ -89,23 +91,23 @@ describe("<GoalsGrid> — populated", () => {
     expect(screen.queryByText("Contributions")).not.toBeInTheDocument();
   });
 
-  it("opens the detail dialog when the card's image/name area is clicked", async () => {
+  it("opens the detail dialog when the card's name is clicked (the image area is now a real upload target, not a detail-view trigger -- Phase 26)", async () => {
     const user = userEvent.setup();
-    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} />);
-    await user.click(screen.getByRole("button", { name: `${goal.name}, view goal details` }));
+    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
+    await user.click(screen.getByRole("button", { name: goal.name }));
     expect(await screen.findByText("Contributions")).toBeInTheDocument();
   });
 
   it("opens the Contribute sheet from the card's persistent Add Cash button", async () => {
     const user = userEvent.setup();
-    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} />);
+    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     await user.click(screen.getByRole("button", { name: "Add Cash" }));
     expect(screen.getByRole("heading", { name: `Add cash to ${goal.name}` })).toBeInTheDocument();
   });
 
   it("opens Create goal from the header button", async () => {
     const user = userEvent.setup();
-    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} />);
+    render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     await user.click(screen.getByRole("button", { name: "+ Create goal" }));
     expect(screen.getByRole("heading", { name: "Create goal" })).toBeInTheDocument();
   });

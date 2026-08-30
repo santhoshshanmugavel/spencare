@@ -65,10 +65,12 @@ export {
   updateGoalSchema,
   addContributionSchema,
   withdrawContributionSchema,
+  goalImageUploadSchema,
   type CreateGoalInput,
   type UpdateGoalInput,
   type AddContributionInput,
   type WithdrawContributionInput,
+  type GoalImageUploadInput,
 } from "./goals.js";
 
 export {

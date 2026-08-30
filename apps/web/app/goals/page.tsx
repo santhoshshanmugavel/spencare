@@ -1,5 +1,5 @@
 import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
-import { getProfile, listAccounts, listGoals, type AuthContext } from "@spencare/domain-application";
+import { getProfile, listAccounts, listGoals, resolveGoalImageUrls, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -28,6 +28,9 @@ export default async function GoalsPage() {
   };
   const [goals, accounts, profile] = await Promise.all([listGoals(ctx), listAccounts(ctx), getProfile(ctx)]);
   const fundingEligibleAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
+  // Resolved AFTER goals are known (needs their `image_url` paths), not
+  // parallelized with the fetch above -- signing depends on the list.
+  const imageSignedUrls = await resolveGoalImageUrls(ctx, goals);
 
   return (
     <AppShell
@@ -59,6 +62,7 @@ export default async function GoalsPage() {
           accounts={accounts}
           fundingEligibleAccounts={fundingEligibleAccounts}
           masked={profile?.privacy_mode_enabled ?? false}
+          imageSignedUrls={imageSignedUrls}
         />
       </div>
     </AppShell>

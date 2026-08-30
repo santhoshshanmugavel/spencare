@@ -7,12 +7,28 @@ import { GoalDetailDialog } from "./goal-detail-dialog";
 
 vi.mock("./actions", () => ({
   listContributionsAction: vi.fn(async () => []),
+  updateGoalImageAction: vi.fn(async () => ({ ok: true, value: { signedUrl: "https://signed.example/new.png" } })),
+  removeGoalImageAction: vi.fn(async () => ({ ok: true, value: {} })),
+}));
+vi.mock("@/lib/toast", () => ({
+  toastConfirmed: vi.fn(),
+  toastError: vi.fn(),
 }));
 
 beforeEach(async () => {
-  const { listContributionsAction } = await import("./actions");
+  const { listContributionsAction, updateGoalImageAction, removeGoalImageAction } = await import("./actions");
   vi.mocked(listContributionsAction).mockReset();
   vi.mocked(listContributionsAction).mockResolvedValue([]);
+  vi.mocked(updateGoalImageAction).mockReset();
+  vi.mocked(updateGoalImageAction).mockResolvedValue({
+    ok: true,
+    value: { signedUrl: "https://signed.example/new.png" } as never,
+  });
+  vi.mocked(removeGoalImageAction).mockReset();
+  vi.mocked(removeGoalImageAction).mockResolvedValue({ ok: true, value: {} as never });
+  const { toastConfirmed, toastError } = await import("@/lib/toast");
+  vi.mocked(toastConfirmed).mockReset();
+  vi.mocked(toastError).mockReset();
 });
 
 const account: AccountRow = {
@@ -73,6 +89,7 @@ describe("<GoalDetailDialog> — accessibility", () => {
       <GoalDetailDialog
         goal={goal}
         fundingAccount={account}
+        imageSignedUrl={null}
         masked={false}
         open
         onOpenChange={noop}
@@ -94,6 +111,7 @@ describe("<GoalDetailDialog> — accessibility", () => {
       <GoalDetailDialog
         goal={goal}
         fundingAccount={account}
+        imageSignedUrl={null}
         masked={false}
         open
         onOpenChange={noop}
@@ -115,6 +133,7 @@ describe("<GoalDetailDialog> — content and behavior", () => {
       <GoalDetailDialog
         goal={goal}
         fundingAccount={account}
+        imageSignedUrl={null}
         masked={false}
         open
         onOpenChange={noop}
@@ -134,6 +153,7 @@ describe("<GoalDetailDialog> — content and behavior", () => {
       <GoalDetailDialog
         goal={goal}
         fundingAccount={account}
+        imageSignedUrl={null}
         masked
         open
         onOpenChange={noop}
@@ -153,6 +173,7 @@ describe("<GoalDetailDialog> — content and behavior", () => {
       <GoalDetailDialog
         goal={reachedGoal}
         fundingAccount={account}
+        imageSignedUrl={null}
         masked={false}
         open
         onOpenChange={noop}
@@ -173,6 +194,7 @@ describe("<GoalDetailDialog> — content and behavior", () => {
       <GoalDetailDialog
         goal={goal}
         fundingAccount={account}
+        imageSignedUrl={null}
         masked={false}
         open
         onOpenChange={noop}
@@ -193,6 +215,7 @@ describe("<GoalDetailDialog> — content and behavior", () => {
       <GoalDetailDialog
         goal={goal}
         fundingAccount={account}
+        imageSignedUrl={null}
         masked={false}
         open
         onOpenChange={noop}
@@ -218,6 +241,7 @@ describe("<GoalDetailDialog> — content and behavior", () => {
       <GoalDetailDialog
         goal={goal}
         fundingAccount={account}
+        imageSignedUrl={null}
         masked={false}
         open
         onOpenChange={noop}
@@ -231,5 +255,133 @@ describe("<GoalDetailDialog> — content and behavior", () => {
     expect(await screen.findByText("+₹5,000.00")).toBeInTheDocument();
     expect(screen.getByText("₹1,000.00")).toBeInTheDocument();
     expect(screen.getByText("Withdraw")).toBeInTheDocument();
+  });
+});
+
+describe("<GoalDetailDialog> — goal image (Phase 26)", () => {
+  it("shows the no-image fallback (goal name) and an 'Add image' control when there's no image", () => {
+    render(
+      <GoalDetailDialog
+        goal={goal}
+        fundingAccount={account}
+        imageSignedUrl={null}
+        masked={false}
+        open
+        onOpenChange={noop}
+        onContribute={noop}
+        onWithdraw={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+      />,
+    );
+    expect(screen.getByRole("button", { name: `Add an image for ${goal.name}` })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: `Remove ${goal.name}'s image` })).not.toBeInTheDocument();
+  });
+
+  it("shows the actual image and Replace/Remove controls when one is already set", () => {
+    render(
+      <GoalDetailDialog
+        goal={goal}
+        fundingAccount={account}
+        imageSignedUrl="https://signed.example/existing.png"
+        masked={false}
+        open
+        onOpenChange={noop}
+        onContribute={noop}
+        onWithdraw={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+      />,
+    );
+    expect(screen.getByRole("img")).toHaveAttribute("src", "https://signed.example/existing.png");
+    expect(screen.getByRole("button", { name: `Replace ${goal.name}'s image` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Remove ${goal.name}'s image` })).toBeInTheDocument();
+  });
+
+  it("uploads a new image and switches to the returned signed URL", async () => {
+    const { updateGoalImageAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(
+      <GoalDetailDialog
+        goal={goal}
+        fundingAccount={account}
+        imageSignedUrl={null}
+        masked={false}
+        open
+        onOpenChange={noop}
+        onContribute={noop}
+        onWithdraw={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+      />,
+    );
+    const file = new File(["fake-bytes"], "photo.png", { type: "image/png" });
+    const input = screen.getByLabelText(`Upload an image for ${goal.name}`);
+    await user.upload(input, file);
+    expect(updateGoalImageAction).toHaveBeenCalledWith(goal.id, expect.any(FormData));
+    expect(await screen.findByRole("img")).toHaveAttribute("src", "https://signed.example/new.png");
+  });
+
+  it("removes the image and reverts to the no-image fallback", async () => {
+    const { removeGoalImageAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(
+      <GoalDetailDialog
+        goal={goal}
+        fundingAccount={account}
+        imageSignedUrl="https://signed.example/existing.png"
+        masked={false}
+        open
+        onOpenChange={noop}
+        onContribute={noop}
+        onWithdraw={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: `Remove ${goal.name}'s image` }));
+    expect(removeGoalImageAction).toHaveBeenCalledWith(goal.id);
+    expect(await screen.findByRole("button", { name: `Add an image for ${goal.name}` })).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("shows an error toast and keeps the previous image when the upload fails (no optimistic update)", async () => {
+    const { updateGoalImageAction } = await import("./actions");
+    vi.mocked(updateGoalImageAction).mockResolvedValueOnce({
+      ok: false,
+      error: { code: "invalid_file_content", message: "That file doesn't look like a valid PNG, JPEG, or WebP image." },
+    });
+    const user = userEvent.setup();
+    render(
+      <GoalDetailDialog
+        goal={goal}
+        fundingAccount={account}
+        imageSignedUrl="https://signed.example/existing.png"
+        masked={false}
+        open
+        onOpenChange={noop}
+        onContribute={noop}
+        onWithdraw={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+      />,
+    );
+    // Declared as a PNG (so the browser's own `accept` filter lets it
+    // through) but the actual bytes are plain text -- exactly the case
+    // content-sniffing exists to catch: never trust a declared MIME type
+    // or filename extension alone.
+    const file = new File(["not-really-a-png"], "fake.png", { type: "image/png" });
+    const input = screen.getByLabelText(`Upload an image for ${goal.name}`);
+    await user.upload(input, file);
+    const { toastError } = await import("@/lib/toast");
+    await vi.waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("That file doesn't look like a valid PNG, JPEG, or WebP image."),
+    );
+    expect(screen.getByRole("img")).toHaveAttribute("src", "https://signed.example/existing.png");
   });
 });

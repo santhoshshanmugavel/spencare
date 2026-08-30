@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
+import { GoalImageUploader } from "@/components/spencare/goal-image-uploader";
 import { listContributionsAction } from "./actions";
 
 /**
@@ -33,6 +34,7 @@ export function GoalDetailDialog({
   goal,
   fundingAccount,
   masked,
+  imageSignedUrl,
   open,
   onOpenChange,
   onContribute,
@@ -44,6 +46,8 @@ export function GoalDetailDialog({
   goal: GoalRow;
   fundingAccount: AccountRow | undefined;
   masked: boolean;
+  /** Resolved by the page (see `resolveGoalImageUrls`), never derived here -- `goal.image_url` is a private Storage path, not a displayable URL. */
+  imageSignedUrl: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onContribute: () => void;
@@ -94,9 +98,12 @@ export function GoalDetailDialog({
 
         <div className="grid gap-6 sm:grid-cols-2">
           <div className="space-y-3">
-            <div className="flex aspect-[3/2] items-center justify-center rounded-lg bg-primary/10">
-              <span className="px-4 text-center text-lg font-bold text-primary">{goal.name}</span>
-            </div>
+            <GoalImageUploader
+              goalId={goal.id}
+              goalName={goal.name}
+              initialSignedUrl={imageSignedUrl}
+              className="rounded-lg"
+            />
 
             {isReached ? (
               <p className="text-sm font-medium text-success">🎉 Goal achieved!</p>

@@ -41,6 +41,10 @@ function pgError(message: string) {
 
 const bankAccountId = "289f5e56-21a8-4ee0-865f-c02c11f4d874";
 const creditCardAccountId = "8cad1f12-3b01-4a55-9aa9-3ce1fef58491";
+/** A second bank account owned by user-a -- Phase 26's funding-account-edit target. */
+const secondBankAccountId = "b2f8f6b4-3f0f-4f3a-9c1f-2f6c1c9a1a11";
+/** Owned by a DIFFERENT user -- cross-user-account rejection case. */
+const otherUsersAccountId = "c3f9f7c5-4f1f-5f4b-ad2f-3f7d2d0b2b22";
 
 function reset() {
   goals = new Map();
@@ -49,6 +53,14 @@ function reset() {
     [
       creditCardAccountId,
       { id: creditCardAccountId, user_id: "user-a", type: "credit_card", currency: "INR", balance_minor: 0 },
+    ],
+    [
+      secondBankAccountId,
+      { id: secondBankAccountId, user_id: "user-a", type: "bank", currency: "INR", balance_minor: 500000 },
+    ],
+    [
+      otherUsersAccountId,
+      { id: otherUsersAccountId, user_id: "user-b", type: "bank", currency: "INR", balance_minor: 200000 },
     ],
   ]);
   nextId = 1;
@@ -79,6 +91,7 @@ vi.mock("@spencare/domain-infra", () => ({
     if (patch.name !== undefined) row.name = patch.name as string;
     if (patch.targetAmountMinor !== undefined) row.target_amount_minor = patch.targetAmountMinor as number;
     if (patch.targetDate !== undefined) row.target_date = patch.targetDate as string | null;
+    if (patch.fundingAccountId !== undefined) row.funding_account_id = patch.fundingAccountId as string;
     return { ...row };
   }),
   archiveGoal: vi.fn(async (_client: unknown, userId: string, goalId: string) => {
@@ -121,6 +134,7 @@ vi.mock("@spencare/domain-infra", () => ({
   // own validation ordering and error strings, so mapGoalError's substring
   // matching is exercised the same way it would be against real Postgres
   // error messages.
+  deleteAllGoalImageObjects: vi.fn(async () => {}),
   callAddContribution: vi.fn(async (_client: unknown, userId: string, patch: Record<string, unknown>) => {
     if ((patch.amountMinor as number) <= 0) throw pgError("invalid_amount");
     const account = accounts.get(patch.accountId as string);
@@ -263,6 +277,124 @@ describe("updateGoal", () => {
   it("is NOT marked consequential -- api-architecture.md §2 names only createGoal/deleteGoal, not updateGoal", () => {
     expect(updateGoal.consequential).toBe(false);
   });
+
+  /**
+   * Phase 26 (E/F): the funding account is now editable, reversing the
+   * prior "fixed per goal" decision -- but changing it must be a change
+   * to the CURRENT association only, never a rewrite of history. These
+   * cases mirror `createGoal`'s own account-eligibility checks plus the
+   * cross-user boundaries, and the explicit "no contributions" / "has
+   * contributions" pair the mandate calls out (this fake has no separate
+   * `transactions` table, so "has contributions" is modeled the same way
+   * the rest of this file already does -- via `saved_amount_minor`).
+   */
+  describe("changing the funding account", () => {
+    it("a goal with NO contributions can have its funding account changed", async () => {
+      const created = await createGoal.execute(makeCtx(), {
+        name: "Europe Vacation",
+        targetAmountMinor: 100000,
+        fundingAccountId: bankAccountId,
+      });
+      if (!created.ok) throw new Error("setup failed");
+      const result = await updateGoal.execute(makeCtx(), {
+        goalId: created.value.id,
+        fundingAccountId: secondBankAccountId,
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.funding_account_id).toBe(secondBankAccountId);
+        expect(result.value.saved_amount_minor).toBe(0);
+      }
+    });
+
+    it("a goal WITH existing contributions can also have its funding account changed, without altering saved_amount_minor", async () => {
+      const created = await createGoal.execute(makeCtx(), {
+        name: "Europe Vacation",
+        targetAmountMinor: 100000,
+        fundingAccountId: bankAccountId,
+      });
+      if (!created.ok) throw new Error("setup failed");
+      await addContribution.execute(makeCtx(), { goalId: created.value.id, accountId: bankAccountId, amountMinor: 30000 });
+      const before = goals.get(created.value.id)!.saved_amount_minor;
+      expect(before).toBe(30000);
+
+      const result = await updateGoal.execute(makeCtx(), {
+        goalId: created.value.id,
+        fundingAccountId: secondBankAccountId,
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.funding_account_id).toBe(secondBankAccountId);
+        // The prior contribution's saved amount is untouched -- changing
+        // the funding account is not the same as moving historical money.
+        expect(result.value.saved_amount_minor).toBe(30000);
+      }
+    });
+
+    it("rejects an account that doesn't exist", async () => {
+      const created = await createGoal.execute(makeCtx(), {
+        name: "T",
+        targetAmountMinor: 100000,
+        fundingAccountId: bankAccountId,
+      });
+      if (!created.ok) throw new Error("setup failed");
+      const result = await updateGoal.execute(makeCtx(), {
+        goalId: created.value.id,
+        fundingAccountId: "289f5e56-0000-0000-0000-000000000000",
+      });
+      expect(result.ok).toBe(false);
+      // Rejected before touching the goal row.
+      expect(goals.get(created.value.id)!.funding_account_id).toBe(bankAccountId);
+    });
+
+    it("rejects a credit card/investment account, same eligibility rule as createGoal", async () => {
+      const created = await createGoal.execute(makeCtx(), {
+        name: "T",
+        targetAmountMinor: 100000,
+        fundingAccountId: bankAccountId,
+      });
+      if (!created.ok) throw new Error("setup failed");
+      const result = await updateGoal.execute(makeCtx(), {
+        goalId: created.value.id,
+        fundingAccountId: creditCardAccountId,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.message).toMatch(/bank or cash/i);
+    });
+
+    it("rejects another user's account (cross-user account, IDOR)", async () => {
+      const created = await createGoal.execute(makeCtx("user-a"), {
+        name: "T",
+        targetAmountMinor: 100000,
+        fundingAccountId: bankAccountId,
+      });
+      if (!created.ok) throw new Error("setup failed");
+      const result = await updateGoal.execute(makeCtx("user-a"), {
+        goalId: created.value.id,
+        fundingAccountId: otherUsersAccountId,
+      });
+      expect(result.ok).toBe(false);
+      expect(goals.get(created.value.id)!.funding_account_id).toBe(bankAccountId);
+    });
+
+    it("a non-owner cannot change another user's goal's funding account (cross-user goal, IDOR)", async () => {
+      const created = await createGoal.execute(makeCtx("user-a"), {
+        name: "T",
+        targetAmountMinor: 100000,
+        fundingAccountId: bankAccountId,
+      });
+      if (!created.ok) throw new Error("setup failed");
+      // user-b owns `otherUsersAccountId`, so the account-eligibility
+      // check alone would pass -- it's the goal-ownership check in the
+      // repo layer that must still reject this.
+      const result = await updateGoal.execute(makeCtx("user-b"), {
+        goalId: created.value.id,
+        fundingAccountId: otherUsersAccountId,
+      });
+      expect(result.ok).toBe(false);
+      expect(goals.get(created.value.id)!.funding_account_id).toBe(bankAccountId);
+    });
+  });
 });
 
 describe("archiveGoal / restoreGoal / completeGoal", () => {
@@ -342,6 +474,25 @@ describe("deleteGoal", () => {
 
   it("is marked consequential", () => {
     expect(deleteGoal.consequential).toBe(true);
+  });
+
+  it("cleans up the goal's uploaded image (Phase 26 C) after the soft delete succeeds", async () => {
+    const { deleteAllGoalImageObjects } = await import("@spencare/domain-infra");
+    const created = await createGoal.execute(makeCtx(), { name: "T", targetAmountMinor: 100000, fundingAccountId: bankAccountId });
+    if (!created.ok) throw new Error("setup failed");
+    const result = await deleteGoal.execute(makeCtx(), { goalId: created.value.id });
+    expect(result.ok).toBe(true);
+    expect(deleteAllGoalImageObjects).toHaveBeenCalledWith(expect.anything(), "user-a", created.value.id);
+  });
+
+  it("still succeeds even if image cleanup itself throws (best-effort, non-fatal)", async () => {
+    const { deleteAllGoalImageObjects } = await import("@spencare/domain-infra");
+    vi.mocked(deleteAllGoalImageObjects).mockRejectedValueOnce(new Error("storage hiccup"));
+    const created = await createGoal.execute(makeCtx(), { name: "T", targetAmountMinor: 100000, fundingAccountId: bankAccountId });
+    if (!created.ok) throw new Error("setup failed");
+    const result = await deleteGoal.execute(makeCtx(), { goalId: created.value.id });
+    expect(result.ok).toBe(true);
+    expect(goals.get(created.value.id)!.deleted_at).not.toBeNull();
   });
 });
 

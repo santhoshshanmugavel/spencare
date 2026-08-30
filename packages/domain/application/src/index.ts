@@ -63,6 +63,13 @@ export {
   type ArchiveGoalInput,
   type DeleteGoalInput,
 } from "./commands/goals.js";
+export {
+  updateGoalImage,
+  removeGoalImage,
+  type UpdateGoalImageInput,
+  type UpdateGoalImageOutput,
+  type RemoveGoalImageInput,
+} from "./commands/goalImage.js";
 
 export {
   createBill,
@@ -126,6 +133,8 @@ export {
   getGoal,
   calculateProgress,
   listContributions,
+  resolveGoalImageUrl,
+  resolveGoalImageUrls,
 } from "./queries/goals.js";
 export { getBill, listBillPredictions } from "./queries/bills.js";
 export {
