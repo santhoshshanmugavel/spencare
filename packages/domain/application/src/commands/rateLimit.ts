@@ -18,6 +18,17 @@ export const RATE_LIMITS = {
   PASSWORD_RESET: { maxAttempts: 3, windowSeconds: 3600 },
   /** 10 OAuth-initiation attempts per 10 minutes per IP-shaped key. */
   OAUTH_INITIATE: { maxAttempts: 10, windowSeconds: 600 },
+  /**
+   * 30 requests per minute per IP-shaped key (Phase 24) -- the remote MCP
+   * endpoint (`/api/mcp`). Generous enough for a real burst of tool calls
+   * within one AI conversation (a single turn can reasonably chain
+   * several read/write/confirm calls in quick succession), tight enough
+   * to bound abuse from a malfunctioning or malicious client hammering a
+   * machine-to-machine endpoint that has no browser session/CAPTCHA of
+   * its own to fall back on. Checked before authentication, so it also
+   * blunts repeated invalid-token probing, not just legitimate traffic.
+   */
+  MCP_REQUEST: { maxAttempts: 30, windowSeconds: 60 },
 } as const;
 
 export async function checkRateLimit(client: TypedSupabaseClient, bucketKey: string, limit: { maxAttempts: number; windowSeconds: number }): Promise<boolean> {

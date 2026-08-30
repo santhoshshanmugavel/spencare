@@ -1,6 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { registerReadTools, registerWriteTools, resolveMcpAuthContextFromToken, McpAuthenticationError } from "@spencare/mcp-server";
+import { checkRateLimit, RATE_LIMITS } from "@spencare/domain-application";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
+
+/** Same best-effort client-IP-shaped key as apps/web/app/(auth)/actions.ts's clientIpKey -- a Route Handler reads the request's own headers directly rather than next/headers. */
+function clientIpKey(request: Request): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  return forwardedFor?.split(",")[0]?.trim() ?? "unknown-ip";
+}
 
 /**
  * `/api/mcp` (Phase 22) -- the REMOTE transport for the exact same MCP
@@ -36,6 +44,11 @@ import { registerReadTools, registerWriteTools, resolveMcpAuthContextFromToken, 
  * is ever registered against an unauthenticated identity, matching
  * stdio's own guarantee.
  *
+ * RATE LIMITED (Phase 24): every request, checked before the
+ * Authorization header is even parsed, against `RATE_LIMITS.MCP_REQUEST`
+ * (30/minute per IP-shaped key) -- the same Postgres-backed limiter
+ * Phase 21 built for login/signup/password-reset/OAuth-initiation.
+ *
  * STATELESS BY DESIGN (`sessionIdGenerator: undefined`): a fresh
  * `McpServer` + transport is created for every single HTTP request, never
  * reused across requests or held in memory between them. This is
@@ -52,6 +65,14 @@ import { registerReadTools, registerWriteTools, resolveMcpAuthContextFromToken, 
  * Spensa's own web chat.
  */
 async function handleMcpRequest(request: Request): Promise<Response> {
+  // Phase 24: checked before the Authorization header is even parsed, so
+  // it bounds both legitimate traffic bursts and repeated invalid-token
+  // probing equally -- see RATE_LIMITS.MCP_REQUEST's own doc comment.
+  const allowed = await checkRateLimit(createServiceRoleSupabaseClient(), `mcp:${clientIpKey(request)}`, RATE_LIMITS.MCP_REQUEST);
+  if (!allowed) {
+    return Response.json({ error: "rate_limited", message: "Too many requests. Try again shortly." }, { status: 429 });
+  }
+
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : null;
   if (!token) {

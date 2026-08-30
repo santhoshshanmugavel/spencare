@@ -20,8 +20,19 @@ vi.mock("@spencare/mcp-server", () => ({
   McpAuthenticationError: FakeMcpAuthenticationError,
 }));
 
+const checkRateLimitSpy = vi.fn(async () => true);
+vi.mock("@spencare/domain-application", () => ({
+  checkRateLimit: checkRateLimitSpy,
+  RATE_LIMITS: { MCP_REQUEST: { maxAttempts: 30, windowSeconds: 60 } },
+}));
+
+vi.mock("@/lib/supabase/service", () => ({
+  createServiceRoleSupabaseClient: vi.fn(() => ({ marker: "service-role" })),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  checkRateLimitSpy.mockResolvedValue(true);
 });
 
 function mcpRequest(body: unknown, authHeader?: string): Request {
@@ -91,5 +102,33 @@ describe("POST /api/mcp (Phase 22 remote MCP transport)", () => {
     const deleteResponse = await DELETE(new Request("http://localhost:3000/api/mcp", { method: "DELETE" }));
     expect(getResponse.status).toBe(401);
     expect(deleteResponse.status).toBe(401);
+  });
+});
+
+describe("POST /api/mcp -- rate limiting (Phase 24)", () => {
+  it("rejects a request once the IP-shaped rate limit is exceeded, before even checking for a token", async () => {
+    checkRateLimitSpy.mockResolvedValue(false);
+    const { POST } = await import("./route.js");
+
+    const response = await POST(mcpRequest(INITIALIZE_BODY, "Bearer valid-test-token"));
+
+    expect(response.status).toBe(429);
+    const body = await response.json();
+    expect(body.error).toBe("rate_limited");
+    expect(resolveMcpAuthContextFromTokenSpy).not.toHaveBeenCalled();
+    expect(registerReadToolsSpy).not.toHaveBeenCalled();
+  });
+
+  it("keys the rate limit by the request's x-forwarded-for header", async () => {
+    const { POST } = await import("./route.js");
+    const request = new Request("http://localhost:3000/api/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.9" },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+
+    await POST(request);
+
+    expect(checkRateLimitSpy).toHaveBeenCalledWith(expect.anything(), "mcp:203.0.113.9", expect.anything());
   });
 });
