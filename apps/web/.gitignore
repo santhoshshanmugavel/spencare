@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the documented placeholder-only reference (Phase 21 §environment
+# variable architecture) -- names and safe placeholders only, never a real
+# secret. Never remove this negation to "clean up" .gitignore.
+!.env.example
 
 # vercel
 .vercel

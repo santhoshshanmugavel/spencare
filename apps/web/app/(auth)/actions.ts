@@ -1,8 +1,8 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getSecurityStatus, type AuthContext } from "@spencare/domain-application";
+import { getSecurityStatus, checkRateLimit, RATE_LIMITS, type AuthContext } from "@spencare/domain-application";
 import {
   forgotPasswordSchema,
   signInSchema,
@@ -21,6 +21,15 @@ export interface AuthActionResult {
   ok: boolean;
   error?: string;
 }
+
+/** Best-effort client-IP-shaped rate-limit key (Phase 21 §12) -- `x-forwarded-for`'s first hop, since Server Actions have no raw socket to read from. Falls back to a shared bucket when absent (e.g. local dev with no proxy) rather than skipping the check entirely -- a shared fallback bucket is a safe degradation, never a silent bypass. */
+async function clientIpKey(): Promise<string> {
+  const h = await headers();
+  const forwardedFor = h.get("x-forwarded-for");
+  return forwardedFor?.split(",")[0]?.trim() ?? "unknown-ip";
+}
+
+const RATE_LIMIT_MESSAGE = "Too many attempts. Try again in a few minutes.";
 
 /** After a session is established (password or OAuth), gate on 2FA and redirect. */
 async function postAuthRedirect(redirectParam: string | null) {
@@ -72,6 +81,9 @@ export async function signUpAction(
   }
 
   const supabase = await createServerSupabaseClient();
+  const allowed = await checkRateLimit(supabase, `signup:${await clientIpKey()}`, RATE_LIMITS.SIGNUP);
+  if (!allowed) return { ok: false, error: RATE_LIMIT_MESSAGE };
+
   const { error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
@@ -96,6 +108,9 @@ export async function signInAction(
   }
 
   const supabase = await createServerSupabaseClient();
+  const allowed = await checkRateLimit(supabase, `login:${parsed.data.email.toLowerCase()}`, RATE_LIMITS.LOGIN);
+  if (!allowed) return { ok: false, error: RATE_LIMIT_MESSAGE };
+
   const { error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
@@ -109,6 +124,9 @@ export async function signInAction(
 
 export async function signInWithGoogleAction(redirectParam: string | null): Promise<void> {
   const supabase = await createServerSupabaseClient();
+  const allowed = await checkRateLimit(supabase, `oauth-initiate:${await clientIpKey()}`, RATE_LIMITS.OAUTH_INITIATE);
+  if (!allowed) redirect(`/login?error=${encodeURIComponent(RATE_LIMIT_MESSAGE)}`);
+
   const target = safeRedirectTarget(redirectParam) ?? "/home";
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -129,6 +147,13 @@ export async function forgotPasswordAction(input: ForgotPasswordInput): Promise<
   }
 
   const supabase = await createServerSupabaseClient();
+  const allowed = await checkRateLimit(supabase, `password-reset:${parsed.data.email.toLowerCase()}`, RATE_LIMITS.PASSWORD_RESET);
+  // Deliberately returns the SAME always-success shape as every other
+  // rejection path below (never reveal the rate limit was hit via a
+  // different response shape than "check your email") -- the enumeration-
+  // avoidance posture this function already documents applies here too.
+  if (!allowed) return { ok: true };
+
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: `${await origin()}/auth/callback?next=/reset-password`,
     captchaToken: parsed.data.captchaToken,

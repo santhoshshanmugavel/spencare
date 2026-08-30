@@ -268,6 +268,7 @@ export {
 } from "./commands/gmailConnection.js";
 
 export { runGmailSync, type GmailSyncSummary } from "./commands/gmailSync.js";
+export { runGmailSyncForAllConnectedUsers, type ScheduledSyncOutcome } from "./commands/gmailScheduledSync.js";
 
 export {
   listGmailCandidatesQuery,
@@ -290,3 +291,4 @@ export {
 
 export { exportUserData, type ExportBundle } from "./commands/exportData.js";
 export { deleteAccount, type DeleteAccountInput } from "./commands/deleteAccount.js";
+export { checkRateLimit, RATE_LIMITS } from "./commands/rateLimit.js";

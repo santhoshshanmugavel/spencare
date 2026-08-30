@@ -190,5 +190,23 @@ export async function purgePendingGmailCandidates(serviceClient: TypedSupabaseCl
   if (error) throw error;
 }
 
+/**
+ * Service-role only (Phase 21 §8) -- the scheduler entry point's one
+ * fan-out query: every user with a live (non-revoked, has a real
+ * encrypted token) Gmail connection, for the scheduled sync route to
+ * loop over. Never exposed to `authenticated`/`anon` -- this is
+ * cross-user by design, the exact opposite of every other function in
+ * this file.
+ */
+export async function listActiveGmailConnectionUserIds(serviceClient: TypedSupabaseClient): Promise<string[]> {
+  const { data, error } = await serviceClient
+    .from("gmail_connections")
+    .select("user_id")
+    .is("revoked_at", null)
+    .not("encrypted_refresh_token", "is", null);
+  if (error) throw error;
+  return (data ?? []).map((row) => row.user_id);
+}
+
 // Re-exported for gmailFinancialCandidatesRepo.ts's Json-typed jsonb columns.
 export type { Json };

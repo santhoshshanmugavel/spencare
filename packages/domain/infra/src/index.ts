@@ -21,3 +21,4 @@ export * from "./gmailApiClient.js";
 export * from "./gmailConnectionsRepo.js";
 export * from "./gmailFinancialCandidatesRepo.js";
 export * from "./accountDeletionRepo.js";
+export * from "./rateLimitRepo.js";
