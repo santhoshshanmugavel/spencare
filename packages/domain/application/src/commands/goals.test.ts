@@ -41,6 +41,8 @@ function pgError(message: string) {
 
 const bankAccountId = "289f5e56-21a8-4ee0-865f-c02c11f4d874";
 const creditCardAccountId = "8cad1f12-3b01-4a55-9aa9-3ce1fef58491";
+/** Phase 28: Investment IS now goal-funding-eligible (metadata only, no money movement) even though it is never a contribution source. */
+const investmentAccountId = "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d";
 /** A second bank account owned by user-a -- Phase 26's funding-account-edit target. */
 const secondBankAccountId = "b2f8f6b4-3f0f-4f3a-9c1f-2f6c1c9a1a11";
 /** Owned by a DIFFERENT user -- cross-user-account rejection case. */
@@ -53,6 +55,10 @@ function reset() {
     [
       creditCardAccountId,
       { id: creditCardAccountId, user_id: "user-a", type: "credit_card", currency: "INR", balance_minor: 0 },
+    ],
+    [
+      investmentAccountId,
+      { id: investmentAccountId, user_id: "user-a", type: "investment", currency: "INR", balance_minor: 0 },
     ],
     [
       secondBankAccountId,
@@ -229,14 +235,24 @@ describe("createGoal", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("rejects a credit card or investment account as the funding account", async () => {
+  it("rejects a credit card account as the funding account -- borrowed credit, not owned savings", async () => {
     const result = await createGoal.execute(makeCtx(), {
       name: "Test",
       targetAmountMinor: 100000,
       fundingAccountId: creditCardAccountId,
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.message).toMatch(/bank or cash/i);
+    if (!result.ok) expect(result.error.message).toMatch(/bank, cash, or investment/i);
+  });
+
+  it("Phase 28: accepts an Investment account as the funding account (metadata only, no money movement)", async () => {
+    const result = await createGoal.execute(makeCtx(), {
+      name: "Test",
+      targetAmountMinor: 100000,
+      fundingAccountId: investmentAccountId,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.funding_account_id).toBe(investmentAccountId);
   });
 
   it("rejects a zero/negative target amount before touching the database", async () => {
@@ -347,7 +363,7 @@ describe("updateGoal", () => {
       expect(goals.get(created.value.id)!.funding_account_id).toBe(bankAccountId);
     });
 
-    it("rejects a credit card/investment account, same eligibility rule as createGoal", async () => {
+    it("rejects a credit card account, same eligibility rule as createGoal", async () => {
       const created = await createGoal.execute(makeCtx(), {
         name: "T",
         targetAmountMinor: 100000,
@@ -359,7 +375,26 @@ describe("updateGoal", () => {
         fundingAccountId: creditCardAccountId,
       });
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.message).toMatch(/bank or cash/i);
+      if (!result.ok) expect(result.error.message).toMatch(/bank, cash, or investment/i);
+    });
+
+    it("Phase 28: allows changing the funding account to Investment -- never moves money or touches saved_amount_minor", async () => {
+      const created = await createGoal.execute(makeCtx(), {
+        name: "T",
+        targetAmountMinor: 100000,
+        fundingAccountId: bankAccountId,
+      });
+      if (!created.ok) throw new Error("setup failed");
+      const bankBalanceBefore = accounts.get(bankAccountId)!.balance_minor;
+      const savedBefore = goals.get(created.value.id)!.saved_amount_minor;
+      const result = await updateGoal.execute(makeCtx(), {
+        goalId: created.value.id,
+        fundingAccountId: investmentAccountId,
+      });
+      expect(result.ok).toBe(true);
+      expect(goals.get(created.value.id)!.funding_account_id).toBe(investmentAccountId);
+      expect(accounts.get(bankAccountId)!.balance_minor).toBe(bankBalanceBefore);
+      expect(goals.get(created.value.id)!.saved_amount_minor).toBe(savedBefore);
     });
 
     it("rejects another user's account (cross-user account, IDOR)", async () => {

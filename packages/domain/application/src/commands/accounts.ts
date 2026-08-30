@@ -8,6 +8,7 @@ import {
   callArchiveAccount,
   createAccount as createAccountRow,
   getAccount as getAccountRow,
+  listGoals as listGoalsRow,
   updateAccount as updateAccountRow,
   type AccountRow,
 } from "@spencare/domain-infra";
@@ -109,6 +110,28 @@ export const archiveAccount: Command<ArchiveAccountInput, AccountRow> = {
     }
     if (existing.is_archived) {
       return ok(existing); // idempotent: already archived is a success, not an error
+    }
+    // Phase 28 Part 10: archiving is this codebase's only account-removal
+    // operation (no deleteAccount exists at all -- see this file's own
+    // header comment). The `archive_account` RPC itself has no awareness
+    // of goals referencing this account as `funding_account_id`, so this
+    // is the one place that relationship can be protected. Rather than
+    // silently leaving an active goal pointing at a now-hidden account,
+    // or silently reassigning/unlinking it on the user's behalf (the
+    // mandate explicitly forbids "silently delete the relationship"),
+    // this fails closed with a clear, actionable error -- force the user
+    // to change the goal's funding account first, the same "reject with a
+    // named reason" pattern used throughout this codebase
+    // (account_not_eligible, insufficient_saved_amount, etc.).
+    const linkedActiveGoals = (await listGoalsRow(ctx.supabase, ctx.userId, {})).filter(
+      (g) => g.funding_account_id === input.accountId && g.status === "active",
+    );
+    if (linkedActiveGoals.length > 0) {
+      const names = linkedActiveGoals.map((g) => g.name).join(", ");
+      return err({
+        code: "account_linked_to_goals",
+        message: `This account funds ${linkedActiveGoals.length === 1 ? "a goal" : "goals"} (${names}). Change ${linkedActiveGoals.length === 1 ? "its" : "their"} funding account before archiving this one.`,
+      });
     }
     try {
       const row = await callArchiveAccount(ctx.supabase, ctx.userId, input.accountId);

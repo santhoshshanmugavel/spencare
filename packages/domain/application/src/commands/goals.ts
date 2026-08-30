@@ -23,6 +23,7 @@ import {
   type GoalRow,
   type TransactionRow,
 } from "@spencare/domain-infra";
+import { hasCapability } from "@spencare/domain-core";
 import { err, ok, type AuthContext, type Command, type Result } from "../types.js";
 
 /**
@@ -46,16 +47,24 @@ export const createGoal: Command<CreateGoalInput, GoalRow> = {
     if (!parsed.success) {
       return err({ code: "validation_error", message: parsed.error.issues[0]?.message ?? "Invalid goal details." });
     }
-    // domain-architecture.md §7: "funding_account_id must belong to the
-    // user and not be a Credit Card or Investment account" -- no DB
-    // constraint enforces the type restriction, so this is an explicit
-    // application-layer check, defense in depth alongside RLS ownership.
+    // Phase 28 account model: `funding_account_id` is pure metadata (a
+    // logical label the goal displays -- never consumed by a balance-
+    // mutating RPC, see the Phase 28 migration's own header comment), so
+    // it may be Bank/Cash/Investment. Credit Card is explicitly and
+    // permanently excluded (domain-architecture.md §7's original "not a
+    // Credit Card" rule; the Phase 28 override reaffirms this: "a credit
+    // card is borrowed credit, not owned savings" -- this stays true even
+    // though Credit Card *is* now Safe-to-Spend-eligible, a different
+    // concept). No DB constraint enforces the type restriction, so this
+    // is an explicit application-layer check, defense in depth alongside
+    // RLS ownership -- using the shared capability model rather than an
+    // inline type check.
     const account = await getAccountRow(ctx.supabase, ctx.userId, parsed.data.fundingAccountId);
     if (!account) {
       return err({ code: "validation_error", message: "That account doesn't exist." });
     }
-    if (account.type !== "bank" && account.type !== "cash") {
-      return err({ code: "validation_error", message: "Goals can only be funded from a bank or cash account." });
+    if (!hasCapability(account.type, "goalFunding")) {
+      return err({ code: "validation_error", message: "Goals can only be funded from a bank, cash, or investment account." });
     }
     try {
       const row = await createGoalRow(ctx.supabase, ctx.userId, {
@@ -88,16 +97,22 @@ export const updateGoal: Command<UpdateGoalCommandInput, GoalRow> = {
       return err({ code: "validation_error", message: parsed.error.issues[0]?.message ?? "Invalid goal details." });
     }
     // Phase 26: changing the funding account re-runs the exact same
-    // bank/cash-type + ownership check `createGoal` performs above --
-    // never trust that a client-supplied account id is even this user's
-    // own, let alone an eligible type, just because it parsed as a UUID.
+    // capability + ownership check `createGoal` performs above -- never
+    // trust that a client-supplied account id is even this user's own,
+    // let alone an eligible type, just because it parsed as a UUID.
+    // Phase 28: eligibility now comes from the shared capability model
+    // (Bank/Cash/Investment; Credit Card still excluded) -- and, per the
+    // Phase 28 mandate's explicit guarantee, this never moves money,
+    // creates a transaction, or touches `saved_amount_minor` either
+    // before or after this change; `updateGoalRow` below only ever
+    // updates the `goals` row's own metadata columns.
     if (parsed.data.fundingAccountId !== undefined) {
       const account = await getAccountRow(ctx.supabase, ctx.userId, parsed.data.fundingAccountId);
       if (!account) {
         return err({ code: "validation_error", message: "That account doesn't exist." });
       }
-      if (account.type !== "bank" && account.type !== "cash") {
-        return err({ code: "validation_error", message: "Goals can only be funded from a bank or cash account." });
+      if (!hasCapability(account.type, "goalFunding")) {
+        return err({ code: "validation_error", message: "Goals can only be funded from a bank, cash, or investment account." });
       }
     }
     try {

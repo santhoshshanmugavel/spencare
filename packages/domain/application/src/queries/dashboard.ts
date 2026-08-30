@@ -5,7 +5,8 @@ import { listAccounts } from "./accounts.js";
 import { listGoals } from "./goals.js";
 import { getUpcomingBills } from "./cashFlow.js";
 import { getCashFlowOverview } from "./cashFlow.js";
-import type { SafeToSpendResult } from "@spencare/domain-core";
+import { getNetWorth } from "./netWorth.js";
+import type { SafeToSpendResult, NetWorthResult } from "@spencare/domain-core";
 import type { AccountRow, GoalRow, BillPredictionWithDefinition } from "@spencare/domain-infra";
 import type { CashFlowTotals } from "@spencare/domain-core";
 
@@ -20,6 +21,15 @@ export interface DashboardSummary {
   goals: GoalRow[];
   upcomingBills: BillPredictionWithDefinition[];
   cashFlow: CashFlowTotals;
+  /**
+   * Phase 28: previously omitted (see git history on this file) because
+   * the Net Worth formula was unresolved and no `getNetWorth` query
+   * existed. The Phase 28 PRODUCT DECISION OVERRIDE resolved the formula
+   * (assets: Bank+Cash+Investment; liability: Credit Card's
+   * `credit_used_minor`) -- `getNetWorth` composes it independently of
+   * `getSafeToSpend`, no shared state between the two.
+   */
+  netWorth: NetWorthResult;
 }
 
 /**
@@ -28,24 +38,17 @@ export interface DashboardSummary {
  * phase's own report) -- Phase 16's Spensa read-tool list is the first
  * real consumer, so it is built now, composing the exact same
  * already-existing queries every other surface uses.
- *
- * `netWorth` is intentionally OMITTED from this summary. Phase 14's
- * reconnaissance found the Net Worth formula itself unresolved (does it
- * subtract `credit_used_minor` as a liability? -- an open product
- * question, never decided anywhere), and no `getNetWorth` query exists.
- * Per this phase's explicit "never invent a financial calculation"
- * instruction, this field is left out entirely rather than fabricated --
- * a real, disclosed gap, not a silent omission.
  */
 export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSummary> {
   const periodStart = currentPeriodStart();
   const periodEnd = lastDayOfMonth(periodStart);
-  const [safeToSpend, accounts, goals, upcomingBills, cashFlow] = await Promise.all([
+  const [safeToSpend, accounts, goals, upcomingBills, cashFlow, netWorth] = await Promise.all([
     getSafeToSpend(ctx),
     listAccounts(ctx),
     listGoals(ctx),
     getUpcomingBills(ctx, 5),
     getCashFlowOverview(ctx, { periodStart, periodEnd }),
+    getNetWorth(ctx),
   ]);
-  return { safeToSpend, accounts, goals, upcomingBills, cashFlow };
+  return { safeToSpend, accounts, goals, upcomingBills, cashFlow, netWorth };
 }

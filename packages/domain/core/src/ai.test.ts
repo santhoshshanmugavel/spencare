@@ -32,6 +32,38 @@ describe("redactFinancialSnapshot — Privacy Mode OFF", () => {
   });
 });
 
+describe("redactFinancialSnapshot — Phase 28: owned vs. credit-available composition", () => {
+  it("includes and redacts the composition breakdown when the caller provides it", () => {
+    const result = redactFinancialSnapshot(
+      {
+        safeToSpend: { state: "budget_and_goals", amountMinor: 9500000, currency: "INR", ownedSpendableMinor: 5500000, creditAvailableMinor: 4000000 },
+        accounts: [],
+      },
+      false,
+    );
+    expect(result.safeToSpend.ownedSpendable).toEqual({ amountMinor: 5500000, currency: "INR" });
+    expect(result.safeToSpend.creditAvailable).toEqual({ amountMinor: 4000000, currency: "INR" });
+  });
+
+  it("masks the composition breakdown too under Privacy Mode -- never a side channel around masking", () => {
+    const result = redactFinancialSnapshot(
+      {
+        safeToSpend: { state: "budget_and_goals", amountMinor: 9500000, currency: "INR", ownedSpendableMinor: 5500000, creditAvailableMinor: 4000000 },
+        accounts: [],
+      },
+      true,
+    );
+    expect(result.safeToSpend.ownedSpendable).toEqual({ private: true });
+    expect(result.safeToSpend.creditAvailable).toEqual({ private: true });
+  });
+
+  it("omits the breakdown entirely for a pre-Phase-28 caller that doesn't supply it -- backward compatible", () => {
+    const result = redactFinancialSnapshot({ safeToSpend: { state: "balance_only", amountMinor: 500000, currency: "INR" }, accounts: [] }, false);
+    expect(result.safeToSpend.ownedSpendable).toBeUndefined();
+    expect(result.safeToSpend.creditAvailable).toBeUndefined();
+  });
+});
+
 describe("redactFinancialSnapshot — Privacy Mode ON", () => {
   it("never includes the real amountMinor anywhere in the output", () => {
     const result = redactFinancialSnapshot(

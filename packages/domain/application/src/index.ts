@@ -141,6 +141,7 @@ export {
   type BudgetWithUsage,
 } from "./queries/budgets.js";
 export { getSafeToSpend } from "./queries/safeToSpend.js";
+export { getNetWorth } from "./queries/netWorth.js";
 export {
   listGoals,
   getGoal,

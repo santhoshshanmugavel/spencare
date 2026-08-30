@@ -45,6 +45,18 @@ export {
 export { calculateGoalProgress, type GoalProgress } from "./goals.js";
 
 export {
+  ACCOUNT_CAPABILITIES,
+  ACCOUNT_TYPE_LABELS,
+  hasCapability,
+  filterByCapability,
+  getSpendableMinor,
+  type AccountType,
+  type AccountCapability,
+} from "./accountCapabilities.js";
+
+export { calculateNetWorth, type NetWorthInput, type NetWorthResult } from "./netWorth.js";
+
+export {
   predictNextOccurrence,
   detectRecurring,
   type RecurrenceInterval,

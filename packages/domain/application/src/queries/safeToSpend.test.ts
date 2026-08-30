@@ -82,8 +82,8 @@ describe("getSafeToSpend — context assembly and userId propagation", () => {
     expect(listBudgetsWithUsageMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "real-user-id" }), expect.any(String));
   });
 
-  it("row 6 of the mandatory matrix: zero bank/cash accounts short-circuits to state 'no_accounts' WITHOUT calling the budget/goal/bill aggregates or the pure calculateSafeToSpend formula", async () => {
-    accountsFixture = [creditCardAccount, investmentAccount]; // accounts exist, but none are bank/cash
+  it("Phase 28: an Investment-only portfolio (zero bank/cash/credit-card accounts) short-circuits to state 'no_accounts' WITHOUT calling the budget/goal/bill aggregates or the pure calculateSafeToSpend formula -- Investment is still never Safe-to-Spend-eligible", async () => {
+    accountsFixture = [investmentAccount]; // an account exists, but it's Investment -- not spend-capacity-eligible
     listBudgetsWithUsageMock.mockClear();
     getActiveGoalsReservedTotalMock.mockClear();
     getUpcomingBillsTotalMock.mockClear();
@@ -97,7 +97,22 @@ describe("getSafeToSpend — context assembly and userId propagation", () => {
     expect(getUpcomingBillsTotalMock).not.toHaveBeenCalled();
   });
 
-  it("only bank/cash accounts become cashBalances -- credit card and investment accounts are excluded before assembly", async () => {
+  it("Phase 28 PRODUCT DECISION OVERRIDE: a credit-card-only portfolio does NOT short-circuit -- its available credit alone is a valid Safe-to-Spend input", async () => {
+    accountsFixture = [creditCardAccount];
+    budgetUsagesFixture = [];
+    goalsAggregateFixture = { count: 0, totalMinor: 0 };
+    upcomingBillsFixture = 0;
+
+    const result = await getSafeToSpend(makeCtx());
+
+    expect(result.state).not.toBe("no_accounts");
+    // limit 10,000,000 - used 5,000,000 = 5,000,000 available.
+    expect(result.availableBalance.amountMinorUnits).toBe(5000000n);
+    expect(result.creditAvailableTotal.amountMinorUnits).toBe(5000000n);
+    expect(result.ownedSpendableTotal.amountMinorUnits).toBe(0n);
+  });
+
+  it("Phase 28 PRODUCT DECISION OVERRIDE: bank + cash + credit card's AVAILABLE credit all become spending capacity; Investment's market value never does", async () => {
     accountsFixture = [bankAccount, cashAccount, creditCardAccount, investmentAccount];
     budgetUsagesFixture = [];
     goalsAggregateFixture = { count: 0, totalMinor: 0 };
@@ -105,9 +120,23 @@ describe("getSafeToSpend — context assembly and userId propagation", () => {
 
     const result = await getSafeToSpend(makeCtx());
 
-    // bank (500000) + cash (20000) = 520000; credit's 5,000,000 used and
-    // investment's 20,000,000 market value must never appear here.
-    expect(result.availableBalance.amountMinorUnits).toBe(520000n);
+    // bank (500,000) + cash (20,000) + credit available (10,000,000 -
+    // 5,000,000 = 5,000,000) = 5,520,000; investment's 20,000,000 market
+    // value must never appear here -- NOT 25,520,000.
+    expect(result.availableBalance.amountMinorUnits).toBe(5520000n);
+    expect(result.ownedSpendableTotal.amountMinorUnits).toBe(520000n);
+    expect(result.creditAvailableTotal.amountMinorUnits).toBe(5000000n);
+  });
+
+  it("Phase 28: uses the credit card's AVAILABLE credit, never its limit -- override's own worked example (limit 100,000, used 35,000 -> 65,000, not 100,000)", async () => {
+    accountsFixture = [{ ...creditCardAccount, credit_limit_minor: 10000000, credit_used_minor: 3500000 }];
+    budgetUsagesFixture = [];
+    goalsAggregateFixture = { count: 0, totalMinor: 0 };
+    upcomingBillsFixture = 0;
+
+    const result = await getSafeToSpend(makeCtx());
+
+    expect(result.availableBalance.amountMinorUnits).toBe(6500000n);
   });
 
   it("budget totals are passed through from listBudgetsWithUsage's own limit/spent sums, not recomputed", async () => {

@@ -115,12 +115,26 @@ function redactAccountSummary(a: AiAccountSummaryInput, masked: boolean): AiAcco
 }
 
 export interface AiFinancialSnapshotInput {
-  safeToSpend: { state: string; amountMinor: number; currency: string };
+  safeToSpend: {
+    state: string;
+    amountMinor: number;
+    currency: string;
+    /**
+     * Phase 28 PRODUCT DECISION OVERRIDE: the owned-money (Bank+Cash) vs.
+     * borrowed-capacity (Credit Card available credit) composition of
+     * `amountMinor`, both optional so a pre-Phase-28 caller (or a test)
+     * omitting them still produces a valid snapshot. When present, Spensa
+     * must use these to avoid describing the total as "cash in your
+     * accounts" -- see context.ts's own instructions to the model.
+     */
+    ownedSpendableMinor?: number;
+    creditAvailableMinor?: number;
+  };
   accounts: AiAccountSummaryInput[];
 }
 
 export interface AiFinancialSnapshotRedacted {
-  safeToSpend: { state: string; amount: MaybePrivateAmount };
+  safeToSpend: { state: string; amount: MaybePrivateAmount; ownedSpendable?: MaybePrivateAmount; creditAvailable?: MaybePrivateAmount };
   accounts: AiAccountSummaryRedacted[];
 }
 
@@ -128,10 +142,17 @@ export function redactFinancialSnapshot(
   input: AiFinancialSnapshotInput,
   privacyModeEnabled: boolean,
 ): AiFinancialSnapshotRedacted {
+  const currency = input.safeToSpend.currency;
   return {
     safeToSpend: {
       state: input.safeToSpend.state,
-      amount: redactAmount({ amountMinor: input.safeToSpend.amountMinor, currency: input.safeToSpend.currency }, privacyModeEnabled),
+      amount: redactAmount({ amountMinor: input.safeToSpend.amountMinor, currency }, privacyModeEnabled),
+      ...(input.safeToSpend.ownedSpendableMinor !== undefined
+        ? { ownedSpendable: redactAmount({ amountMinor: input.safeToSpend.ownedSpendableMinor, currency }, privacyModeEnabled) }
+        : {}),
+      ...(input.safeToSpend.creditAvailableMinor !== undefined
+        ? { creditAvailable: redactAmount({ amountMinor: input.safeToSpend.creditAvailableMinor, currency }, privacyModeEnabled) }
+        : {}),
     },
     accounts: input.accounts.map((a) => redactAccountSummary(a, privacyModeEnabled)),
   };

@@ -16,11 +16,21 @@ interface FakeAccount {
   updated_at: string;
 }
 
+interface FakeGoal {
+  id: string;
+  user_id: string;
+  name: string;
+  funding_account_id: string;
+  status: "active" | "completed" | "archived";
+}
+
 let accounts: Map<string, FakeAccount>;
+let goals: FakeGoal[];
 let nextId = 1;
 
 function reset() {
   accounts = new Map();
+  goals = [];
   nextId = 1;
 }
 
@@ -68,6 +78,7 @@ vi.mock("@spencare/domain-infra", () => ({
     row.is_archived = true;
     return { ...row };
   }),
+  listGoals: vi.fn(async (_client: unknown, userId: string) => goals.filter((g) => g.user_id === userId)),
 }));
 
 const { createAccount, updateAccount, archiveAccount } = await import("./accounts.js");
@@ -230,5 +241,69 @@ describe("archiveAccount — ownership and lifecycle", () => {
 
   it("is marked non-consequential (client always confirms before calling this, per confirmation-ui-specification.md §5)", () => {
     expect(archiveAccount.consequential).toBe(false);
+  });
+});
+
+describe("archiveAccount — Phase 28 Part 10: goal-funding-account protection", () => {
+  it("refuses to archive an account that actively funds a goal -- forces reassignment first, never silently unlinks", async () => {
+    const created = await createAccount.execute(makeCtx("user-a"), {
+      type: "bank",
+      name: "HDFC Bank",
+      currency: "INR",
+      balanceMinor: 500000,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    goals.push({ id: "goal-1", user_id: "user-a", name: "Emergency Fund", funding_account_id: created.value.id, status: "active" });
+
+    const result = await archiveAccount.execute(makeCtx("user-a"), { accountId: created.value.id });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("account_linked_to_goals");
+      expect(result.error.message).toMatch(/Emergency Fund/);
+    }
+    expect(accounts.get(created.value.id)!.is_archived).toBe(false);
+  });
+
+  it("allows archiving once the linked goal's funding account has been reassigned elsewhere", async () => {
+    const created = await createAccount.execute(makeCtx("user-a"), {
+      type: "bank",
+      name: "HDFC Bank",
+      currency: "INR",
+      balanceMinor: 500000,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    goals.push({ id: "goal-1", user_id: "user-a", name: "Emergency Fund", funding_account_id: "some-other-account", status: "active" });
+
+    const result = await archiveAccount.execute(makeCtx("user-a"), { accountId: created.value.id });
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not block archiving over a goal that is already archived/completed, only active goals", async () => {
+    const created = await createAccount.execute(makeCtx("user-a"), {
+      type: "bank",
+      name: "HDFC Bank",
+      currency: "INR",
+      balanceMinor: 500000,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    goals.push({ id: "goal-1", user_id: "user-a", name: "Old Goal", funding_account_id: created.value.id, status: "completed" });
+
+    const result = await archiveAccount.execute(makeCtx("user-a"), { accountId: created.value.id });
+    expect(result.ok).toBe(true);
+  });
+
+  it("applies the same protection to Cash and Investment accounts, not just Bank", async () => {
+    const investment = await createAccount.execute(makeCtx("user-a"), {
+      type: "investment",
+      name: "Mutual Fund",
+      currency: "INR",
+      marketValueMinor: 3_000_000,
+    } as never);
+    if (!investment.ok) throw new Error("setup failed");
+    goals.push({ id: "goal-1", user_id: "user-a", name: "House Down Payment", funding_account_id: investment.value.id, status: "active" });
+
+    const result = await archiveAccount.execute(makeCtx("user-a"), { accountId: investment.value.id });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("account_linked_to_goals");
   });
 });
