@@ -50,7 +50,6 @@ export default async function McpSettingsPage() {
               label: "Settings",
               icon: <SettingsIcon className="size-5" />,
               href: "/settings/profile",
-              active: true,
             },
           ]}
         />

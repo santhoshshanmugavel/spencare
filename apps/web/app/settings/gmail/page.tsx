@@ -63,7 +63,6 @@ export default async function GmailSettingsPage(props: PageProps<"/settings/gmai
               label: "Settings",
               icon: <SettingsIcon className="size-5" />,
               href: "/settings/profile",
-              active: true,
             },
           ]}
         />

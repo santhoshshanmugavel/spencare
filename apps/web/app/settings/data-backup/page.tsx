@@ -45,7 +45,6 @@ export default async function DataBackupSettingsPage() {
               label: "Settings",
               icon: <SettingsIcon className="size-5" />,
               href: "/settings/profile",
-              active: true,
             },
           ]}
         />

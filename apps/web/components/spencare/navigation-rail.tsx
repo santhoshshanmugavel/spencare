@@ -1,8 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { isNavItemActive } from "@/lib/navigation";
 
 /**
  * <NavigationRail> — the persistent left icon rail, confirmed identical
@@ -12,6 +14,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
  * hover labels rather than the screen-evidenced quick-reply-chip token,
  * per design-system-specification.md §6's accessibility correction
  * (a tooltip must be non-interactive; a quick-reply chip is not).
+ *
+ * Phase 28 Part 1: `active` is now derived from the real pathname
+ * (`usePathname()` + `isNavItemActive`, see lib/navigation.ts) rather than
+ * a boolean each of the 15 call sites used to hardcode by hand -- that
+ * self-reported flag could silently drift from the actual route (e.g. it
+ * never existed at all on the Spensa chat route). `item.active` is still
+ * accepted as an explicit override for a caller with a genuine reason to
+ * force a state, but no call site in this app sets it anymore.
  */
 
 export interface NavigationRailItem {
@@ -19,6 +29,7 @@ export interface NavigationRailItem {
   label: string;
   icon: ReactNode;
   href: string;
+  /** Explicit override only -- omit this and let the rail derive it from the current pathname. */
   active?: boolean;
 }
 
@@ -40,6 +51,8 @@ export function NavigationRail({
   onNavigate,
   className,
 }: NavigationRailProps) {
+  const pathname = usePathname();
+
   return (
     <nav
       aria-label="Primary"
@@ -51,35 +64,38 @@ export function NavigationRail({
       <div className="mb-4">{brand}</div>
 
       <ul className="flex flex-1 flex-col items-center gap-1">
-        {items.map((item) => (
-          <li key={item.key}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <a
-                  href={item.href}
-                  aria-current={item.active ? "page" : undefined}
-                  onClick={(e) => {
-                    if (onNavigate) {
-                      e.preventDefault();
-                      onNavigate(item);
-                    }
-                  }}
-                  className={cn(
-                    "flex size-11 items-center justify-center rounded-full transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    item.active
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  <span aria-hidden="true">{item.icon}</span>
-                  <span className="sr-only">{item.label}</span>
-                </a>
-              </TooltipTrigger>
-              <TooltipContent side="right">{item.label}</TooltipContent>
-            </Tooltip>
-          </li>
-        ))}
+        {items.map((item) => {
+          const active = item.active ?? isNavItemActive(pathname, item.href);
+          return (
+            <li key={item.key}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    onClick={(e) => {
+                      if (onNavigate) {
+                        e.preventDefault();
+                        onNavigate(item);
+                      }
+                    }}
+                    className={cn(
+                      "flex size-11 items-center justify-center rounded-full transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    )}
+                  >
+                    <span aria-hidden="true">{item.icon}</span>
+                    <span className="sr-only">{item.label}</span>
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent side="right">{item.label}</TooltipContent>
+              </Tooltip>
+            </li>
+          );
+        })}
       </ul>
 
       {extraFooterSlot ? <div className="mb-2">{extraFooterSlot}</div> : null}

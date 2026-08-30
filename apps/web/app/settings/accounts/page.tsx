@@ -34,7 +34,6 @@ export default async function AccountsSettingsPage() {
               label: "Settings",
               icon: <SettingsIcon className="size-5" />,
               href: "/settings/profile",
-              active: true,
             },
           ]}
         />

@@ -48,7 +48,6 @@ export default async function BillsPage() {
               label: "Cash Flow",
               icon: <ArrowLeftRight className="size-5" />,
               href: "/cash-flow",
-              active: true,
             },
             { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             {

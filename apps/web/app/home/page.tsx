@@ -73,7 +73,7 @@ export default async function HomePage() {
         <NavigationRail
           brand={<span className="text-lg font-bold text-primary">S</span>}
           items={[
-            { key: "home", label: "Home", icon: <HomeIcon className="size-5" />, href: "/home", active: true },
+            { key: "home", label: "Home", icon: <HomeIcon className="size-5" />, href: "/home" },
             {
               key: "cash-flow",
               label: "Cash Flow",
