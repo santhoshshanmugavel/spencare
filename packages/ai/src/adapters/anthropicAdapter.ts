@@ -1,5 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { MalformedProviderResponseError, ProviderOutageError, ProviderRateLimitError } from "../provider.js";
+import {
+  MalformedProviderResponseError,
+  ProviderAuthenticationError,
+  ProviderInvalidRequestError,
+  ProviderModelNotFoundError,
+  ProviderOutageError,
+  ProviderPermissionError,
+  ProviderRateLimitError,
+} from "../provider.js";
 import type { AiEvent, AiProviderAdapter, ChatMessage, ToolDefinition } from "../provider.js";
 
 /**
@@ -73,8 +81,27 @@ export class AnthropicAdapter implements AiProviderAdapter {
       }
       yield { type: "message_stop" };
     } catch (err) {
+      // Phase 27 §7: distinguish WHY the provider rejected the request --
+      // never collapse a bad/revoked key, a permission/billing problem, a
+      // missing model, and a genuinely malformed response into one
+      // generic bucket. Anthropic's own SDK already exposes exactly this
+      // status-code taxonomy as distinct classes; this just maps them
+      // onto Spensa's provider-agnostic equivalents (provider.ts) rather
+      // than inventing a new one.
       if (err instanceof Anthropic.RateLimitError) {
         throw new ProviderRateLimitError();
+      }
+      if (err instanceof Anthropic.AuthenticationError) {
+        throw new ProviderAuthenticationError(err.message);
+      }
+      if (err instanceof Anthropic.PermissionDeniedError) {
+        throw new ProviderPermissionError(err.message);
+      }
+      if (err instanceof Anthropic.NotFoundError) {
+        throw new ProviderModelNotFoundError(err.message);
+      }
+      if (err instanceof Anthropic.BadRequestError || err instanceof Anthropic.UnprocessableEntityError) {
+        throw new ProviderInvalidRequestError(err.message);
       }
       if (err instanceof Anthropic.APIConnectionError || err instanceof Anthropic.InternalServerError) {
         throw new ProviderOutageError();

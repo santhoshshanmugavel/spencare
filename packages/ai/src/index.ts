@@ -1,5 +1,15 @@
 export type { AiProviderAdapter, AiProviderName, AiEvent, ChatMessage, ToolDefinition } from "./provider.js";
-export { ProviderOutageError, ProviderRateLimitError, MalformedProviderResponseError, NoProviderConfiguredError, ProviderNotImplementedError } from "./provider.js";
+export {
+  ProviderOutageError,
+  ProviderRateLimitError,
+  MalformedProviderResponseError,
+  NoProviderConfiguredError,
+  ProviderNotImplementedError,
+  ProviderAuthenticationError,
+  ProviderPermissionError,
+  ProviderModelNotFoundError,
+  ProviderInvalidRequestError,
+} from "./provider.js";
 
 export { AnthropicAdapter } from "./adapters/anthropicAdapter.js";
 export { FakeAiProviderAdapter, type FakeScenario } from "./adapters/fakeAdapter.js";

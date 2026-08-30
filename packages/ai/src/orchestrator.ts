@@ -15,7 +15,16 @@ import { buildAiContext } from "./context.js";
 import { resolveProviderAdapter } from "./resolver.js";
 import { getToolDefinitions, executeTool } from "./tools/registry.js";
 import type { AiEvent, AiProviderAdapter, ChatMessage, ToolDefinition } from "./provider.js";
-import { NoProviderConfiguredError, ProviderOutageError, ProviderRateLimitError, MalformedProviderResponseError } from "./provider.js";
+import {
+  NoProviderConfiguredError,
+  ProviderOutageError,
+  ProviderRateLimitError,
+  MalformedProviderResponseError,
+  ProviderAuthenticationError,
+  ProviderPermissionError,
+  ProviderModelNotFoundError,
+  ProviderInvalidRequestError,
+} from "./provider.js";
 import { SPENSA_SYSTEM_PROMPT } from "./systemPrompt.js";
 
 /**
@@ -224,10 +233,19 @@ export async function* sendMessage(ctx: AuthContext, rawInput: SendMessageInput,
         }
       }
     } catch (err) {
-      const message =
-        err instanceof ProviderOutageError || err instanceof ProviderRateLimitError || err instanceof MalformedProviderResponseError
-          ? err.message
-          : "Spensa is unavailable right now.";
+      // Phase 27 §7: each of these carries its own specific, actionable
+      // message (see provider.ts) -- surfaced as-is rather than collapsed
+      // into the generic fallback, which is now reserved for a truly
+      // unrecognized error only.
+      const isKnownProviderError =
+        err instanceof ProviderOutageError ||
+        err instanceof ProviderRateLimitError ||
+        err instanceof MalformedProviderResponseError ||
+        err instanceof ProviderAuthenticationError ||
+        err instanceof ProviderPermissionError ||
+        err instanceof ProviderModelNotFoundError ||
+        err instanceof ProviderInvalidRequestError;
+      const message = isKnownProviderError ? (err as Error).message : "Spensa is unavailable right now.";
       await insertMessage(ctx.supabase, conversationId, "assistant", { kind: "error", message });
       yield { type: "error", message };
       return;

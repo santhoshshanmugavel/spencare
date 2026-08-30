@@ -64,6 +64,44 @@ export class MalformedProviderResponseError extends Error {
   }
 }
 
+/**
+ * Phase 27 §7 -- distinct, provider-agnostic error categories so a 401
+ * ("your key is bad, reconnect it") is never collapsed into the same
+ * bucket as a 403 ("your plan/billing doesn't allow this") or a 404
+ * ("that model isn't available to you"), the way everything but
+ * rate-limit/outage previously fell into the generic
+ * `MalformedProviderResponseError`. Any future non-Anthropic adapter
+ * should map its own SDK's equivalent status codes onto these same four
+ * classes, not invent new ones per provider.
+ */
+export class ProviderAuthenticationError extends Error {
+  constructor(message = "Your AI provider credential is invalid or has been revoked. Reconnect it in Settings.") {
+    super(message);
+    this.name = "ProviderAuthenticationError";
+  }
+}
+
+export class ProviderPermissionError extends Error {
+  constructor(message = "Your AI provider account doesn't have permission for this -- check your plan, billing, or model access.") {
+    super(message);
+    this.name = "ProviderPermissionError";
+  }
+}
+
+export class ProviderModelNotFoundError extends Error {
+  constructor(message = "The configured AI model isn't available on this account.") {
+    super(message);
+    this.name = "ProviderModelNotFoundError";
+  }
+}
+
+export class ProviderInvalidRequestError extends Error {
+  constructor(message = "Spensa sent an invalid request to the AI provider.") {
+    super(message);
+    this.name = "ProviderInvalidRequestError";
+  }
+}
+
 export class NoProviderConfiguredError extends Error {
   constructor(message = "Connect an AI provider in Settings to start using Spensa.") {
     super(message);
