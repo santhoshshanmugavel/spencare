@@ -1,6 +1,6 @@
 import type { AuthContext } from "@spencare/domain-application";
 import { getProfile } from "@spencare/domain-application";
-import { MAX_TOOL_CALL_DEPTH, MAX_CONTEXT_MESSAGE_COUNT } from "@spencare/domain-core";
+import { MAX_TOOL_CALL_DEPTH, MAX_CONTEXT_MESSAGE_COUNT, redactFinancialText } from "@spencare/domain-core";
 import { sendMessageSchema, type SendMessageInput, type ConfirmationCommandType } from "@spencare/validation";
 import {
   createConversation,
@@ -172,7 +172,21 @@ export async function* sendMessage(ctx: AuthContext, rawInput: SendMessageInput,
       for await (const event of chatWithRetry(adapter, messages, tools, SPENSA_SYSTEM_PROMPT)) {
         if (event.type === "text_delta") {
           finalText += event.text;
-          yield { type: "text_delta", text: event.text };
+          // Phase 27: Spensa's own generated prose is not a structured
+          // field the way AiContext/tool results are, so nothing
+          // upstream guarantees it never contains a real currency figure
+          // (redactFinancialText's own doc comment explains why). A
+          // currency figure can straddle two streamed chunks (e.g.
+          // "...₹10," then "000..."), so redacting per-delta is unsafe --
+          // when Privacy Mode is on, raw deltas are never streamed at
+          // all; the fully-assembled, redacted text is emitted as a
+          // single delta once the model's turn completes instead (below).
+          // This trades live token-by-token animation for a real privacy
+          // guarantee, only for Privacy Mode users -- unchanged behavior
+          // otherwise.
+          if (!privacyModeEnabled) {
+            yield { type: "text_delta", text: event.text };
+          }
         } else if (event.type === "error") {
           await insertMessage(ctx.supabase, conversationId, "assistant", { kind: "error", message: event.message });
           yield { type: "error", message: event.message };
@@ -222,8 +236,19 @@ export async function* sendMessage(ctx: AuthContext, rawInput: SendMessageInput,
     if (!sawToolCall) break;
   }
 
-  if (finalText.length > 0) {
-    const saved = await insertMessage(ctx.supabase, conversationId, "assistant", { kind: "text", text: finalText });
+  // Persisted (and, for Privacy Mode, streamed) text always goes through
+  // this redaction pass -- a no-op when Privacy Mode is off, so behavior
+  // for the common case is byte-for-byte unchanged. Persisting the
+  // REDACTED text (not the raw one) also means a future turn's
+  // conversation-history replay (`toChatMessages`, above) can never
+  // resurface a real figure this message might otherwise have contained.
+  const outputText = redactFinancialText(finalText, privacyModeEnabled);
+
+  if (outputText.length > 0) {
+    if (privacyModeEnabled) {
+      yield { type: "text_delta", text: outputText };
+    }
+    const saved = await insertMessage(ctx.supabase, conversationId, "assistant", { kind: "text", text: outputText });
     await touchConversation(ctx.supabase, ctx.userId, conversationId);
     yield { type: "message_complete", messageId: saved.id };
   } else {

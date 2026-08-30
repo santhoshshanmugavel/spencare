@@ -255,6 +255,44 @@ export function describeAmountForProvider(amountMinor: number, currency: string,
   return `${currency} ${major}`;
 }
 
+/**
+ * Phase 27 -- deterministic, defense-in-depth redaction for Spensa's OWN
+ * free-form generated text, applied server-side right before that text is
+ * streamed to the client or persisted to `ai_messages`.
+ *
+ * Every structured input the model receives (AiContext, every read tool's
+ * result -- see `redactFinancialSnapshot`/`redactBudgetSummaries`/etc.
+ * above) is already redacted before it ever reaches the model, so the
+ * model has no REAL figure of the app's own data to leak in the first
+ * place. But the model's generated prose is not itself a structured
+ * field -- nothing upstream can guarantee it never contains a currency
+ * figure (the model could echo/paraphrase a number the user themselves
+ * typed, or otherwise synthesize one in free text) -- so relying on the
+ * system prompt alone to ask it not to ("please don't reveal exact
+ * amounts") is not a real guarantee. This is that guarantee: a plain
+ * regex pass over the actual output text.
+ *
+ * Deliberately narrow in scope -- matches only a token immediately
+ * preceded by a recognized currency marker (₹, "Rs"/"Rs.", or "INR",
+ * case-insensitive), with its digits (any comma grouping) and optional
+ * decimal portion, plus an optional leading minus sign either side of the
+ * marker. It does NOT attempt to redact a bare number "in financial
+ * context" with no currency marker at all -- reliably telling a financial
+ * bare number apart from a year, an ID, a percentage, or a date is not
+ * something a deterministic pass can do safely, and getting that wrong
+ * would violate the very same requirement (never redact a year/ID/
+ * percentage/date) this function exists to uphold. That is a deliberate,
+ * disclosed scope boundary, not an oversight.
+ */
+export function redactFinancialText(text: string, privacyModeEnabled: boolean): string {
+  if (!privacyModeEnabled) return text;
+  const pattern = /-?(₹|Rs\.?|INR)\s?-?\d{1,3}(?:,\d{1,3})*(?:\.\d+)?/gi;
+  return text.replace(pattern, (match) => {
+    const marker = match.match(/₹|Rs\.?|INR/i)?.[0] ?? "₹";
+    return `${marker}*`;
+  });
+}
+
 /** Safety limits (Phase 16 §14 -- implementation-defined, not source-specified; kept isolated and named so they're easy to find/tune). */
 export const MAX_TOOL_CALL_DEPTH = 6;
 export const MAX_CONTEXT_MESSAGE_COUNT = 40;

@@ -230,6 +230,7 @@ export function CashFlowOverview({
                   masked={masked}
                   size="hero"
                   tone="neutral"
+                  className="text-3xl min-[375px]:text-4xl"
                 />
               </div>
             </>
@@ -244,6 +245,7 @@ export function CashFlowOverview({
                   masked={masked}
                   size="hero"
                   tone="auto"
+                  className="text-3xl min-[375px]:text-4xl"
                 />
               </div>
             </>

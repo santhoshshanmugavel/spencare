@@ -465,3 +465,53 @@ describe("sendMessage — rate-limit retry (Spensa Spec v1.0 Correction Pass, Co
     expect(calls).toBe(2); // the original attempt + exactly one retry, never more
   });
 });
+
+describe("sendMessage — Privacy Mode redacts Spensa's OWN free-form text (Phase 27)", () => {
+  it("redacts a real currency figure the model generated in its own prose before streaming or persisting it", async () => {
+    const { app } = await setupBaseMocks();
+    vi.mocked(app.getProfile).mockResolvedValue({ privacy_mode_enabled: true, preferred_currency: "INR" } as never);
+    const infra = await import("@spencare/domain-infra");
+    const fake = new FakeAiProviderAdapter([{ kind: "text", text: "You have ₹5,000 available to spend today." }]);
+
+    const { sendMessage } = await import("./orchestrator.js");
+    const events: unknown[] = [];
+    for await (const event of sendMessage(ctx, { conversationId: "289f5e56-21a8-4ee0-865f-c02c11f4d874", content: "How much can I spend?" }, { adapterOverride: fake })) {
+      events.push(event);
+    }
+
+    // Nothing resembling the real figure ever crosses the stream.
+    const streamed = JSON.stringify(events);
+    expect(streamed).not.toContain("5,000");
+    expect(streamed).not.toContain("5000");
+    expect(streamed).toContain("₹*");
+
+    // Nor does it reach storage -- a later turn's conversation-history
+    // replay must never be able to resurface it either.
+    const persistedTextCall = vi.mocked(infra.insertMessage).mock.calls.find(
+      (call) => call[2] === "assistant" && (call[3] as { kind: string }).kind === "text",
+    );
+    expect(persistedTextCall).toBeDefined();
+    const persistedContent = persistedTextCall?.[3] as { kind: "text"; text: string };
+    expect(persistedContent.text).not.toContain("5,000");
+    expect(persistedContent.text).toContain("₹*");
+  });
+
+  it("passes the model's real text through completely unchanged when Privacy Mode is off", async () => {
+    await setupBaseMocks(); // privacy_mode_enabled: false by default
+    const infra = await import("@spencare/domain-infra");
+    const fake = new FakeAiProviderAdapter([{ kind: "text", text: "You have ₹5,000 available to spend today." }]);
+
+    const { sendMessage } = await import("./orchestrator.js");
+    const events: unknown[] = [];
+    for await (const event of sendMessage(ctx, { conversationId: "289f5e56-21a8-4ee0-865f-c02c11f4d874", content: "How much can I spend?" }, { adapterOverride: fake })) {
+      events.push(event);
+    }
+
+    expect(JSON.stringify(events)).toContain("₹5,000");
+    const persistedTextCall = vi.mocked(infra.insertMessage).mock.calls.find(
+      (call) => call[2] === "assistant" && (call[3] as { kind: string }).kind === "text",
+    );
+    const persistedContent = persistedTextCall?.[3] as { kind: "text"; text: string };
+    expect(persistedContent.text).toBe("You have ₹5,000 available to spend today.");
+  });
+});

@@ -114,6 +114,7 @@ export {
   redactBillSummaries,
   redactCashFlowSummary,
   describeAmountForProvider,
+  redactFinancialText,
   calculateCreditUtilization,
   MAX_TOOL_CALL_DEPTH,
   MAX_CONTEXT_MESSAGE_COUNT,

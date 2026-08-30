@@ -121,6 +121,7 @@ export function GoalDetailDialog({
                 masked={masked}
                 size="hero"
                 tone={isReached ? "positive" : "neutral"}
+                className="text-2xl min-[375px]:text-3xl sm:text-4xl"
               />
               {!isReached ? (
                 <p className="text-sm text-muted-foreground">

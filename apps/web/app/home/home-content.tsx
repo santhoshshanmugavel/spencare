@@ -83,7 +83,13 @@ export function HomeContent({
                   masked={masked}
                   size="hero"
                   tone="auto"
-                  className="text-5xl"
+                  // Phase 27 fix: a bare text-5xl overflowed its card at
+                  // 320-375px (found live, not just here -- the same gap
+                  // existed on Budgets/Cash Flow's hero figures, all
+                  // fixed the same way). Scales down at narrow widths,
+                  // restores the original text-5xl from sm: up --
+                  // desktop is unchanged.
+                  className="text-3xl min-[375px]:text-4xl sm:text-5xl"
                 />
               </div>
             </>

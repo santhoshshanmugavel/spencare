@@ -6,6 +6,7 @@ import {
   redactBillSummaries,
   redactCashFlowSummary,
   describeAmountForProvider,
+  redactFinancialText,
   calculateCreditUtilization,
   type AiAccountSummaryInput,
 } from "./ai.js";
@@ -160,5 +161,83 @@ describe("describeAmountForProvider", () => {
     const result = describeAmountForProvider(50000, "INR", true);
     expect(result).not.toMatch(/500|50000/);
     expect(result).toContain("private");
+  });
+});
+
+describe("redactFinancialText -- Phase 27 defense-in-depth redaction of Spensa's own free-form output", () => {
+  it("passes text through completely unchanged when Privacy Mode is off", () => {
+    const text = "You spent ₹10,000 on Dining this month, which is 78% of your ₹12,800 budget.";
+    expect(redactFinancialText(text, false)).toBe(text);
+  });
+
+  it("redacts a plain ₹ amount with comma grouping", () => {
+    expect(redactFinancialText("You spent ₹10,000 on Dining.", true)).toBe("You spent ₹* on Dining.");
+  });
+
+  it("redacts a ₹ amount with a decimal portion", () => {
+    expect(redactFinancialText("Safe to Spend is ₹7,250.00 right now.", true)).toBe("Safe to Spend is ₹* right now.");
+  });
+
+  it("redacts every occurrence in a sentence with multiple amounts", () => {
+    expect(redactFinancialText("Budget: ₹10,000, spent: ₹4,500, remaining: ₹5,500.", true)).toBe(
+      "Budget: ₹*, spent: ₹*, remaining: ₹*.",
+    );
+  });
+
+  it("redacts an amount with no comma grouping (small figure)", () => {
+    expect(redactFinancialText("Your coffee cost ₹150 today.", true)).toBe("Your coffee cost ₹* today.");
+  });
+
+  it("redacts a negative amount, sign included", () => {
+    expect(redactFinancialText("You're -₹500 over budget this month.", true)).toBe("You're ₹* over budget this month.");
+  });
+
+  it("redacts 'Rs.' and 'Rs' prefixed amounts, preserving the marker used", () => {
+    expect(redactFinancialText("That's about Rs. 2,500.", true)).toBe("That's about Rs.*.");
+    expect(redactFinancialText("That's about Rs 2,500.", true)).toBe("That's about Rs*.");
+  });
+
+  it("redacts 'INR' prefixed amounts case-insensitively", () => {
+    expect(redactFinancialText("The total is INR 45,000.", true)).toBe("The total is INR*.");
+    expect(redactFinancialText("The total is inr 45,000.", true)).toBe("The total is inr*.");
+  });
+
+  it("never redacts a bare year with no currency marker", () => {
+    expect(redactFinancialText("Your goal target date is in 2026.", true)).toBe("Your goal target date is in 2026.");
+  });
+
+  it("never redacts a percentage with no currency marker", () => {
+    expect(redactFinancialText("You've used 78% of your Dining budget.", true)).toBe("You've used 78% of your Dining budget.");
+  });
+
+  it("never redacts a plain date with no currency marker", () => {
+    expect(redactFinancialText("Your bill is due on 30/08/2026.", true)).toBe("Your bill is due on 30/08/2026.");
+  });
+
+  it("never redacts a bare number with no currency marker, even in an obviously financial sentence", () => {
+    // Deliberate scope boundary (see redactFinancialText's own doc
+    // comment): a bare number cannot be reliably distinguished from a
+    // year/ID/percentage/date without a marker, so it is left untouched
+    // rather than risk over-redacting non-financial numbers.
+    expect(redactFinancialText("I saved 10000 for my trip this year.", true)).toBe("I saved 10000 for my trip this year.");
+  });
+
+  it("never redacts an unrelated ID-shaped or count-shaped number", () => {
+    expect(redactFinancialText("You have 3 upcoming bills and 12 transactions this month.", true)).toBe(
+      "You have 3 upcoming bills and 12 transactions this month.",
+    );
+  });
+
+  it("handles an amount at the very start and end of the text", () => {
+    expect(redactFinancialText("₹1,000 is what you spent, total ₹2,000", true)).toBe("₹* is what you spent, total ₹*");
+  });
+
+  it("redacts an amount using Indian lakh-style comma grouping (2-digit groups)", () => {
+    expect(redactFinancialText("Your balance is ₹1,00,000 today.", true)).toBe("Your balance is ₹* today.");
+  });
+
+  it("leaves non-currency text completely untouched when there is nothing to redact", () => {
+    const text = "You're on track with your Emergency Fund goal. Keep it up!";
+    expect(redactFinancialText(text, true)).toBe(text);
   });
 });

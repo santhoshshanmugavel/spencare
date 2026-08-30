@@ -163,15 +163,26 @@ export function BudgetDashboard({
         <>
           <Card>
             <CardContent className="space-y-2 py-5">
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm font-medium text-muted-foreground">
-                  {totalRemaining < 0 ? "Over budget" : "Budget remaining"}
-                </span>
+              {/*
+                Phase 27 fix: this used to put the label and the hero
+                figure side-by-side in one `justify-between` row, which
+                overflowed at 320-375px (a long label plus a large
+                `text-4xl` figure have no room to share one line). Home's
+                own Safe-to-Spend card (home-content.tsx) already solved
+                this correctly -- label on its own line, hero figure
+                stacked below -- so this now matches that exact pattern
+                instead of inventing a new one.
+              */}
+              <span className="text-sm font-medium text-muted-foreground">
+                {totalRemaining < 0 ? "Over budget" : "Budget remaining"}
+              </span>
+              <div>
                 <Money
                   value={DomainMoney.fromMinorUnits(BigInt(remainingDisplay(totalRemaining).magnitude), CURRENCY as never)}
                   masked={masked}
                   size="hero"
                   tone={remainingDisplay(totalRemaining).tone}
+                  className="text-2xl min-[375px]:text-3xl sm:text-4xl"
                 />
               </div>
               <Progress
