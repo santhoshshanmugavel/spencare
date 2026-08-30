@@ -61,13 +61,18 @@ module.exports = {
       severity: "error",
       from: { path: "^packages/domain/core" },
       to: {
+        // Anchored on the `node_modules/` resolution boundary -- an
+        // unanchored substring like "openai" would also match this
+        // repo's OWN `adapters/openaiAdapter.ts` filename (a real false
+        // positive found live when openaiAdapter.ts was added), which is
+        // never the intent of an SDK-import ban.
         path: [
           "^react",
-          "@supabase/supabase-js",
-          "@anthropic-ai",
-          "openai",
-          "@google/generative-ai",
-          "@google/genai",
+          "node_modules/@supabase/supabase-js",
+          "node_modules/@anthropic-ai",
+          "node_modules/openai",
+          "node_modules/@google/generative-ai",
+          "node_modules/@google/genai",
         ],
       },
     },
@@ -94,7 +99,18 @@ module.exports = {
       severity: "error",
       from: { path: "^packages/ai/src", pathNot: "^packages/ai/src/adapters" },
       to: {
-        path: ["@anthropic-ai", "openai", "@google/generative-ai", "@google/genai"],
+        // Same `node_modules/`-anchored fix as domain-core-is-pure above
+        // -- this rule's own file (resolver.ts) legitimately imports
+        // adapters/openaiAdapter.ts and adapters/geminiAdapter.ts (that's
+        // the one sanctioned place outside `adapters/` allowed to
+        // reference an adapter file by name), which an unanchored
+        // "openai" substring match would have wrongly flagged.
+        path: [
+          "node_modules/@anthropic-ai",
+          "node_modules/openai",
+          "node_modules/@google/generative-ai",
+          "node_modules/@google/genai",
+        ],
       },
     },
   ],
