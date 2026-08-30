@@ -54,6 +54,25 @@ describe("connectProvider — validate-then-write, never the reverse", () => {
     expect(vi.mocked(infra.replaceActiveCredential)).not.toHaveBeenCalled();
   });
 
+  it("a provider/model-availability failure (tagged not-a-key-problem by the adapter) is never reported as an invalid key -- the real bug this fixed", async () => {
+    const infra = await import("@spencare/domain-infra");
+    const resolver = await import("./resolver.js");
+    vi.mocked(resolver.buildAdapterForProvider).mockReturnValue(
+      fakeAdapter({ valid: false, error: "provider_error (not a key problem): model: claude-3-5-haiku-latest is deprecated (invalid_request_error)" }),
+    );
+
+    const { connectProvider } = await import("./providerManagement.js");
+    const result = await connectProvider(ctx, { provider: "anthropic", apiKey: "sk-a-perfectly-valid-key" });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("invalid_key");
+      expect(result.error.message).not.toBe("That API key appears to be invalid.");
+      expect(result.error.message).toMatch(/unrelated to your key/i);
+    }
+    expect(vi.mocked(infra.replaceActiveCredential)).not.toHaveBeenCalled();
+  });
+
   it("rejects an unimplemented provider structurally, before ever building an adapter or persisting", async () => {
     const infra = await import("@spencare/domain-infra");
     const resolver = await import("./resolver.js");

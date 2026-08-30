@@ -54,6 +54,16 @@ export type ProviderMutationResult = { ok: true; status: AiProviderStatus } | { 
  */
 function toSafeValidationMessage(rawError: string | undefined): string {
   const text = (rawError ?? "").toLowerCase();
+  // An adapter tags any error it knows is NOT about the key itself (a
+  // stale/unavailable model, a malformed request, etc.) with this prefix
+  // -- checked first so it can never fall through into the "invalid"
+  // substring match below, which is exactly the misdiagnosis a
+  // deprecated hardcoded model ID once caused (real defect, found live:
+  // Anthropic's own "invalid_request_error" type string for a bad model
+  // name contains the word "invalid" too).
+  if (text.includes("provider_error (not a key problem)")) {
+    return "The provider rejected this request for a reason unrelated to your key. Try again shortly, or contact support if this persists.";
+  }
   if (text.includes("401") || text.includes("unauthorized") || text.includes("authentication") || text.includes("invalid")) {
     return "That API key appears to be invalid.";
   }
@@ -87,6 +97,12 @@ async function validateAndReplace(ctx: AuthContext, provider: AiProvider, apiKey
   const adapter = buildAdapterForProvider(provider, apiKey);
   const validation = await adapter.validateKey(apiKey);
   if (!validation.valid) {
+    // Server-side only -- never sent to the client (the message returned
+    // below is always the pre-sanitized, safe category). Without this,
+    // a genuine provider/model-availability failure was previously
+    // undiagnosable from outside a debugger: the raw reason reached
+    // neither the user (correctly redacted) nor any log (a real gap).
+    console.error(`[providerManagement] ${provider} key validation failed:`, validation.error);
     return { ok: false, error: { code: "invalid_key", message: toSafeValidationMessage(validation.error) } };
   }
 

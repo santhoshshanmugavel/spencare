@@ -194,6 +194,9 @@ export function AiProviderManager({
                   id="updateApiKey"
                   type="password"
                   autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-bwignore
                   aria-invalid={!!updateForm.formState.errors.apiKey}
                   aria-describedby={updateForm.formState.errors.apiKey ? errorId("updateApiKey") : undefined}
                   {...updateForm.register("apiKey")}
@@ -233,6 +236,9 @@ export function AiProviderManager({
                   id="connectApiKey"
                   type="password"
                   autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-bwignore
                   aria-invalid={!!connectForm.formState.errors.apiKey}
                   aria-describedby={connectForm.formState.errors.apiKey ? errorId("connectApiKey") : undefined}
                   {...connectForm.register("apiKey")}

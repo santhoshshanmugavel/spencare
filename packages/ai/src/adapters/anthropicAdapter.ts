@@ -25,17 +25,36 @@ export class AnthropicAdapter implements AiProviderAdapter {
     this.client = new Anthropic({ apiKey });
   }
 
+  /**
+   * A real defect found live: this used to catch every error type
+   * (auth failure, unavailable model, network outage, rate limit -- see
+   * `chat()`'s own taxonomy below, which this didn't share) into one
+   * bucket and hand the raw SDK message straight to
+   * `providerManagement.ts`'s `toSafeValidationMessage`, which classifies
+   * by crude substring match ("invalid", "401", etc.). An `AuthenticationError`
+   * genuinely contains those words -- but so does Anthropic's own
+   * `invalid_request_error` type string, which is what a stale/renamed
+   * model ID (unrelated to whether the key itself is valid) produces.
+   * That collision reported a perfectly valid key as "invalid" while the
+   * real fault was an outdated hardcoded model name. Now only a genuine
+   * `Anthropic.AuthenticationError` is reported as a key problem; every
+   * other error type is prefixed so it can never be mistaken for one.
+   */
   async validateKey(key: string): Promise<{ valid: boolean; error?: string }> {
     try {
       const client = new Anthropic({ apiKey: key });
       await client.messages.create({
-        model: "claude-3-5-haiku-latest",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1,
         messages: [{ role: "user", content: "hi" }],
       });
       return { valid: true };
     } catch (err) {
-      return { valid: false, error: err instanceof Error ? err.message : "Invalid API key" };
+      if (err instanceof Anthropic.AuthenticationError) {
+        return { valid: false, error: err.message };
+      }
+      const detail = err instanceof Error ? err.message : String(err);
+      return { valid: false, error: `provider_error (not a key problem): ${detail}` };
     }
   }
 
@@ -53,7 +72,7 @@ export class AnthropicAdapter implements AiProviderAdapter {
       }));
 
       const stream = this.client.messages.stream({
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-5",
         max_tokens: 1024,
         system,
         messages: anthropicMessages,

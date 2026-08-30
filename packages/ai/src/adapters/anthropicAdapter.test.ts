@@ -106,3 +106,56 @@ describe("AnthropicAdapter.chat -- error classification (Phase 27 §7)", () => {
     await expect(drainChat(mockStreamThrows(err))).rejects.toThrow("invalid x-api-key provided");
   });
 });
+
+/**
+ * Real defect found live: `validateKey` used to catch every error type
+ * into one bucket and hand the raw SDK `.message` to
+ * `providerManagement.ts`'s crude substring classifier, which treats any
+ * text containing "invalid" as "the key is invalid" -- but Anthropic's
+ * OWN `invalid_request_error` type string (thrown for, among other
+ * things, a stale/unavailable model ID that has nothing to do with the
+ * key) contains that exact word. A real, correct API key was reported as
+ * invalid purely because the hardcoded validation model name had gone
+ * stale. Fixed: only a genuine AuthenticationError is reported as a key
+ * problem; every other error type is tagged so it can never collide with
+ * that check.
+ */
+describe("AnthropicAdapter.validateKey -- does not conflate a provider/model problem with an invalid key", () => {
+  it("reports valid:true on a successful ping", async () => {
+    const createSpy = vi.spyOn(Anthropic.Messages.prototype, "create").mockResolvedValue({} as never);
+    const { AnthropicAdapter } = await import("./anthropicAdapter.js");
+    const result = await new AnthropicAdapter("test-key").validateKey("test-key");
+    expect(result).toEqual({ valid: true });
+    createSpy.mockRestore();
+  });
+
+  it("reports valid:false with the real message for a genuine AuthenticationError", async () => {
+    const err = new Anthropic.AuthenticationError(401, { type: "authentication_error", message: "invalid x-api-key" }, undefined, FAKE_HEADERS);
+    const createSpy = vi.spyOn(Anthropic.Messages.prototype, "create").mockRejectedValue(err);
+    const { AnthropicAdapter } = await import("./anthropicAdapter.js");
+    const result = await new AnthropicAdapter("test-key").validateKey("test-key");
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/invalid x-api-key/);
+    createSpy.mockRestore();
+  });
+
+  it("a model-not-found error (unrelated to the key) is NOT reported the same way an invalid key is", async () => {
+    const err = new Anthropic.NotFoundError(404, { type: "not_found_error", message: "model: claude-not-a-real-model not found" }, undefined, FAKE_HEADERS);
+    const createSpy = vi.spyOn(Anthropic.Messages.prototype, "create").mockRejectedValue(err);
+    const { AnthropicAdapter } = await import("./anthropicAdapter.js");
+    const result = await new AnthropicAdapter("test-key").validateKey("test-key");
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/provider_error \(not a key problem\)/);
+    createSpy.mockRestore();
+  });
+
+  it("a stale-model invalid_request_error (contains the word 'invalid') is NOT reported as an invalid key either -- the exact collision that caused the real bug", async () => {
+    const err = new Anthropic.BadRequestError(400, { type: "invalid_request_error", message: "model: claude-3-5-haiku-latest is deprecated" }, undefined, FAKE_HEADERS);
+    const createSpy = vi.spyOn(Anthropic.Messages.prototype, "create").mockRejectedValue(err);
+    const { AnthropicAdapter } = await import("./anthropicAdapter.js");
+    const result = await new AnthropicAdapter("test-key").validateKey("test-key");
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/provider_error \(not a key problem\)/);
+    createSpy.mockRestore();
+  });
+});

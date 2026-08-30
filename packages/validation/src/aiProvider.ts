@@ -10,7 +10,23 @@ import { z } from "zod";
 export const AI_PROVIDERS = ["anthropic", "openai", "google", "openrouter", "other"] as const;
 export type AiProviderValue = (typeof AI_PROVIDERS)[number];
 
-const apiKeySchema = z.string().trim().min(1, "Enter an API key.").max(500, "That key is too long.");
+/**
+ * Real defect found live: a password-manager/autofill extension can
+ * inject a masked placeholder (literal "•" bullet characters, U+2022)
+ * into a `type="password"` field instead of the real typed value. A real
+ * provider API key is always printable ASCII -- rejecting anything
+ * outside that range here catches this (and any other non-key paste)
+ * with a clear, actionable message, instead of the request reaching the
+ * provider SDK and crashing deep inside the HTTP layer with a cryptic
+ * "Cannot convert argument to a ByteString" error that gets misreported
+ * as a generic provider failure.
+ */
+const apiKeySchema = z
+  .string()
+  .trim()
+  .min(1, "Enter an API key.")
+  .max(500, "That key is too long.")
+  .regex(/^[\x20-\x7E]+$/, "That doesn't look like a valid API key -- it contains a character a real key wouldn't. If a password manager filled this field, clear it and paste the key manually.");
 
 export const connectProviderSchema = z.object({
   provider: z.enum(AI_PROVIDERS),
