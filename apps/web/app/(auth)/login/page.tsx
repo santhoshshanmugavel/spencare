@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GoogleButton } from "@/components/spencare/google-button";
+import { isGoogleSignInEnabled } from "@/lib/supabase/auth-providers";
 import { signInWithGoogleAction } from "../actions";
 import { LoginForm } from "./login-form";
 
@@ -9,6 +10,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
   const redirectTarget = typeof params.redirect === "string" ? params.redirect : null;
   const error = typeof params.error === "string" ? params.error : null;
   const resetSuccess = params.reset === "success";
+  const googleEnabled = await isGoogleSignInEnabled();
 
   return (
     <Card>
@@ -27,18 +29,22 @@ export default async function LoginPage(props: PageProps<"/login">) {
           </p>
         ) : null}
         <LoginForm redirectTarget={redirectTarget} />
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">Or</span>
-          </div>
-        </div>
-        <GoogleButton
-          action={signInWithGoogleAction.bind(null, redirectTarget)}
-          label="Continue with Google"
-        />
+        {googleEnabled ? (
+          <>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">Or</span>
+              </div>
+            </div>
+            <GoogleButton
+              action={signInWithGoogleAction.bind(null, redirectTarget)}
+              label="Continue with Google"
+            />
+          </>
+        ) : null}
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="text-primary hover:underline">

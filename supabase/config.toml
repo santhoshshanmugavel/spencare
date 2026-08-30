@@ -160,7 +160,16 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# Phase 22 forensic finding: this previously listed only
+# "https://127.0.0.1:3000" -- wrong scheme (this app never runs a local
+# TLS dev server; `requestOrigin()` in apps/web/lib/request-origin.ts
+# always builds "http://" locally) AND missing "localhost" entirely, even
+# though the dev server is commonly opened at http://localhost:3000 (the
+# harness's own preview tooling defaults to it). Google/GitHub/etc. treat
+# "localhost" and "127.0.0.1" as different OAuth origins -- neither
+# implies the other. Both hosts are listed here so sign-in works
+# regardless of which one the browser is actually pointed at.
+additional_redirect_urls = ["http://127.0.0.1:3000", "http://localhost:3000"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -336,13 +345,43 @@ max_frequency = "5s"
 # verify_enabled = true
 
 # Google OAuth (security-architecture.md §1's canonical auth model).
-# Disabled here because no real Google Cloud OAuth client exists in this
-# environment -- the sign-in code path (signInWithOAuth({provider:
-# 'google'})) is fully implemented and will work as soon as a real
-# client_id/secret are set via environment variables; ENVIRONMENT
-# REQUIREMENT: create an OAuth client in Google Cloud Console with
-# authorized redirect URI `<site_url>/auth/v1/callback`, then set
-# SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID/_SECRET and flip enabled = true.
+# Phase 22 full forensic trace (do not re-flip `enabled` without
+# re-reading this):
+#
+# 1. First measurement made it LOOK like real credentials already
+#    existed: `docker exec supabase_auth_spencare env` showed
+#    GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID at 44 chars and
+#    GOTRUE_EXTERNAL_GOOGLE_SECRET at 41 chars -- non-empty, plausible
+#    lengths.
+# 2. That was wrong. `echo -n "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)" | wc -c`
+#    is ALSO 44, and `echo -n "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)" | wc -c`
+#    is ALSO 41. The container was holding the LITERAL, UNSUBSTITUTED
+#    TOML STRING, not a real value -- the Supabase CLI's `env(...)`
+#    syntax silently passes the placeholder text through as-is when the
+#    referenced shell variable is unset, rather than erroring.
+# 3. Confirmed by temporarily enabling this block and hitting
+#    `.../auth/v1/authorize?provider=google` live: GoTrue returned a real
+#    302 to `https://accounts.google.com/...` but with
+#    `client_id=env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)` (URL-encoded)
+#    as the literal client_id parameter -- Google would reject this
+#    immediately with its own generic invalid_client error, AFTER the
+#    user's browser already left this app. That is a WORSE failure mode
+#    than the honest, fast, in-house rejection `enabled = false` produces
+#    ("Unsupported provider: provider is not enabled") -- so this stays
+#    `false` until a real client_id/secret exist.
+# 4. Confirmed (via a throwaway, clearly-fake probe value, never a real
+#    secret) that the propagation mechanism ITSELF works correctly: a
+#    real value exported as SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID/
+#    _SECRET in the shell BEFORE `supabase start`/`supabase stop && start`
+#    runs DOES reach the container correctly. So the fix, once real
+#    Google Cloud credentials exist, is exactly: export both variables in
+#    that shell, restart Supabase, THEN flip `enabled = true` here --
+#    and verify with `docker exec supabase_auth_spencare env` (checking
+#    length/hash only, never printing the raw secret) that the container
+#    is NOT holding the 44/41-char literal placeholder strings before
+#    trusting it.
+# ENVIRONMENT REQUIREMENT (unchanged): a Google Cloud OAuth client with
+# authorized redirect URI `<site_url>/auth/v1/callback`.
 [auth.external.google]
 enabled = false
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
