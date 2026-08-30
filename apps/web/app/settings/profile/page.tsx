@@ -2,6 +2,7 @@ import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
 import { getProfileForDisplay, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
@@ -41,7 +42,7 @@ export default async function ProfileSettingsPage() {
         />
       }
     >
-      <div className="mx-auto max-w-xl space-y-6 py-8">
+      <SettingsShell active="profile">
         <h1 className="text-2xl font-semibold text-foreground">Profile</h1>
 
         <Card>
@@ -68,7 +69,7 @@ export default async function ProfileSettingsPage() {
             />
           </CardContent>
         </Card>
-      </div>
+      </SettingsShell>
     </AppShell>
   );
 }

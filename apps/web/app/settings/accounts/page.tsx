@@ -2,6 +2,7 @@ import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
 import { getProfile, listAccounts, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { SettingsShell } from "@/components/spencare/settings-nav";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { AccountList } from "./account-list";
@@ -39,9 +40,9 @@ export default async function AccountsSettingsPage() {
         />
       }
     >
-      <div className="mx-auto max-w-2xl py-8">
+      <SettingsShell active="accounts">
         <AccountList initialAccounts={accounts} masked={profile?.privacy_mode_enabled ?? false} />
-      </div>
+      </SettingsShell>
     </AppShell>
   );
 }

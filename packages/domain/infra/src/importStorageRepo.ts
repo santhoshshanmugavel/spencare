@@ -43,3 +43,28 @@ export async function deleteStatementFile(client: TypedSupabaseClient, path: str
   const { error } = await client.storage.from("statements").remove([path]);
   if (error) throw error;
 }
+
+/**
+ * Account deletion (Phase 20): removes every statement file this user
+ * ever uploaded. `.list()` is one level deep, so this walks
+ * `{userId}/{importBatchId}/` explicitly rather than assuming a single
+ * flat listing finds everything -- the same two-segment path this
+ * bucket's own upload function writes (`uploadStatementFile` above).
+ */
+export async function deleteAllStatementObjectsForUser(client: TypedSupabaseClient, userId: string): Promise<void> {
+  const { data: batchFolders, error: listError } = await client.storage.from("statements").list(userId);
+  if (listError) throw listError;
+  if (!batchFolders || batchFolders.length === 0) return;
+
+  const allPaths: string[] = [];
+  for (const folder of batchFolders) {
+    const { data: files, error: nestedError } = await client.storage.from("statements").list(`${userId}/${folder.name}`);
+    if (nestedError) throw nestedError;
+    for (const file of files ?? []) {
+      allPaths.push(`${userId}/${folder.name}/${file.name}`);
+    }
+  }
+  if (allPaths.length === 0) return;
+  const { error: removeError } = await client.storage.from("statements").remove(allPaths);
+  if (removeError) throw removeError;
+}

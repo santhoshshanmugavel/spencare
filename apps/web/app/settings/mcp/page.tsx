@@ -2,6 +2,7 @@ import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
 import { listMcpSessions, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
@@ -55,7 +56,7 @@ export default async function McpSettingsPage() {
         />
       }
     >
-      <div className="mx-auto max-w-xl space-y-6 py-8">
+      <SettingsShell active="mcp">
         <h1 className="text-2xl font-semibold text-foreground">MCP Access</h1>
         <p className="text-sm text-muted-foreground">
           Generate a token to let an MCP client (like Claude Desktop) read your finances or
@@ -71,7 +72,7 @@ export default async function McpSettingsPage() {
             <McpSessionManager initialSessions={sessions} />
           </CardContent>
         </Card>
-      </div>
+      </SettingsShell>
     </AppShell>
   );
 }

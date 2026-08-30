@@ -1190,6 +1190,67 @@ R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/audit_log" -H 
 check "audit_actor enum accepts 'gmail' -- a service-role sync-event insert succeeds (HTTP 201)" "201" "$R"
 echo
 
+# ============================================================================
+# Phase 20 -- Account Deletion ("Data & Backup").
+#
+# This is deliberately the LAST section in the script: it permanently
+# deletes user1, so nothing below it may depend on user1's data existing.
+# The real FK audit behind this migration is in
+# 20260905000001_account_deletion.sql's own header comment -- these checks
+# prove that audit was correct: every user-owned table across every phase
+# of this whole script (Accounts/Transactions/Budgets/Goals/Bills/Imports/
+# Spensa/BYO AI/MCP/Gmail) is actually empty afterward, not just the ones
+# a narrower test might have thought to check.
+# ============================================================================
+
+echo "== Account deletion: ownership / IDOR (Phase 20) =="
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/delete_own_account" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\"}")
+check "user2 cannot delete user1's account by spoofing p_user_id" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"not_authorized\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/profiles?user_id=eq.$UID1&select=user_id" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "user1's profile still exists after user2's spoofed deletion attempt" "1" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/delete_own_account" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\"}")
+check "user1 (real owner) can delete their own account" "204" "$R"
+echo
+
+echo "== Account deletion: every user-owned table is actually empty afterward (Phase 20) =="
+
+for TABLE in profiles security_settings accounts transactions budgets goals bill_definitions bill_predictions import_batches import_staged_transactions pending_confirmations mcp_sessions ai_provider_credentials ai_conversations gmail_connections gmail_financial_candidates notifications audit_log; do
+  R=$(curl -s "$BASE/rest/v1/$TABLE?user_id=eq.$UID1&select=user_id" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+  check "$TABLE has zero rows for the deleted user" "0" "$R"
+done
+
+R=$(curl -s "$BASE/auth/v1/admin/users/$UID1" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;print(json.load(sys.stdin).get('error_code'))")
+check "the auth.users row itself is gone (Admin API reports user_not_found)" "user_not_found" "$R"
+
+R=$(curl -s -X POST "$BASE/auth/v1/token?grant_type=password" -H "apikey: $ANON_KEY" -H "Content-Type: application/json" \
+  -d "{\"email\":\"sec-smoke-a-${STAMP}@example.com\",\"password\":\"CorrectHorse123\"}" | python3 -c "import json,sys;print(json.load(sys.stdin).get('error_code'))")
+check "the deleted user can no longer log in at all (invalid credentials, not a stale session)" "invalid_credentials" "$R"
+
+# EMPIRICALLY VERIFIED, NOT ASSUMED: PostgREST validates a JWT's signature
+# and expiry only -- it never checks whether the `auth.users` row the
+# JWT's `sub` claim names still exists. A stale token for an
+# already-deleted user therefore remains technically "valid" (HTTP
+# 204/200, not 401) until its natural expiry, exactly like any other
+# still-unexpired JWT would. This is NOT a data-exposure hole -- every
+# query it can still make is scoped to a user_id with zero rows behind
+# it anywhere (proved by the loop above), and re-calling
+# delete_own_account itself is a harmless, fully idempotent no-op (every
+# DELETE affects zero rows, `delete from auth.users` affects zero rows).
+# Documented here as a genuine, disclosed platform behavior rather than
+# silently asserting the wrong (401) expectation.
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/delete_own_account" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\"}")
+check "re-calling delete_own_account with the still-unexpired (but now ownerless) token is a safe, harmless no-op -- never an error, never a second effect" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?user_id=eq.$UID1&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+check "a stale token for a deleted user reads back nothing at all -- there is no data left anywhere for it to expose" "[]" "$R"
+echo
+
 echo "== summary =="
 echo "  $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then

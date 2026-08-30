@@ -29,10 +29,13 @@ import {
   MissingGmailOAuthConfigError,
   listAccounts,
   listCategories,
+  exportUserData,
+  deleteAccount,
   type AuthContext,
   type McpScope,
   type GmailCandidateReviewStatus,
   type EditGmailCandidateInput,
+  type DeleteAccountInput,
 } from "@spencare/domain-application";
 import type { ProfileUpdateInput } from "@spencare/validation";
 import { connectProvider, switchProvider, updateProviderKey, disconnectProvider, getProviderStatus } from "@spencare/ai";
@@ -283,4 +286,34 @@ export async function listAccountsForGmailReviewAction() {
 export async function listCategoriesForGmailReviewAction() {
   const ctx = await requireAuthContext();
   return listCategories(ctx);
+}
+
+/**
+ * Data & Backup (Phase 20, SP-317/SP-319/SP-320). `exportUserDataAction`
+ * returns the bundle directly to the browser for an immediate download --
+ * a deliberate, disclosed deviation from SP-320's "email in 5-6 days"
+ * async design (see exportData.ts's own doc comment for why: no
+ * background-job/email-attachment infrastructure exists anywhere in this
+ * deployment, and fabricating that promise would violate the same
+ * "never claim infrastructure that doesn't exist" rule Phase 19 already
+ * established for Gmail sync).
+ *
+ * `deleteAccountAction` signs the browser out immediately after a
+ * successful deletion -- the `auth.users` row is gone, so any lingering
+ * session cookie is already orphaned; `signOut()` clears it cleanly
+ * rather than leaving the client to discover this on its next request.
+ */
+export async function exportUserDataAction() {
+  const ctx = await requireAuthContext();
+  return exportUserData(ctx);
+}
+
+export async function deleteAccountAction(input: DeleteAccountInput) {
+  const supabase = await createServerSupabaseClient();
+  const ctx = await requireAuthContext();
+  const result = await deleteAccount.execute(ctx, input);
+  if (result.ok) {
+    await supabase.auth.signOut();
+  }
+  return result;
 }

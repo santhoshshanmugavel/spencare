@@ -4,6 +4,7 @@ import { AI_PROVIDERS } from "@spencare/validation";
 import type { AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
@@ -54,7 +55,7 @@ export default async function AiProviderSettingsPage() {
         />
       }
     >
-      <div className="mx-auto max-w-xl space-y-6 py-8">
+      <SettingsShell active="ai">
         <h1 className="text-2xl font-semibold text-foreground">AI Provider</h1>
         <p className="text-sm text-muted-foreground">
           Connect your own API key to power Spensa. Your key is encrypted and only ever used
@@ -73,7 +74,7 @@ export default async function AiProviderSettingsPage() {
             />
           </CardContent>
         </Card>
-      </div>
+      </SettingsShell>
     </AppShell>
   );
 }

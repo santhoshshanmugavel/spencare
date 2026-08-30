@@ -287,3 +287,6 @@ export {
   type GmailCandidateReviewStatus,
   type GmailCandidateDirection,
 } from "@spencare/domain-infra";
+
+export { exportUserData, type ExportBundle } from "./commands/exportData.js";
+export { deleteAccount, type DeleteAccountInput } from "./commands/deleteAccount.js";

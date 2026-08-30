@@ -3,12 +3,22 @@ import { getSecurityStatus, type AuthContext } from "@spencare/domain-applicatio
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { SettingsShell } from "@/components/spencare/settings-nav";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
-import { TwoFactorManager } from "./two-factor-manager";
+import { DataBackupManager } from "./data-backup-manager";
 
-export default async function SecuritySettingsPage() {
+/**
+ * `/settings/data-backup` -- Phase 20's Data & Backup surface (SP-317-320:
+ * export my data, delete my account). Follows the exact same shell/fetch
+ * pattern as every other Settings page. See `exportData.ts`'s and
+ * `deleteAccount.ts`'s own doc comments for the two disclosed,
+ * intentional deviations from the visual design: export is synchronous
+ * (no background-job infra exists to honor the designed "email in 5-6
+ * days" flow), and re-verification before deletion uses a typed-email
+ * confirmation plus existing 2FA (never a new email-OTP mechanism).
+ */
+export default async function DataBackupSettingsPage() {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -41,15 +51,12 @@ export default async function SecuritySettingsPage() {
         />
       }
     >
-      <SettingsShell active="security">
-        <h1 className="text-2xl font-semibold text-foreground">Security</h1>
+      <SettingsShell active="data-backup">
+        <h1 className="text-2xl font-semibold text-foreground">Data & Backup</h1>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Two-factor authentication</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TwoFactorManager initiallyEnabled={security?.two_factor_enabled ?? false} />
+          <CardContent className="py-2">
+            <DataBackupManager accountEmail={user.email ?? ""} twoFactorEnabled={security?.two_factor_enabled ?? false} />
           </CardContent>
         </Card>
       </SettingsShell>

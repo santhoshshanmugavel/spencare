@@ -2,6 +2,7 @@ import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
 import { getGmailStatus, listGmailCandidatesQuery, listAccounts, listCategories, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
@@ -67,7 +68,7 @@ export default async function GmailSettingsPage(props: PageProps<"/settings/gmai
         />
       }
     >
-      <div className="mx-auto max-w-2xl space-y-6 py-8">
+      <SettingsShell active="gmail">
         <h1 className="text-2xl font-semibold text-foreground">Gmail</h1>
         <p className="text-sm text-muted-foreground">
           Connect Gmail so Spencare can find bank, credit-card, receipt, and bill emails and suggest
@@ -91,7 +92,7 @@ export default async function GmailSettingsPage(props: PageProps<"/settings/gmai
             />
           </CardContent>
         </Card>
-      </div>
+      </SettingsShell>
     </AppShell>
   );
 }
