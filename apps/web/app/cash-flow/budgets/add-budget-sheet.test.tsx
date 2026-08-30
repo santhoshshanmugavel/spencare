@@ -63,8 +63,41 @@ describe("<AddBudgetSheet> — behavior", () => {
       categoryId: "289f5e56-21a8-4ee0-865f-c02c11f4d874",
       amountMinor: 600000,
       periodStart: "2026-08-01",
+      applyToUpcoming: false,
     });
     expect(onCreated).toHaveBeenCalledTimes(1);
+  });
+
+  it("unchecked 'Apply to all upcoming months' submits directly with no confirmation", async () => {
+    const { createBudgetAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(<AddBudgetSheet open onOpenChange={() => {}} onCreated={() => {}} periodStart="2026-08-01" categories={categories} />);
+    expect(screen.getByRole("checkbox", { name: "Apply this budget to all upcoming months" })).not.toBeChecked();
+    await user.click(screen.getByRole("combobox", { name: "Category" }));
+    await user.click(screen.getByRole("option", { name: "Dining" }));
+    await user.type(screen.getByLabelText("Monthly limit (INR ₹)"), "6000");
+    await user.click(screen.getByRole("button", { name: "Add budget" }));
+    expect(screen.queryByText("Apply to upcoming months?")).not.toBeInTheDocument();
+    expect(createBudgetAction).toHaveBeenCalledWith(expect.objectContaining({ applyToUpcoming: false }));
+  });
+
+  it("checking 'Apply to all upcoming months' shows the confirmation dialog before creating anything", async () => {
+    const { createBudgetAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(<AddBudgetSheet open onOpenChange={() => {}} onCreated={() => {}} periodStart="2026-08-01" categories={categories} />);
+    await user.click(screen.getByRole("combobox", { name: "Category" }));
+    await user.click(screen.getByRole("option", { name: "Dining" }));
+    await user.type(screen.getByLabelText("Monthly limit (INR ₹)"), "6000");
+    await user.click(screen.getByRole("checkbox", { name: "Apply this budget to all upcoming months" }));
+    await user.click(screen.getByRole("button", { name: "Add budget" }));
+
+    expect(screen.getByText("Apply to upcoming months?")).toBeInTheDocument();
+    expect(createBudgetAction).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(createBudgetAction).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryId: "289f5e56-21a8-4ee0-865f-c02c11f4d874", applyToUpcoming: true }),
+    );
   });
 
   it("defaults the month field to the dashboard's current period", () => {

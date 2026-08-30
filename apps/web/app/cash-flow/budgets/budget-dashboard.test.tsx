@@ -33,6 +33,7 @@ function usage(overrides: Partial<BudgetWithUsage> = {}): BudgetWithUsage {
     remainingMinor: 130000,
     percentUsed: 78.33,
     status: "near_limit",
+    isRecurring: false,
     ...overrides,
   };
 }

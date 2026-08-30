@@ -55,6 +55,8 @@ export interface BudgetWithUsage extends BudgetUsage {
   categoryId: string;
   periodStart: string;
   periodEnd: string;
+  /** Phase 26: whether this row is part of an ongoing "apply to upcoming months" plan -- used only to pre-select a sensible default in the edit UI, never in any spend/remaining/status calculation above. */
+  isRecurring: boolean;
 }
 
 /**
@@ -77,6 +79,7 @@ export async function listBudgetsWithUsage(ctx: AuthContext, periodStart: string
     categoryId: b.category_id,
     periodStart: b.period_start,
     periodEnd: b.period_end,
+    isRecurring: b.is_recurring,
     ...calculateBudgetUsage(b.amount_minor, spending[b.category_id] ?? 0),
   }));
 }

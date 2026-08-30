@@ -6,9 +6,11 @@ import {
 } from "@spencare/validation";
 import { lastDayOfMonth } from "@spencare/domain-core";
 import {
+  applyBudgetToUpcomingMonths,
   createBudget as createBudgetRow,
   deleteBudget as deleteBudgetRow,
   getBudget as getBudgetRow,
+  getBudgetByCategoryAndPeriod,
   updateBudget as updateBudgetRow,
   type BudgetRow,
 } from "@spencare/domain-infra";
@@ -41,6 +43,28 @@ export const createBudget: Command<CreateBudgetInput, BudgetRow> = {
       });
     }
     try {
+      // Phase 26: "Apply to upcoming months" writes real rows for this
+      // month AND the forward window in one call -- see
+      // `applyBudgetToUpcomingMonths`'s own doc comment for exactly which
+      // future months it does/doesn't touch. The plain (unchecked) path
+      // below is byte-for-byte the original single-month behavior.
+      if (parsed.data.applyToUpcoming) {
+        await applyBudgetToUpcomingMonths(ctx.supabase, ctx.userId, {
+          categoryId: parsed.data.categoryId,
+          fromPeriodStart: parsed.data.periodStart,
+          amountMinor: parsed.data.amountMinor,
+        });
+        const row = await getBudgetByCategoryAndPeriod(
+          ctx.supabase,
+          ctx.userId,
+          parsed.data.categoryId,
+          parsed.data.periodStart,
+        );
+        if (!row) {
+          return err({ code: "create_failed", message: "Couldn't create the budget. Try again." });
+        }
+        return ok(row);
+      }
       const row = await createBudgetRow(ctx.supabase, ctx.userId, {
         categoryId: parsed.data.categoryId,
         amountMinor: parsed.data.amountMinor,
@@ -74,7 +98,31 @@ export const updateBudget: Command<UpdateBudgetCommandInput, BudgetRow> = {
       });
     }
     try {
-      const row = await updateBudgetRow(ctx.supabase, ctx.userId, budgetId, parsed.data);
+      if (parsed.data.applyToUpcoming) {
+        const existing = await getBudgetRow(ctx.supabase, ctx.userId, budgetId);
+        if (!existing) {
+          return err({ code: "not_found", message: "That budget no longer exists." });
+        }
+        await applyBudgetToUpcomingMonths(ctx.supabase, ctx.userId, {
+          categoryId: existing.category_id,
+          fromPeriodStart: existing.period_start,
+          amountMinor: parsed.data.amountMinor,
+        });
+        const row = await getBudgetRow(ctx.supabase, ctx.userId, budgetId);
+        if (!row) {
+          return err({ code: "update_failed", message: "Couldn't save your changes. Try again." });
+        }
+        return ok(row);
+      }
+      // "This month only" -- an explicit, unchecked edit on a budget that
+      // WAS part of a recurring plan is the user's deliberate signal that
+      // this one month should now diverge from it, so this always clears
+      // `is_recurring` rather than leaving a stale `true` behind. Past and
+      // future months are never touched by this branch.
+      const row = await updateBudgetRow(ctx.supabase, ctx.userId, budgetId, {
+        amountMinor: parsed.data.amountMinor,
+        isRecurring: false,
+      });
       return ok(row);
     } catch (e) {
       return err({ code: "update_failed", message: mapBudgetError(e, "Couldn't save your changes. Try again.") });

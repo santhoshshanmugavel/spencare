@@ -25,7 +25,10 @@ const budget: BudgetWithUsage = {
   remainingMinor: 130000,
   percentUsed: 78.33,
   status: "near_limit",
+  isRecurring: false,
 };
+
+const recurringBudget: BudgetWithUsage = { ...budget, id: "budget-2", isRecurring: true };
 
 describe("<EditBudgetSheet> — accessibility", () => {
   it("has no axe violations", async () => {
@@ -47,7 +50,18 @@ describe("<EditBudgetSheet> — behavior", () => {
     expect(screen.getByLabelText("Monthly limit (INR ₹)")).toHaveValue("6000");
   });
 
-  it("submits only amountMinor, scoped to this budget's id -- category and month are not resubmitted", async () => {
+  it("defaults 'Apply to' to This month only for a non-recurring budget", () => {
+    render(<EditBudgetSheet budget={budget} categoryName="Dining" open onOpenChange={() => {}} onUpdated={() => {}} />);
+    expect(screen.getByRole("radio", { name: "This month only" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "This month and upcoming months" })).not.toBeChecked();
+  });
+
+  it("defaults 'Apply to' to This month and upcoming months for a budget already part of a recurring plan", () => {
+    render(<EditBudgetSheet budget={recurringBudget} categoryName="Dining" open onOpenChange={() => {}} onUpdated={() => {}} />);
+    expect(screen.getByRole("radio", { name: "This month and upcoming months" })).toBeChecked();
+  });
+
+  it("'This month only' submits directly, with no confirmation dialog", async () => {
     const { updateBudgetAction } = await import("./actions");
     const onUpdated = vi.fn();
     const user = userEvent.setup();
@@ -56,7 +70,48 @@ describe("<EditBudgetSheet> — behavior", () => {
     await user.clear(input);
     await user.type(input, "8000");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
-    expect(updateBudgetAction).toHaveBeenCalledWith("budget-1", { amountMinor: 800000 });
+    expect(screen.queryByText("Apply to upcoming months?")).not.toBeInTheDocument();
+    expect(updateBudgetAction).toHaveBeenCalledWith("budget-1", { amountMinor: 800000, applyToUpcoming: false });
     expect(onUpdated).toHaveBeenCalledTimes(1);
+  });
+
+  it("'This month and upcoming months' shows the confirmation dialog with the mandate's exact copy before submitting anything", async () => {
+    const { updateBudgetAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(<EditBudgetSheet budget={budget} categoryName="Dining" open onOpenChange={() => {}} onUpdated={() => {}} />);
+    await user.click(screen.getByRole("radio", { name: "This month and upcoming months" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(screen.getByText("Apply to upcoming months?")).toBeInTheDocument();
+    expect(
+      screen.getByText("Your changes will replace the current budget plan for August 2026 and all upcoming months. Previous months won't be changed."),
+    ).toBeInTheDocument();
+    expect(updateBudgetAction).not.toHaveBeenCalled();
+  });
+
+  it("confirming the dialog submits with applyToUpcoming: true", async () => {
+    const { updateBudgetAction } = await import("./actions");
+    const onUpdated = vi.fn();
+    const user = userEvent.setup();
+    render(<EditBudgetSheet budget={budget} categoryName="Dining" open onOpenChange={() => {}} onUpdated={onUpdated} />);
+    await user.click(screen.getByRole("radio", { name: "This month and upcoming months" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(updateBudgetAction).toHaveBeenCalledWith("budget-1", { amountMinor: 600000, applyToUpcoming: true });
+    expect(onUpdated).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancelling the dialog submits nothing and returns to the form", async () => {
+    const { updateBudgetAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(<EditBudgetSheet budget={budget} categoryName="Dining" open onOpenChange={() => {}} onUpdated={() => {}} />);
+    await user.click(screen.getByRole("radio", { name: "This month and upcoming months" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(updateBudgetAction).not.toHaveBeenCalled();
+    expect(screen.queryByText("Apply to upcoming months?")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Monthly limit (INR ₹)")).toBeInTheDocument(); // form still present
   });
 });

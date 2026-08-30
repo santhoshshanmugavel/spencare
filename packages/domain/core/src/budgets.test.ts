@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateBudgetUsage, lastDayOfMonth, BUDGET_STATUS_THRESHOLDS } from "./budgets.js";
+import { addMonthsToPeriodStart, calculateBudgetUsage, lastDayOfMonth, BUDGET_STATUS_THRESHOLDS } from "./budgets.js";
 
 describe("lastDayOfMonth", () => {
   it("returns the 31st for a 31-day month", () => {
@@ -20,6 +20,26 @@ describe("lastDayOfMonth", () => {
 
   it("handles December (year rollover)", () => {
     expect(lastDayOfMonth("2026-12-01")).toBe("2026-12-31");
+  });
+});
+
+describe("addMonthsToPeriodStart", () => {
+  it("returns the same month unchanged for 0 months ahead", () => {
+    expect(addMonthsToPeriodStart("2026-12-01", 0)).toBe("2026-12-01");
+  });
+
+  it("adds months within the same year", () => {
+    expect(addMonthsToPeriodStart("2026-08-01", 1)).toBe("2026-09-01");
+    expect(addMonthsToPeriodStart("2026-08-01", 4)).toBe("2026-12-01");
+  });
+
+  it("rolls over into the next year", () => {
+    expect(addMonthsToPeriodStart("2026-12-01", 1)).toBe("2027-01-01");
+    expect(addMonthsToPeriodStart("2026-11-01", 3)).toBe("2027-02-01");
+  });
+
+  it("handles a full 24-month forward window without drift", () => {
+    expect(addMonthsToPeriodStart("2026-08-01", 24)).toBe("2028-08-01");
   });
 });
 

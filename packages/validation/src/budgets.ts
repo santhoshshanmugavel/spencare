@@ -26,20 +26,31 @@ const periodStartSchema = z
   .string()
   .refine((v) => /^\d{4}-\d{2}-01$/.test(v), "Choose a month (period must start on the 1st).");
 
+/**
+ * Phase 26: `applyToUpcoming` is the plain-language "apply this budget to
+ * all upcoming months" checkbox -- optional and defaulted to false so
+ * every existing single-month create/update call site is unaffected.
+ * When true, the command writes real rows for this month AND the next
+ * `RECURRING_BUDGET_FORWARD_MONTHS` months (see budgetsRepo.ts), never a
+ * separate template concept the UI or API surface needs to know about.
+ */
 export const createBudgetSchema = z.object({
   categoryId: z.string().uuid(),
   amountMinor: amountMinorSchema,
   periodStart: periodStartSchema,
+  applyToUpcoming: z.boolean().optional(),
 });
 export type CreateBudgetInput = z.infer<typeof createBudgetSchema>;
 
 /**
- * Update is scoped to the limit only -- `categoryId`/`periodStart` are not
- * editable (changing either is really "delete this budget, create a
- * different one", not an edit of the same row, matching the
- * `(user_id, category_id, period_start)` uniqueness key's own meaning).
+ * Update is scoped to the limit (+ the same `applyToUpcoming` option) --
+ * `categoryId`/`periodStart` are not editable (changing either is really
+ * "delete this budget, create a different one", not an edit of the same
+ * row, matching the `(user_id, category_id, period_start)` uniqueness
+ * key's own meaning).
  */
 export const updateBudgetSchema = z.object({
   amountMinor: amountMinorSchema,
+  applyToUpcoming: z.boolean().optional(),
 });
 export type UpdateBudgetInput = z.infer<typeof updateBudgetSchema>;

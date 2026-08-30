@@ -145,6 +145,7 @@ describe("<CashFlowOverview> — budget panel label (locked decision #4: never '
             remainingMinor: 130000,
             percentUsed: 78.3,
             status: "near_limit",
+            isRecurring: false,
           },
         ]}
       />,
@@ -291,6 +292,7 @@ describe("<CashFlowOverview> — accessibility", () => {
             remainingMinor: 130000,
             percentUsed: 78.3,
             status: "near_limit",
+            isRecurring: false,
           },
         ]}
       />,

@@ -16,9 +16,19 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { createBudgetAction } from "./actions";
+import { ApplyToUpcomingConfirmDialog } from "./apply-to-upcoming-confirm-dialog";
+
+function formatMonthLabel(periodStart: string): string {
+  return new Date(periodStart + "T00:00:00Z").toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
 
 /**
  * visual-conflicts.md CF-D26: every Budget creation screen (SP-162-165) is
@@ -57,6 +67,8 @@ export function AddBudgetSheet({
   categories: CategoryRow[];
 }) {
   const money = useMoneyField();
+  const [applyToUpcoming, setApplyToUpcoming] = useState(false);
+  const [pendingData, setPendingData] = useState<CreateBudgetInput | null>(null);
   const {
     control,
     handleSubmit,
@@ -71,15 +83,26 @@ export function AddBudgetSheet({
     },
   });
 
-  async function onSubmit(data: CreateBudgetInput) {
-    const result = await createBudgetAction(data);
+  async function submit(data: CreateBudgetInput, apply: boolean) {
+    const result = await createBudgetAction({ ...data, applyToUpcoming: apply });
     if (!result.ok) {
       toastError(result.error.message);
       return;
     }
-    toastConfirmed("Budget created.");
+    toastConfirmed(apply ? "Budget created for this month and upcoming months." : "Budget created.");
     reset({ categoryId: "", amountMinor: 0, periodStart });
+    setApplyToUpcoming(false);
     onCreated();
+  }
+
+  async function onSubmit(data: CreateBudgetInput) {
+    if (applyToUpcoming) {
+      // Can silently replace an already-configured future month for this
+      // category -- confirm before it actually runs, same as editing.
+      setPendingData(data);
+      return;
+    }
+    await submit(data, false);
   }
 
   return (
@@ -141,12 +164,36 @@ export function AddBudgetSheet({
               </FormField>
             )}
           />
+
+          <label htmlFor="budget-apply-upcoming" className="flex items-center gap-2 text-sm text-foreground">
+            <Checkbox
+              id="budget-apply-upcoming"
+              checked={applyToUpcoming}
+              onCheckedChange={(checked) => setApplyToUpcoming(checked === true)}
+            />
+            Apply this budget to all upcoming months
+          </label>
+
           <Button type="submit" size="touch" className="w-full" disabled={isSubmitting || categories.length === 0}>
             {isSubmitting ? "Adding…" : "Add budget"}
           </Button>
         </form>
         <SheetFooter />
       </SheetContent>
+
+      {pendingData ? (
+        <ApplyToUpcomingConfirmDialog
+          monthLabel={formatMonthLabel(pendingData.periodStart)}
+          open
+          onOpenChange={(o) => {
+            if (!o) setPendingData(null);
+          }}
+          onConfirm={async () => {
+            await submit(pendingData, true);
+            setPendingData(null);
+          }}
+        />
+      ) : null}
     </Sheet>
   );
 }

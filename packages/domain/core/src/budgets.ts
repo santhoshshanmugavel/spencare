@@ -57,6 +57,20 @@ export function lastDayOfMonth(periodStartIso: string): string {
   return last.toISOString().slice(0, 10);
 }
 
+/**
+ * Phase 26 -- pure month arithmetic for "apply to upcoming months," same
+ * spirit as `lastDayOfMonth` above (always the 1st of a month in, always
+ * the 1st of a month out, zero I/O). `monthsAhead` may be 0 (returns
+ * `periodStartIso` itself unchanged).
+ */
+export function addMonthsToPeriodStart(periodStartIso: string, monthsAhead: number): string {
+  const parts = periodStartIso.split("-");
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const d = new Date(Date.UTC(year, month - 1 + monthsAhead, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
 export function calculateBudgetUsage(limitMinor: number, spentMinor: number): BudgetUsage {
   const remainingMinor = limitMinor - spentMinor;
   // A zero-limit budget has no meaningful percentage; treat any spend

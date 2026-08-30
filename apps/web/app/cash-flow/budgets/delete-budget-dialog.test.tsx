@@ -28,6 +28,7 @@ const budget: BudgetWithUsage = {
   remainingMinor: 130000,
   percentUsed: 78.33,
   status: "near_limit",
+  isRecurring: false,
 };
 
 describe("<DeleteBudgetDialog> — accessibility (reuses the Phase 7/8 confirm pattern)", () => {

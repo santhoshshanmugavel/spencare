@@ -29,6 +29,7 @@ export { sniffImageMimeType, type SniffedImageType } from "./fileSniff.js";
 export {
   calculateBudgetUsage,
   lastDayOfMonth,
+  addMonthsToPeriodStart,
   BUDGET_STATUS_THRESHOLDS,
   type BudgetStatus,
   type BudgetUsage,
