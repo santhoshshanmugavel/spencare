@@ -72,6 +72,26 @@ export {
   type ImportSummary,
 } from "./imports.js";
 
+export { classifyEmailRelevance, isKnownFinancialSenderDomain, type EmailRelevance, type EmailRelevanceInput } from "./gmailClassification.js";
+
+export {
+  extractAmount,
+  extractCardOrAccountLastFour,
+  extractDirection,
+  extractMerchant,
+  extractDate,
+  extractReferenceId,
+  classifyCandidateType,
+  type ExtractedAmount,
+  type GmailCandidateType,
+} from "./gmailExtraction.js";
+
+export { scoreGmailConfidence, GMAIL_LOW_CONFIDENCE_THRESHOLD, type GmailConfidenceInput } from "./gmailConfidence.js";
+
+export { findTransferPairs, type TransferMatchCandidate, type TransferPairMatch } from "./transferMatching.js";
+
+export { matchGmailAccount, type AccountMatchCandidate, type GmailAccountMatchInput, type GmailAccountMatchResult } from "./gmailAccountMatching.js";
+
 export {
   calculateCashFlowTotals,
   calculateCategoryBreakdown,

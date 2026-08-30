@@ -1063,6 +1063,133 @@ R=$(curl -s "$BASE/rest/v1/audit_log?entity_type=eq.budget&action=eq.createBudge
 check "createBudget's own direct audit_log insert (inside confirm_command, not delegated to another RPC) also records actor='mcp'" "mcp" "$R"
 echo
 
+# ============================================================================
+# Phase 19 -- Google Auth + Gmail Financial Ingestion.
+#
+# Google Auth itself adds no new RLS/RPC surface (Supabase Auth handles the
+# OAuth code exchange internally; `handle_new_user()`'s profile/security_
+# settings creation, already exercised by every `signup()` call at the top
+# of this script, is provider-agnostic and needs no Gmail-specific proof).
+# What Phase 19 DOES add at the database layer -- `gmail_connections`/
+# `gmail_financial_candidates` RLS+ownership, the idempotency constraint,
+# and confirm_command/audit_log accepting source/actor='gmail' -- is
+# covered below, following the exact same pattern proven for MCP above:
+# the SAME canonical confirm_command cascade, now exercised as the
+# Accept-candidate flow's actual mechanism (packages/domain/application's
+# gmailCandidates.ts calls proposeCommand/confirmCommand with source=
+# actor="gmail", never a parallel mutation path).
+# ============================================================================
+
+echo "== Gmail: gmail_connections ownership / IDOR (Phase 19) =="
+
+GMAILCONN=$(curl -s -X POST "$BASE/rest/v1/gmail_connections" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"google_email\":\"user1@gmail.com\",\"encrypted_refresh_token\":\"\\\\xdeadbeef\",\"scopes\":[\"https://www.googleapis.com/auth/gmail.readonly\"]}")
+GMAILCONNID=$(echo "$GMAILCONN" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+check "user1 can create their own gmail_connections row (own RLS-scoped insert/upsert, exactly what completeGmailConnect does)" "True" "$([ -n "$GMAILCONNID" ] && echo True || echo False)"
+
+R=$(curl -s "$BASE/rest/v1/gmail_connections?id=eq.$GMAILCONNID&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's gmail_connections row" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/gmail_connections" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"google_email\":\"spoofed@gmail.com\",\"encrypted_refresh_token\":\"\\\\xbeef\",\"scopes\":[\"read\"]}")
+check "user2 cannot insert a gmail_connections row impersonating user1 (RLS with check, HTTP 403)" "403" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/gmail_connections?id=eq.$GMAILCONNID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"revoked_at":"2026-08-30T00:00:00Z"}')
+check "user2 cannot revoke/disconnect user1's gmail connection (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/gmail_connections?id=eq.$GMAILCONNID&select=revoked_at" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['revoked_at'])")
+check "user1's connection still active after user2's spoofed disconnect attempt" "None" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/gmail_connections?id=eq.$GMAILCONNID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"encrypted_refresh_token\":null,\"revoked_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}")
+check "user1 (real owner) can disconnect their own gmail connection -- own RLS-scoped update, exactly what disconnectGmail does" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/gmail_connections?id=eq.$GMAILCONNID&select=encrypted_refresh_token,revoked_at" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;d=json.load(sys.stdin)[0];print(d['encrypted_refresh_token'] is None and d['revoked_at'] is not None)")
+check "disconnect actually nulls the encrypted credential material, not merely flips revoked_at (locked decision: remove the secret, keep the row's history)" "True" "$R"
+echo
+
+echo "== Gmail: gmail_financial_candidates ownership / IDOR + idempotency (Phase 19) =="
+
+GMAILCAND=$(curl -s -X POST "$BASE/rest/v1/gmail_financial_candidates" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"gmail_message_id\":\"gm-msg-1\",\"parser_version\":\"gmail-v1\",\"candidate_type\":\"transaction\",\"direction\":\"expense\",\"account_id\":\"$TXN_ACCID\",\"suggested_category_id\":\"$CATID\",\"normalized_amount_minor\":30000,\"currency\":\"INR\",\"normalized_date\":\"2026-08-29\",\"normalized_merchant\":\"Smoke Test Coffee\",\"confidence_score\":0.85}")
+GMAILCANDID=$(echo "$GMAILCAND" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+check "the sync engine (service role) can stage a gmail_financial_candidates row" "True" "$([ -n "$GMAILCANDID" ] && echo True || echo False)"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/gmail_financial_candidates" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"user_id\":\"$UID1\",\"gmail_message_id\":\"gm-msg-1\",\"parser_version\":\"gmail-v1\",\"candidate_type\":\"transaction\",\"direction\":\"expense\",\"normalized_amount_minor\":99999,\"confidence_score\":0.5}")
+check "re-processing the SAME (user, message, no-attachment) key is rejected by the idempotency constraint, not silently duplicated (a real sync uses upsert; a raw re-insert like this one correctly hits the unique constraint, HTTP 409)" "409" "$R"
+
+R=$(curl -s "$BASE/rest/v1/gmail_financial_candidates?user_id=eq.$UID1&gmail_message_id=eq.gm-msg-1&select=id" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "exactly one candidate row exists for that message -- the rejected re-insert did not create a duplicate" "1" "$R"
+
+R=$(curl -s "$BASE/rest/v1/gmail_financial_candidates?id=eq.$GMAILCANDID&select=*" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2")
+check "user2 cannot read user1's gmail candidate" "[]" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/gmail_financial_candidates?id=eq.$GMAILCANDID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d '{"review_status":"rejected"}')
+check "user2 cannot action (reject/accept/edit) user1's gmail candidate (RLS, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/gmail_financial_candidates?id=eq.$GMAILCANDID&select=review_status" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['review_status'])")
+check "user1's candidate still pending after user2's spoofed action attempt" "pending" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE/rest/v1/gmail_financial_candidates?id=eq.$GMAILCANDID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1")
+check "even the real owner cannot hard-delete a gmail candidate via raw REST (no delete policy -- review_status transitions only, HTTP 204/0 rows)" "204" "$R"
+
+R=$(curl -s "$BASE/rest/v1/gmail_financial_candidates?id=eq.$GMAILCANDID&select=id" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+check "the candidate row still exists after the owner's attempted DELETE" "1" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE/rest/v1/gmail_financial_candidates?id=eq.$GMAILCANDID" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d '{"review_status":"rejected"}')
+check "user1 (real owner) can reject their own candidate (own RLS-scoped update, exactly what rejectGmailCandidate does)" "204" "$R"
+echo
+
+echo "== Gmail: Accept routes through the SAME confirm_command cascade, source=actor=gmail (Phase 19) =="
+
+GMAILPC=$(curl -s -X POST "$BASE/rest/v1/pending_confirmations" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d "{\"user_id\":\"$UID1\",\"source\":\"gmail\",\"command_type\":\"createTransaction\",\"payload\":{\"accountId\":\"$TXN_ACCID\",\"type\":\"expense\",\"amountMinor\":30000,\"categoryId\":\"$CATID\",\"occurredAt\":\"2026-08-29\",\"merchant\":\"Smoke Test Coffee\"},\"preview\":{\"summary\":\"Record an expense of INR 300 at Smoke Test Coffee from Gmail\"},\"expires_at\":\"2026-12-31T00:00:00Z\"}")
+GMAILPCID=$(echo "$GMAILPC" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN2" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID2\",\"p_confirmation_id\":\"$GMAILPCID\",\"p_actor\":\"gmail\"}")
+check "user2 cannot confirm user1's gmail-sourced (Accept) proposal by naming their own real user_id -- the row just isn't theirs" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"confirmation_not_found\"}HTTP:400" "$R"
+
+BALANCE_BEFORE_GMAIL_ACCEPT=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$GMAILPCID\",\"p_actor\":\"gmail\"}")
+check "user1 (real owner) accepting a Gmail candidate confirms via confirm_command with p_actor=gmail" "200" "$R"
+
+EXPECTED_BALANCE_AFTER_GMAIL_ACCEPT=$((BALANCE_BEFORE_GMAIL_ACCEPT - 30000))
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "accepting a Gmail candidate applies the real domain mutation exactly once" "$EXPECTED_BALANCE_AFTER_GMAIL_ACCEPT" "$R"
+
+R=$(curl -s "$BASE/rest/v1/audit_log?entity_type=eq.transaction&action=eq.create_transaction&user_id=eq.$UID1&order=created_at.desc&limit=1&select=actor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['actor'])")
+check "the resulting audit_log row records actor='gmail'" "gmail" "$R"
+
+R=$(curl -s -w "HTTP:%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_command" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$GMAILPCID\",\"p_actor\":\"gmail\"}")
+check "a replayed Accept on the same gmail-sourced confirmation is rejected -- not double-executable" "{\"code\":\"P0001\",\"details\":null,\"hint\":null,\"message\":\"confirmation_not_pending\"}HTTP:400" "$R"
+
+R=$(curl -s "$BASE/rest/v1/accounts?id=eq.$TXN_ACCID&select=balance_minor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['balance_minor'])")
+check "the replayed Accept attempt did not apply the balance delta a second time" "$EXPECTED_BALANCE_AFTER_GMAIL_ACCEPT" "$R"
+echo
+
+echo "== Gmail: audit_log supports actor=gmail directly (scope-denial-shaped event, Phase 19) =="
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/audit_log" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"actor\":\"gmail\",\"action\":\"sync_failed\",\"entity_type\":\"gmail_connection\"}")
+check "an authenticated client still cannot write audit_log directly, even claiming actor=gmail (service-role only)" "403" "$R"
+
+R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/audit_log" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$UID1\",\"actor\":\"gmail\",\"action\":\"sync_failed\",\"entity_type\":\"gmail_connection\",\"after\":{\"reason\":\"token_expired\"}}")
+check "audit_actor enum accepts 'gmail' -- a service-role sync-event insert succeeds (HTTP 201)" "201" "$R"
+echo
+
 echo "== summary =="
 echo "  $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then

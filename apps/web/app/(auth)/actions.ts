@@ -1,7 +1,6 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSecurityStatus, type AuthContext } from "@spencare/domain-application";
 import {
@@ -16,17 +15,11 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { toUserFacingAuthError } from "@/lib/auth-errors";
 import { safeRedirectTarget } from "@/lib/supabase/middleware";
+import { requestOrigin as origin } from "@/lib/request-origin";
 
 export interface AuthActionResult {
   ok: boolean;
   error?: string;
-}
-
-async function origin() {
-  const h = await headers();
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  const host = h.get("host");
-  return `${proto}://${host}`;
 }
 
 /** After a session is established (password or OAuth), gate on 2FA and redirect. */

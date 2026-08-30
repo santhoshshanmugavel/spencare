@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import QRCode from "qrcode";
 import {
   confirmTotpEnrollment,
@@ -15,14 +17,29 @@ import {
   createMcpSession,
   listMcpSessions,
   revokeMcpSession,
+  beginGmailConnect,
+  getGmailStatus,
+  disconnectGmail,
+  runGmailSync,
+  listGmailCandidatesQuery,
+  acceptGmailCandidate,
+  rejectGmailCandidate,
+  markGmailCandidateMatchedExisting,
+  editGmailCandidate,
+  MissingGmailOAuthConfigError,
+  listAccounts,
+  listCategories,
   type AuthContext,
   type McpScope,
+  type GmailCandidateReviewStatus,
+  type EditGmailCandidateInput,
 } from "@spencare/domain-application";
 import type { ProfileUpdateInput } from "@spencare/validation";
 import { connectProvider, switchProvider, updateProviderKey, disconnectProvider, getProviderStatus } from "@spencare/ai";
 import type { ConnectProviderInput, SwitchProviderInput, UpdateProviderKeyInput } from "@spencare/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
+import { requestOrigin } from "@/lib/request-origin";
 
 /** Every settings action resolves AuthContext from the verified session -- never a client-supplied user id (system model §22). */
 async function requireAuthContext(): Promise<AuthContext> {
@@ -172,4 +189,98 @@ export async function revokeMcpSessionAction(sessionId: string) {
   const ctx = await requireAuthContext();
   await revokeMcpSession(ctx, sessionId);
   revalidatePath("/settings/mcp");
+}
+
+/**
+ * Gmail financial ingestion (Phase 19). Every action resolves AuthContext
+ * from the verified session exactly like every action above -- no
+ * exception for Gmail's OAuth-adjacent actions. `beginGmailConnectAction`
+ * is a DEDICATED flow from Google Sign-In (locked decision #5): it never
+ * touches Supabase Auth, only Google's own OAuth endpoints via
+ * `domain-application`'s `beginGmailConnect`/`completeGmailConnect`.
+ */
+const GMAIL_OAUTH_STATE_COOKIE = "spencare_gmail_oauth_state";
+
+export async function beginGmailConnectAction(): Promise<void> {
+  await requireAuthContext();
+  const redirectUri = `${await requestOrigin()}/auth/gmail/callback`;
+
+  let initiation: { authUrl: string; state: string } | null;
+  try {
+    initiation = beginGmailConnect(redirectUri);
+  } catch (e) {
+    const message = e instanceof MissingGmailOAuthConfigError ? "Gmail isn't configured in this environment yet." : "Couldn't start connecting Gmail.";
+    redirect(`/settings/gmail?error=${encodeURIComponent(message)}`);
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set(GMAIL_OAUTH_STATE_COOKIE, initiation.state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 600,
+  });
+  redirect(initiation.authUrl);
+}
+
+export async function getGmailStatusAction() {
+  const ctx = await requireAuthContext();
+  return getGmailStatus(ctx);
+}
+
+export async function disconnectGmailAction() {
+  const ctx = await requireAuthContext();
+  await disconnectGmail(ctx);
+  revalidatePath("/settings/gmail");
+}
+
+export async function syncGmailNowAction() {
+  const ctx = await requireAuthContext();
+  const result = await runGmailSync(ctx);
+  revalidatePath("/settings/gmail");
+  return result;
+}
+
+export async function listGmailCandidatesAction(reviewStatus?: GmailCandidateReviewStatus) {
+  const ctx = await requireAuthContext();
+  return listGmailCandidatesQuery(ctx, reviewStatus);
+}
+
+export async function acceptGmailCandidateAction(candidateId: string) {
+  const ctx = await requireAuthContext();
+  const result = await acceptGmailCandidate(ctx, candidateId);
+  revalidatePath("/settings/gmail");
+  return result;
+}
+
+export async function rejectGmailCandidateAction(candidateId: string) {
+  const ctx = await requireAuthContext();
+  const result = await rejectGmailCandidate(ctx, candidateId);
+  revalidatePath("/settings/gmail");
+  return result;
+}
+
+export async function markGmailCandidateDuplicateAction(candidateId: string) {
+  const ctx = await requireAuthContext();
+  const result = await markGmailCandidateMatchedExisting(ctx, candidateId);
+  revalidatePath("/settings/gmail");
+  return result;
+}
+
+export async function editGmailCandidateAction(candidateId: string, input: EditGmailCandidateInput) {
+  const ctx = await requireAuthContext();
+  const result = await editGmailCandidate(ctx, candidateId, input);
+  revalidatePath("/settings/gmail");
+  return result;
+}
+
+export async function listAccountsForGmailReviewAction() {
+  const ctx = await requireAuthContext();
+  return listAccounts(ctx);
+}
+
+export async function listCategoriesForGmailReviewAction() {
+  const ctx = await requireAuthContext();
+  return listCategories(ctx);
 }

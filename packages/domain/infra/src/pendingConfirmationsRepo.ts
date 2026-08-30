@@ -9,7 +9,7 @@ import type { Json } from "./generated/database.types.js";
  * mutation (see the `confirm_command` migration).
  */
 
-export type ConfirmationSource = "web" | "spensa" | "mcp";
+export type ConfirmationSource = "web" | "spensa" | "mcp" | "gmail";
 export type ConfirmationStatus = "pending" | "confirmed" | "cancelled" | "expired";
 
 export interface PendingConfirmationRow {

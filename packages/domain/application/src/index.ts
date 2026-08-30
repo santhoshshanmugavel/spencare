@@ -256,3 +256,34 @@ export {
 // (Phase 18 locked decision #1's service-role AuthContext), the same way
 // apps/web's own lib/supabase/service.ts already does.
 export { createServiceRoleClient, type TypedSupabaseClient } from "@spencare/domain-infra";
+
+export {
+  beginGmailConnect,
+  completeGmailConnect,
+  getGmailStatus,
+  disconnectGmail,
+  MissingGmailOAuthConfigError,
+  type GmailConnectInitiation,
+  type CompleteGmailConnectInput,
+} from "./commands/gmailConnection.js";
+
+export { runGmailSync, type GmailSyncSummary } from "./commands/gmailSync.js";
+
+export {
+  listGmailCandidatesQuery,
+  getGmailCandidateQuery,
+  editGmailCandidate,
+  rejectGmailCandidate,
+  markGmailCandidateMatchedExisting,
+  acceptGmailCandidate,
+  type EditGmailCandidateInput,
+} from "./commands/gmailCandidates.js";
+
+export {
+  type GmailConnectionStatus,
+  type GmailSyncStatus,
+  type GmailCandidateRow,
+  type GmailCandidateType,
+  type GmailCandidateReviewStatus,
+  type GmailCandidateDirection,
+} from "@spencare/domain-infra";
