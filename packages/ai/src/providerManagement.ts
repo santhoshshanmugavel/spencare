@@ -61,6 +61,9 @@ function toSafeValidationMessage(rawError: string | undefined): string {
   // deprecated hardcoded model ID once caused (real defect, found live:
   // Anthropic's own "invalid_request_error" type string for a bad model
   // name contains the word "invalid" too).
+  if (text.includes("credit balance") || text.includes("plans & billing") || text.includes("plans and billing")) {
+    return "Your provider account doesn't have enough credit balance to use the API. Add credits in your provider's billing settings, then try again -- your key itself is fine.";
+  }
   if (text.includes("provider_error (not a key problem)")) {
     return "The provider rejected this request for a reason unrelated to your key. Try again shortly, or contact support if this persists.";
   }

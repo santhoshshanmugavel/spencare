@@ -73,6 +73,30 @@ describe("connectProvider — validate-then-write, never the reverse", () => {
     expect(vi.mocked(infra.replaceActiveCredential)).not.toHaveBeenCalled();
   });
 
+  it("an insufficient-credit-balance failure gets a clear, actionable billing message -- never 'invalid key' and never the generic provider-error message either", async () => {
+    const infra = await import("@spencare/domain-infra");
+    const resolver = await import("./resolver.js");
+    vi.mocked(resolver.buildAdapterForProvider).mockReturnValue(
+      fakeAdapter({
+        valid: false,
+        error:
+          'provider_error (not a key problem): 400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}',
+      }),
+    );
+
+    const { connectProvider } = await import("./providerManagement.js");
+    const result = await connectProvider(ctx, { provider: "anthropic", apiKey: "sk-a-perfectly-valid-key" });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("invalid_key");
+      expect(result.error.message).not.toBe("That API key appears to be invalid.");
+      expect(result.error.message).toMatch(/credit balance/i);
+      expect(result.error.message).toMatch(/your key itself is fine/i);
+    }
+    expect(vi.mocked(infra.replaceActiveCredential)).not.toHaveBeenCalled();
+  });
+
   it("rejects an unimplemented provider structurally, before ever building an adapter or persisting", async () => {
     const infra = await import("@spencare/domain-infra");
     const resolver = await import("./resolver.js");
