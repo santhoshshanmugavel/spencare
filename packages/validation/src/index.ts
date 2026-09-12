@@ -6,6 +6,7 @@ export {
   forgotPasswordSchema,
   resetPasswordSchema,
   profileUpdateSchema,
+  updatePrivacyModeSchema,
   totpVerifySchema,
   backupCodeSchema,
   avatarUploadSchema,
@@ -14,6 +15,7 @@ export {
   type ForgotPasswordInput,
   type ResetPasswordInput,
   type ProfileUpdateInput,
+  type UpdatePrivacyModeInput,
   type TotpVerifyInput,
   type BackupCodeInput,
   type AvatarUploadInput,
@@ -134,6 +136,11 @@ export {
   regenerateReplySchema,
   type RegenerateReplyInput,
 } from "./ai.js";
+
+export {
+  createCategorySchema,
+  type CreateCategoryInput,
+} from "./categories.js";
 
 export {
   AI_PROVIDERS,

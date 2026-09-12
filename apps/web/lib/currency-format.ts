@@ -2,11 +2,6 @@
  * Pure formatting helpers for the <Money> UI component. No React here —
  * kept separate so the digit-grouping/symbol logic is independently
  * testable without rendering.
- *
- * Scoping note: assumes 2 minor-unit decimal places (matches INR, the only
- * currency evidenced anywhere in the source screens) — zero-decimal
- * currencies (e.g. JPY) are not handled and would need this revisited. Not
- * invented beyond what the product currently needs.
  */
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -14,7 +9,25 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: "$",
   EUR: "€",
   GBP: "£",
+  JPY: "¥",
+  KWD: "KD",
+  BHD: "BD",
 };
+
+/** Number of fractional (minor-unit) digits per currency. */
+const CURRENCY_FRACTION_DIGITS: Record<string, number> = {
+  INR: 2,
+  USD: 2,
+  EUR: 2,
+  GBP: 2,
+  JPY: 0,
+  KWD: 3,
+  BHD: 3,
+};
+
+export function currencyFractionDigits(currencyCode: string): number {
+  return CURRENCY_FRACTION_DIGITS[currencyCode] ?? 2;
+}
 
 export function currencySymbol(currencyCode: string): string {
   return CURRENCY_SYMBOLS[currencyCode] ?? currencyCode;
@@ -43,12 +56,14 @@ export interface FormattedMoney {
 export function formatMinorUnits(amountMinorUnits: bigint, currencyCode: string): FormattedMoney {
   const isNegative = amountMinorUnits < 0n;
   const abs = isNegative ? -amountMinorUnits : amountMinorUnits;
-  const major = abs / 100n;
-  const minor = abs % 100n;
+  const fractionDigits = currencyFractionDigits(currencyCode);
+  const factor = BigInt(10 ** fractionDigits);
+  const major = abs / factor;
+  const minor = abs % factor;
   return {
     symbol: currencySymbol(currencyCode),
     integerPart: groupIndianDigits(major.toString()),
-    decimalPart: minor.toString().padStart(2, "0"),
+    decimalPart: fractionDigits > 0 ? minor.toString().padStart(fractionDigits, "0") : "",
     isNegative,
   };
 }

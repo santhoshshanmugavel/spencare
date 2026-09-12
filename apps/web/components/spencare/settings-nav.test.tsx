@@ -8,7 +8,7 @@ describe("<SettingsNav>", () => {
   it("lists every genuinely implemented section, in the design's original order, with net-new sections appended", () => {
     render(<SettingsNav active="profile" />);
     const links = screen.getAllByRole("link").map((el) => el.textContent);
-    expect(links).toEqual(["Accounts", "Spensa's Brain", "Profile", "Security", "Data & Backup", "MCP", "Gmail"]);
+    expect(links).toEqual(["Accounts", "Spensa's Brain", "Profile", "Privacy", "Security", "Data & Backup", "MCP", "Gmail", "Categories"]);
   });
 
   it("never lists Notifications -- no page exists behind it", () => {
@@ -27,6 +27,7 @@ describe("<SettingsNav>", () => {
   it("every item links to its correct, real route", () => {
     render(<SettingsNav active="profile" />);
     expect(screen.getByRole("link", { name: "Accounts" })).toHaveAttribute("href", "/settings/accounts");
+    expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/settings/privacy");
     expect(screen.getByRole("link", { name: "Data & Backup" })).toHaveAttribute("href", "/settings/data-backup");
     expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute("href", "/settings/mcp");
     expect(screen.getByRole("link", { name: "Gmail" })).toHaveAttribute("href", "/settings/gmail");

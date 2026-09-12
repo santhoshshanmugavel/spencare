@@ -42,7 +42,7 @@ export {
   type SafeToSpendResult,
 } from "./safeToSpend.js";
 
-export { calculateGoalProgress, type GoalProgress } from "./goals.js";
+export { calculateGoalProgress, type GoalProgress, calculateGoalPaceStatus, type GoalPaceStatus } from "./goals.js";
 
 export {
   ACCOUNT_CAPABILITIES,

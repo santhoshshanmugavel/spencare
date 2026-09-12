@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/sheet";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
 import { updateBudgetAction } from "./actions";
 import { ApplyToUpcomingConfirmDialog } from "./apply-to-upcoming-confirm-dialog";
 
@@ -47,9 +48,13 @@ function formatMonthLabel(periodStart: string): string {
 function useMoneyField(initial: string) {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number) => void) {
-    const digits = raw.replace(/[^0-9]/g, "");
-    setDisplay(digits);
-    set(digits === "" ? 0 : Number(digits) * 100);
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+    setDisplay(normalized);
+    if (normalized === "" || normalized === ".") { set(0); return; }
+    const { minor } = parseMoneyInput(normalized, "INR");
+    set(minor);
   }
   return { display, onChange };
 }
@@ -67,7 +72,7 @@ export function EditBudgetSheet({
   onOpenChange: (open: boolean) => void;
   onUpdated: () => void;
 }) {
-  const money = useMoneyField(String(Math.round(budget.limitMinor / 100)));
+  const money = useMoneyField(minorUnitsToDisplay(budget.limitMinor, "INR"));
   const [applyChoice, setApplyChoice] = useState<"thisMonthOnly" | "thisMonthAndUpcoming">(
     budget.isRecurring ? "thisMonthAndUpcoming" : "thisMonthOnly",
   );
@@ -116,7 +121,7 @@ export function EditBudgetSheet({
               render={({ field }) => (
                 <Input
                   id="edit-budget-amount"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   value={money.display}
                   onChange={(e) => money.onChange(e.target.value, field.onChange)}
                   aria-describedby={errors.amountMinor ? errorId("edit-budget-amount") : undefined}

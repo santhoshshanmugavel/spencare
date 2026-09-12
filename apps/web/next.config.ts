@@ -21,6 +21,15 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "6mb",
     },
   },
+  // pdfjs-dist (via pdf-parse → @spencare/domain-infra) uses DOMMatrix at
+  // module-evaluation time. When bundled by Turbopack into the SSR chunks,
+  // the inline code hits `ReferenceError: DOMMatrix is not defined` before
+  // any request is served. Marking these packages as external means
+  // Next.js emits a require() call that is resolved lazily at call-site
+  // instead of inlining the module graph; pdfjs-dist's own polyfill guards
+  // (try/catch around @napi-rs/canvas) then run in their original context
+  // and degrade gracefully with warnings rather than crashing the Lambda.
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
 };
 
 export default nextConfig;

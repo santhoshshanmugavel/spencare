@@ -1150,6 +1150,14 @@ R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/oauth_clients"
   -H "Content-Type: application/json" \
   -d "{\"client_id\":\"spc_client_smoke_test\",\"client_name\":\"Smoke Test Client\",\"redirect_uris\":[\"https://smoke-test.example.com/callback\"]}")
 check "the service-role client (what /oauth/register actually uses) CAN register a client" "201" "$R"
+
+# Phase 36 fix: this row was previously left behind after every run,
+# causing the NEXT run's own registration check above to fail with a
+# false-negative 409 (unique constraint on client_id) -- a test-hygiene
+# gap found live in Phases 34/35/36's own baseline runs, not a security
+# defect. Every other section in this script cleans up its own rows;
+# this one now does too.
+curl -s -o /dev/null -X DELETE "$BASE/rest/v1/oauth_clients?client_id=eq.spc_client_smoke_test" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY"
 echo
 
 # ============================================================================

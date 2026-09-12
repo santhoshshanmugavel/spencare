@@ -41,7 +41,7 @@ function formatTimestamp(iso: string | null): string {
   return new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 }
 
-export function McpSessionManager({ initialSessions }: { initialSessions: McpSessionStatus[] }) {
+export function McpSessionManager({ initialSessions, mcpServerUrl = "" }: { initialSessions: McpSessionStatus[]; mcpServerUrl?: string }) {
   const [sessions, setSessions] = useState<McpSessionStatus[]>(initialSessions);
   const [clientName, setClientName] = useState("");
   const [scopes, setScopes] = useState<Record<McpScope, boolean>>({ read: true, write: false });
@@ -49,8 +49,19 @@ export function McpSessionManager({ initialSessions }: { initialSessions: McpSes
   const [creating, setCreating] = useState(false);
   const [revealedToken, setRevealedToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<McpSessionStatus | null>(null);
   const [revoking, setRevoking] = useState(false);
+
+  async function onCopyUrl() {
+    try {
+      await navigator.clipboard.writeText(mcpServerUrl);
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+    } catch {
+      toastError("Couldn't copy automatically — select and copy the URL manually.");
+    }
+  }
 
   function toggleScope(scope: McpScope) {
     setScopes((prev) => ({ ...prev, [scope]: !prev[scope] }));
@@ -119,6 +130,34 @@ export function McpSessionManager({ initialSessions }: { initialSessions: McpSes
 
   return (
     <div className="space-y-6">
+      {/* Server URL + connection guidance */}
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-foreground">Connect an AI assistant</p>
+        <p className="text-xs text-muted-foreground">
+          Use this remote MCP server URL with any compatible AI assistant or MCP client.
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-sm text-foreground">
+            {mcpServerUrl}
+          </code>
+          <Button type="button" variant="outline" size="icon" onClick={onCopyUrl} aria-label="Copy server URL">
+            {copiedUrl ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+          </Button>
+        </div>
+        <details className="rounded-lg border border-border">
+          <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-foreground">
+            How to connect with Claude
+          </summary>
+          <ol className="space-y-1 px-4 pb-3 pt-2 text-xs text-muted-foreground list-decimal list-inside">
+            <li>Open Claude and go to its MCP / connector settings.</li>
+            <li>Add a remote MCP server and paste the URL above.</li>
+            <li>Complete Spencare authorization when prompted.</li>
+            <li>Approve the requested permissions.</li>
+            <li>Return to Claude and try: &ldquo;Show my account balances.&rdquo;</li>
+          </ol>
+        </details>
+      </div>
+
       {revealedToken ? (
         <Card className="border-primary">
           <CardContent className="space-y-3 py-5">

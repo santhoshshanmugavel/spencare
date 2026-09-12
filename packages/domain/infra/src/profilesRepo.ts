@@ -67,6 +67,27 @@ export async function updateProfile(
   return data as ProfileRow;
 }
 
+/**
+ * Phase 32 -- single-column update, same shape as `updateAvatarUrl` below
+ * (a narrow, dedicated write beside the general `updateProfile` above,
+ * not a variant of it) -- the entry point every Privacy Mode control in
+ * the product (nav rail toggle, Settings > Privacy) ultimately calls.
+ */
+export async function updatePrivacyModeEnabled(
+  client: TypedSupabaseClient,
+  userId: string,
+  enabled: boolean,
+): Promise<ProfileRow> {
+  const { data, error } = await client
+    .from("profiles")
+    .update({ privacy_mode_enabled: enabled })
+    .eq("user_id", userId)
+    .select(PROFILE_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as ProfileRow;
+}
+
 export async function updateAvatarUrl(
   client: TypedSupabaseClient,
   userId: string,

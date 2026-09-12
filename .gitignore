@@ -13,3 +13,9 @@ supabase/.branches/
 supabase/.temp/
 *.tsbuildinfo
 next-env.d.ts
+
+# Local Netlify folder
+.netlify
+
+# Vercel build output
+.vercel/output/

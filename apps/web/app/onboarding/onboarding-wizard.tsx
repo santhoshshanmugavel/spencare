@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastError } from "@/lib/toast";
+import { parseMoneyInput } from "@/lib/money-input";
 import { signOutAction } from "../(auth)/actions";
 import { completeOnboardingAction, saveOnboardingStepAction } from "./actions";
 
@@ -60,6 +61,7 @@ export function OnboardingWizard({ initial }: { initial: OnboardingInitialValues
   const [step, setStep] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [incomeDisplay, setIncomeDisplay] = useState("");
 
   const {
     register,
@@ -267,12 +269,18 @@ export function OnboardingWizard({ initial }: { initial: OnboardingInitialValues
                     render={({ field }) => (
                       <Input
                         id="incomeAmountMinor"
-                        inputMode="numeric"
+                        inputMode="decimal"
                         placeholder="50000"
-                        value={field.value ?? ""}
+                        value={incomeDisplay}
                         onChange={(e) => {
-                          const raw = e.target.value.replace(/[^0-9]/g, "");
-                          field.onChange(raw === "" ? null : Number(raw) * 100);
+                          const raw = e.target.value;
+                          const cleaned = raw.replace(/[^0-9.]/g, "");
+                          const parts = cleaned.split(".");
+                          const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+                          setIncomeDisplay(normalized);
+                          if (normalized === "" || normalized === ".") { field.onChange(null); return; }
+                          const { minor } = parseMoneyInput(normalized, "INR");
+                          field.onChange(minor);
                         }}
                       />
                     )}

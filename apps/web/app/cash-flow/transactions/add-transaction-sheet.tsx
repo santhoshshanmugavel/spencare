@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@spencare/validation";
 import type { AccountRow, CategoryRow } from "@spencare/domain-application";
 import { ACCOUNT_TYPE_LABELS, filterByCapability } from "@spencare/domain-core";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,6 +27,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { CreateCategorySheet } from "@/components/spencare/create-category-sheet";
+import { parseMoneyInput } from "@/lib/money-input";
 import { createTransactionAction, transferAction } from "./actions";
 
 /**
@@ -39,12 +43,16 @@ import { createTransactionAction, transferAction } from "./actions";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-function useMoneyField(initial = "") {
+function useMoneyField(initial = "", currency = "INR") {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number) => void) {
-    const digits = raw.replace(/[^0-9]/g, "");
-    setDisplay(digits);
-    set(digits === "" ? 0 : Number(digits) * 100);
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+    setDisplay(normalized);
+    if (normalized === "" || normalized === ".") { set(0); return; }
+    const { minor } = parseMoneyInput(normalized, currency);
+    set(minor);
   }
   return { display, onChange };
 }
@@ -80,18 +88,52 @@ function AccountSelect({
   );
 }
 
+/**
+ * Phase 38 §4 fix: without this, a transaction kind with zero
+ * capability-eligible accounts (e.g. logging income with only a credit
+ * card on file) silently rendered an empty account dropdown -- the user
+ * could only discover the real problem after a validation error on
+ * submit. `<GoalWizardSheet>`'s own zero-accounts branch (Phase 33)
+ * already established the right pattern for this exact situation: name
+ * the problem and link straight to the fix, matching NN/g #5 (error
+ * prevention) and #9 (help users recognize and recover), not a form the
+ * user has to submit once just to learn what's wrong.
+ */
+function NoEligibleAccounts({ message }: { message: string }) {
+  return (
+    <div className="space-y-3 py-4 text-center">
+      <p className="text-sm text-muted-foreground">{message}</p>
+      <Button asChild size="touch" className="w-full">
+        <Link href="/settings/accounts">Add an account</Link>
+      </Button>
+    </div>
+  );
+}
+
+const CREATE_NEW_SENTINEL = "__create_new__";
+
 function CategorySelect({
   categories,
   value,
   onChange,
+  onRequestCreate,
 }: {
   categories: CategoryRow[];
   value: string;
   onChange: (v: string) => void;
+  onRequestCreate: () => void;
 }) {
+  function handleChange(v: string) {
+    if (v === CREATE_NEW_SENTINEL) {
+      onRequestCreate();
+      return;
+    }
+    onChange(v);
+  }
+
   return (
     <FormField id="txn-category" label="Category">
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} onValueChange={handleChange}>
         <SelectTrigger id="txn-category">
           <SelectValue placeholder="Choose a category" />
         </SelectTrigger>
@@ -101,6 +143,12 @@ function CategorySelect({
               {c.name}
             </SelectItem>
           ))}
+          <SelectItem value={CREATE_NEW_SENTINEL}>
+            <span className="flex items-center gap-1.5 text-primary">
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              Create new category
+            </span>
+          </SelectItem>
         </SelectContent>
       </Select>
     </FormField>
@@ -111,13 +159,16 @@ function ExpenseIncomeForm({
   kind,
   accounts,
   categories,
+  onCategoriesChange,
   onDone,
 }: {
   kind: "expense" | "income";
   accounts: AccountRow[];
   categories: CategoryRow[];
+  onCategoriesChange: (updated: CategoryRow[]) => void;
   onDone: () => void;
 }) {
+  const [createCatOpen, setCreateCatOpen] = useState(false);
   // Phase 28: Credit Card is a valid EXPENSE source but never an income
   // target (a credit card is borrowed credit, not something that receives
   // income) -- filtered here via the shared capability model rather than
@@ -126,11 +177,17 @@ function ExpenseIncomeForm({
   // normal-transaction account).
   const eligibleAccounts = filterByCapability(accounts, kind === "expense" ? "expenseSource" : "incomeTarget");
   const money = useMoneyField();
+  const noEligibleAccountsMessage =
+    kind === "expense"
+      ? "You need a bank, cash, or credit card account to record an expense."
+      : "You need a bank or cash account to record income.";
   const schema = kind === "expense" ? createExpenseSchema : createIncomeSchema;
   const {
     register,
     control,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(schema),
@@ -144,6 +201,8 @@ function ExpenseIncomeForm({
       occurredAt: todayIso(),
     },
   });
+  const selectedAccountId = watch("accountId");
+  const selectedAccount = eligibleAccounts.find((a) => a.id === selectedAccountId);
 
   async function onSubmit(data: CreateTransactionInput) {
     const result = await createTransactionAction(data);
@@ -153,6 +212,10 @@ function ExpenseIncomeForm({
     }
     toastConfirmed(kind === "expense" ? "Expense added." : "Income added.");
     onDone();
+  }
+
+  if (eligibleAccounts.length === 0) {
+    return <NoEligibleAccounts message={noEligibleAccountsMessage} />;
   }
 
   return (
@@ -170,11 +233,27 @@ function ExpenseIncomeForm({
           />
         )}
       />
+      {/*
+        Phase 38 §4 fix: the Transfer form already explains what a
+        credit-card destination means (a repayment); an expense charged
+        TO a credit card had no equivalent note, even though it's the
+        same "this changes what you owe, not your cash balance" concept
+        (NN/g #2, match system and real world) a first-time user could
+        easily misread as spending cash they still have.
+      */}
+      {kind === "expense" && selectedAccount?.type === "credit_card" ? (
+        <p className="text-xs text-muted-foreground">This adds to what you owe on {selectedAccount.name} -- it doesn&apos;t reduce cash in any other account.</p>
+      ) : null}
       <Controller
         control={control}
         name="categoryId"
         render={({ field }) => (
-          <CategorySelect categories={categories} value={field.value} onChange={field.onChange} />
+          <CategorySelect
+            categories={categories}
+            value={field.value}
+            onChange={field.onChange}
+            onRequestCreate={() => setCreateCatOpen(true)}
+          />
         )}
       />
       <FormField id="txn-amount" label="Amount (INR ₹)" error={errors.amountMinor?.message}>
@@ -184,7 +263,7 @@ function ExpenseIncomeForm({
           render={({ field }) => (
             <Input
               id="txn-amount"
-              inputMode="numeric"
+              inputMode="decimal"
               placeholder="500"
               value={money.display}
               onChange={(e) => money.onChange(e.target.value, field.onChange)}
@@ -201,6 +280,15 @@ function ExpenseIncomeForm({
       <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? "Adding…" : kind === "expense" ? "Add expense" : "Add income"}
       </Button>
+      <CreateCategorySheet
+        open={createCatOpen}
+        onOpenChange={setCreateCatOpen}
+        onCreated={(newCat) => {
+          onCategoriesChange([...categories, newCat].sort((a, b) => a.name.localeCompare(b.name)));
+          setValue("categoryId", newCat.id);
+          setCreateCatOpen(false);
+        }}
+      />
     </form>
   );
 }
@@ -240,6 +328,16 @@ function TransferForm({ accounts, onDone }: { accounts: AccountRow[]; onDone: ()
     onDone();
   }
 
+  // Only `fromEligible` needs its own zero-account guard: every account
+  // type with `transferSource: true` (bank/cash) also has
+  // `transferDestination: true`, so `fromEligible` is always a subset of
+  // `toEligible` under the current capability model -- a "toEligible is
+  // empty but fromEligible isn't" state cannot occur, and guarding for it
+  // separately would be dead code.
+  if (fromEligible.length === 0) {
+    return <NoEligibleAccounts message="You need a bank or cash account to transfer from." />;
+  }
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
       <Controller
@@ -267,7 +365,7 @@ function TransferForm({ accounts, onDone }: { accounts: AccountRow[]; onDone: ()
           render={({ field }) => (
             <Input
               id="txn-transfer-amount"
-              inputMode="numeric"
+              inputMode="decimal"
               placeholder="1000"
               value={money.display}
               onChange={(e) => money.onChange(e.target.value, field.onChange)}
@@ -293,7 +391,7 @@ export function AddTransactionSheet({
   onOpenChange,
   onCreated,
   accounts,
-  categories,
+  categories: initialCategories,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -302,6 +400,7 @@ export function AddTransactionSheet({
   categories: CategoryRow[];
 }) {
   const [kind, setKind] = useState<"expense" | "income" | "transfer">("expense");
+  const [categories, setCategories] = useState<CategoryRow[]>(initialCategories);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -319,10 +418,10 @@ export function AddTransactionSheet({
             </TabsList>
           </Tabs>
           {kind === "expense" ? (
-            <ExpenseIncomeForm key="expense" kind="expense" accounts={accounts} categories={categories} onDone={onCreated} />
+            <ExpenseIncomeForm key="expense" kind="expense" accounts={accounts} categories={categories} onCategoriesChange={setCategories} onDone={onCreated} />
           ) : null}
           {kind === "income" ? (
-            <ExpenseIncomeForm key="income" kind="income" accounts={accounts} categories={categories} onDone={onCreated} />
+            <ExpenseIncomeForm key="income" kind="income" accounts={accounts} categories={categories} onCategoriesChange={setCategories} onDone={onCreated} />
           ) : null}
           {kind === "transfer" ? <TransferForm key="transfer" accounts={accounts} onDone={onCreated} /> : null}
         </div>

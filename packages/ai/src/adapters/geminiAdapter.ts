@@ -30,7 +30,29 @@ import type { AiEvent, AiProviderAdapter, ChatMessage, ToolDefinition } from "..
  * name must never be misreported as an invalid key).
  */
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
+// All Gemini model selection flows through resolveModel() -- the GEMINI_MODEL
+// env var is the single override point for production deploys. The default
+// is gemini-3.8-flash (GA, designed for agentic workflows, Phase 29 §6);
+// override with GEMINI_MODEL to pin a specific model in production.
+const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+
+// Canonical model registry -- ordered by preference (most capable / most
+// current first). This is the single source of truth for what Spensa
+// supports; the adapter passes whatever resolveModel() returns directly
+// to the API without further validation.
+export const SUPPORTED_GEMINI_MODELS = [
+  "gemini-3.8-flash",    // GA, agentic-optimised -- default
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+] as const;
+
+export type SupportedGeminiModel = (typeof SUPPORTED_GEMINI_MODELS)[number];
 
 function resolveModel(): string {
   return process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
@@ -62,8 +84,15 @@ export class GeminiAdapter implements AiProviderAdapter {
       await client.models.list();
       return { valid: true };
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        return { valid: false, error: err.message };
+      if (err instanceof ApiError) {
+        const { status, message } = err;
+        // 401 = invalid key; 403 = key restricted/blocked; 400 = unrestricted
+        // standard key rejected (Gemini stopped accepting them Sep 2026 --
+        // users need an auth key from aistudio.google.com/api-keys).
+        // All three mean "this key will not work" -- never tag as provider_error.
+        if (status === 401 || status === 403 || status === 400) {
+          return { valid: false, error: message };
+        }
       }
       const detail = err instanceof Error ? err.message : String(err);
       return { valid: false, error: `provider_error (not a key problem): ${detail}` };

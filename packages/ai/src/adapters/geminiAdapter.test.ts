@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { ApiError } from "@google/genai";
 import {
   MalformedProviderResponseError,
@@ -9,6 +9,7 @@ import {
   ProviderPermissionError,
   ProviderRateLimitError,
 } from "../provider.js";
+import type { ToolDefinition } from "../provider.js";
 
 /**
  * Gemini's SDK has one generic `ApiError` (status-code-carrying), not a
@@ -25,7 +26,8 @@ import {
  * passes through as the real class so tests construct genuine error
  * instances, never hand-rolled fakes that could drift from the real shape.
  */
-let modelsImpl: { list?: () => unknown; generateContentStream?: () => unknown } = {};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let modelsImpl: { list?: (opts?: any) => unknown; generateContentStream?: (opts?: any) => unknown } = {};
 
 vi.mock("@google/genai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@google/genai")>();
@@ -155,5 +157,272 @@ describe("GeminiAdapter.validateKey — does not conflate a provider/model probl
     const { GeminiAdapter } = await import("./geminiAdapter.js");
     await new GeminiAdapter("test-key").validateKey("test-key");
     expect(generateSpy).not.toHaveBeenCalled();
+  });
+});
+
+// Helper: build a fake async-iterable stream of chunks
+function fakeStream(chunks: unknown[]) {
+  return async function* () {
+    for (const chunk of chunks) yield chunk;
+  };
+}
+
+describe("GeminiAdapter.chat — model resolution", () => {
+  const origEnv = process.env.GEMINI_MODEL;
+  afterEach(() => {
+    if (origEnv === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = origEnv;
+    vi.resetModules();
+  });
+
+  it("passes the GEMINI_MODEL env var as the model id when set", async () => {
+    process.env.GEMINI_MODEL = "gemini-3.7-flash";
+    let capturedModel: string | undefined;
+    modelsImpl = {
+      generateContentStream: async (opts: { model?: string }) => {
+        capturedModel = opts.model;
+        return fakeStream([{ text: "ok", candidates: [] }])();
+      },
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _ of adapter.chat([{ role: "user", content: "hi" }], [])) { /* drain */ }
+    expect(capturedModel).toBe("gemini-3.7-flash");
+  });
+
+  it("falls back to gemini-3.8-flash when GEMINI_MODEL is unset", async () => {
+    delete process.env.GEMINI_MODEL;
+    let capturedModel: string | undefined;
+    modelsImpl = {
+      generateContentStream: async (opts: { model?: string }) => {
+        capturedModel = opts.model;
+        return fakeStream([{ text: "ok", candidates: [] }])();
+      },
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _ of adapter.chat([{ role: "user", content: "hi" }], [])) { /* drain */ }
+    expect(capturedModel).toBe("gemini-3.8-flash");
+  });
+
+  it("trims whitespace from GEMINI_MODEL and never passes a blank override", async () => {
+    process.env.GEMINI_MODEL = "   ";
+    let capturedModel: string | undefined;
+    modelsImpl = {
+      generateContentStream: async (opts: { model?: string }) => {
+        capturedModel = opts.model;
+        return fakeStream([{ text: "ok", candidates: [] }])();
+      },
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _ of adapter.chat([{ role: "user", content: "hi" }], [])) { /* drain */ }
+    expect(capturedModel).toBe("gemini-3.8-flash");
+  });
+});
+
+describe("GeminiAdapter.chat — streaming and message construction", () => {
+  beforeEach(() => { vi.resetModules(); });
+
+  it("yields text_delta for each chunk that has text", async () => {
+    modelsImpl = {
+      generateContentStream: async () =>
+        fakeStream([
+          { text: "Hello", candidates: [] },
+          { text: " world", candidates: [] },
+        ])(),
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    const events = [];
+    for await (const e of adapter.chat([{ role: "user", content: "hi" }], [])) {
+      events.push(e);
+    }
+    expect(events.filter((e) => e.type === "text_delta")).toEqual([
+      { type: "text_delta", text: "Hello" },
+      { type: "text_delta", text: " world" },
+    ]);
+  });
+
+  it("always yields message_stop as the final event", async () => {
+    modelsImpl = {
+      generateContentStream: async () => fakeStream([{ text: "done", candidates: [] }])(),
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    const events = [];
+    for await (const e of adapter.chat([{ role: "user", content: "hi" }], [])) {
+      events.push(e);
+    }
+    expect(events[events.length - 1]).toEqual({ type: "message_stop" });
+  });
+
+  it("skips chunks with no text and no functionCall without erroring", async () => {
+    modelsImpl = {
+      generateContentStream: async () =>
+        fakeStream([
+          { text: null, candidates: [] },
+          { text: "real", candidates: [] },
+        ])(),
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    const events = [];
+    for await (const e of adapter.chat([{ role: "user", content: "hi" }], [])) {
+      events.push(e);
+    }
+    expect(events.filter((e) => e.type === "text_delta")).toEqual([{ type: "text_delta", text: "real" }]);
+  });
+
+  it("yields a tool_call event when the model returns a functionCall part", async () => {
+    modelsImpl = {
+      generateContentStream: async () =>
+        fakeStream([
+          {
+            text: null,
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { functionCall: { id: "call-1", name: "proposeAddExpense", args: { amount: 50 } } },
+                  ],
+                },
+              },
+            ],
+          },
+        ])(),
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    const events = [];
+    for await (const e of adapter.chat([{ role: "user", content: "add 50" }], [])) {
+      events.push(e);
+    }
+    expect(events.find((e) => e.type === "tool_call")).toMatchObject({
+      type: "tool_call",
+      id: "call-1",
+      name: "proposeAddExpense",
+      arguments: { amount: 50 },
+    });
+  });
+
+  it("falls back to name when functionCall.id is absent", async () => {
+    modelsImpl = {
+      generateContentStream: async () =>
+        fakeStream([
+          {
+            text: null,
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { functionCall: { id: undefined, name: "myTool", args: {} } },
+                  ],
+                },
+              },
+            ],
+          },
+        ])(),
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    const events = [];
+    for await (const e of adapter.chat([{ role: "user", content: "call" }], [])) {
+      events.push(e);
+    }
+    expect(events.find((e) => e.type === "tool_call")).toMatchObject({ id: "myTool" });
+  });
+
+  it("maps user messages to role:user and assistant messages to role:model", async () => {
+    let capturedContents: unknown[] | undefined;
+    modelsImpl = {
+      generateContentStream: async (opts: { contents?: unknown[] }) => {
+        capturedContents = opts.contents;
+        return fakeStream([{ text: "ok", candidates: [] }])();
+      },
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    for await (const _ of adapter.chat(
+      [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "hi there" },
+        { role: "user", content: "follow-up" },
+      ],
+      [],
+    )) { /* drain */ }
+    expect(capturedContents).toMatchObject([
+      { role: "user", parts: [{ text: "hello" }] },
+      { role: "model", parts: [{ text: "hi there" }] },
+      { role: "user", parts: [{ text: "follow-up" }] },
+    ]);
+  });
+
+  it("maps tool-result messages to role:user with functionResponse parts", async () => {
+    let capturedContents: unknown[] | undefined;
+    modelsImpl = {
+      generateContentStream: async (opts: { contents?: unknown[] }) => {
+        capturedContents = opts.contents;
+        return fakeStream([{ text: "ok", candidates: [] }])();
+      },
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    for await (const _ of adapter.chat(
+      [{ role: "tool", content: '{"ok":true}', toolCallId: "call-42" }],
+      [],
+    )) { /* drain */ }
+    expect(capturedContents).toMatchObject([
+      { role: "user", parts: [{ functionResponse: { id: "call-42" } }] },
+    ]);
+  });
+
+  it("passes the system instruction in config when provided", async () => {
+    let capturedConfig: unknown;
+    modelsImpl = {
+      generateContentStream: async (opts: { config?: unknown }) => {
+        capturedConfig = opts.config;
+        return fakeStream([{ text: "ok", candidates: [] }])();
+      },
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    for await (const _ of adapter.chat([{ role: "user", content: "hi" }], [], "You are Spensa.")) { /* drain */ }
+    expect((capturedConfig as { systemInstruction?: string }).systemInstruction).toBe("You are Spensa.");
+  });
+
+  it("sends functionDeclarations when tools are provided", async () => {
+    let capturedConfig: unknown;
+    modelsImpl = {
+      generateContentStream: async (opts: { config?: unknown }) => {
+        capturedConfig = opts.config;
+        return fakeStream([{ text: "ok", candidates: [] }])();
+      },
+    };
+    const tools: ToolDefinition[] = [
+      { name: "myTool", description: "does a thing", inputSchema: { type: "object", properties: {} } },
+    ];
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    for await (const _ of adapter.chat([{ role: "user", content: "hi" }], tools)) { /* drain */ }
+    const cfg = capturedConfig as { tools?: { functionDeclarations?: unknown[] }[] };
+    expect(cfg.tools?.[0]?.functionDeclarations?.[0]).toMatchObject({ name: "myTool" });
+  });
+
+  it("sends no tools property when the tool list is empty", async () => {
+    let capturedConfig: unknown;
+    modelsImpl = {
+      generateContentStream: async (opts: { config?: unknown }) => {
+        capturedConfig = opts.config;
+        return fakeStream([{ text: "ok", candidates: [] }])();
+      },
+    };
+    const { GeminiAdapter } = await import("./geminiAdapter.js");
+    const adapter = new GeminiAdapter("test-key");
+    for await (const _ of adapter.chat([{ role: "user", content: "hi" }], [])) { /* drain */ }
+    expect((capturedConfig as { tools?: unknown }).tools).toBeUndefined();
   });
 });

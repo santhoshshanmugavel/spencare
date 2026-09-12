@@ -102,6 +102,92 @@ export async function listCategories(client: TypedSupabaseClient, userId: string
   return (data ?? []) as CategoryRow[];
 }
 
+export interface CreateCategoryPatch {
+  name: string;
+  icon?: string | null;
+}
+
+export async function createCategory(
+  client: TypedSupabaseClient,
+  userId: string,
+  patch: CreateCategoryPatch,
+): Promise<CategoryRow> {
+  const { data, error } = await client
+    .from("categories")
+    .insert({ user_id: userId, name: patch.name, icon: patch.icon ?? null, is_system: false })
+    .select("id, user_id, name, icon, is_system")
+    .single();
+  if (error) throw error;
+  return data as CategoryRow;
+}
+
+export interface UpdateCategoryPatch {
+  name?: string;
+  icon?: string | null;
+}
+
+export async function updateCategory(
+  client: TypedSupabaseClient,
+  userId: string,
+  categoryId: string,
+  patch: UpdateCategoryPatch,
+): Promise<CategoryRow> {
+  const { data, error } = await client
+    .from("categories")
+    .update({ ...(patch.name !== undefined && { name: patch.name }), ...(patch.icon !== undefined && { icon: patch.icon }) })
+    .eq("id", categoryId)
+    .eq("user_id", userId)
+    .eq("is_system", false)
+    .select("id, user_id, name, icon, is_system")
+    .single();
+  if (error) throw error;
+  return data as CategoryRow;
+}
+
+export async function archiveCategory(
+  client: TypedSupabaseClient,
+  userId: string,
+  categoryId: string,
+): Promise<void> {
+  const { error } = await client
+    .from("categories")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", categoryId)
+    .eq("user_id", userId)
+    .eq("is_system", false);
+  if (error) throw error;
+}
+
+export async function reassignCategoryInTransactions(
+  client: TypedSupabaseClient,
+  userId: string,
+  fromCategoryId: string,
+  toCategoryId: string,
+): Promise<void> {
+  const { error } = await client
+    .from("transactions")
+    .update({ category_id: toCategoryId })
+    .eq("user_id", userId)
+    .eq("category_id", fromCategoryId)
+    .is("deleted_at", null);
+  if (error) throw error;
+}
+
+export async function countTransactionsForCategory(
+  client: TypedSupabaseClient,
+  userId: string,
+  categoryId: string,
+): Promise<number> {
+  const { count, error } = await client
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("category_id", categoryId)
+    .is("deleted_at", null);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export interface CreateExpenseOrIncomePatch {
   type: "income" | "expense";
   accountId: string;

@@ -19,6 +19,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
 import { updateTransactionAction } from "./actions";
 
 /**
@@ -57,7 +58,8 @@ export function EditTransactionSheet({
   const accountOptions = eligibleAccounts.some((a) => a.id === transaction.account_id)
     ? eligibleAccounts
     : [...eligibleAccounts, ...accounts.filter((a) => a.id === transaction.account_id)];
-  const [display, setDisplay] = useState(String(Math.trunc(transaction.amount_minor / 100)));
+  const txnCurrency = accounts.find((a) => a.id === transaction.account_id)?.currency ?? "INR";
+  const [display, setDisplay] = useState(minorUnitsToDisplay(transaction.amount_minor, txnCurrency));
   const {
     control,
     register,
@@ -132,12 +134,17 @@ export function EditTransactionSheet({
               render={({ field }) => (
                 <Input
                   id="edit-txn-amount"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   value={display}
                   onChange={(e) => {
-                    const digits = e.target.value.replace(/[^0-9]/g, "");
-                    setDisplay(digits);
-                    field.onChange(digits === "" ? 0 : Number(digits) * 100);
+                    const raw = e.target.value;
+                    const cleaned = raw.replace(/[^0-9.]/g, "");
+                    const parts = cleaned.split(".");
+                    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+                    setDisplay(normalized);
+                    if (normalized === "" || normalized === ".") { field.onChange(0); return; }
+                    const { minor } = parseMoneyInput(normalized, txnCurrency);
+                    field.onChange(minor);
                   }}
                 />
               )}

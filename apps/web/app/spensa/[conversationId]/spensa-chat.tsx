@@ -79,8 +79,8 @@ export function SpensaChat({
   void categories;
   void goals;
 
-  async function handleSend() {
-    const content = input.trim();
+  async function handleSend(override?: string) {
+    const content = (override ?? input).trim();
     if (!content) return;
     setInput("");
     setMessages((m) => [...m, { id: `local-${Date.now()}`, role: "user", kind: "text", text: content }]);
@@ -196,10 +196,30 @@ export function SpensaChat({
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-6" role="log" aria-live="polite" aria-label="Conversation">
           {messages.length === 0 && !isStreaming ? (
-            <div className="mx-auto max-w-md space-y-3 py-12 text-center">
+            <div className="mx-auto max-w-md space-y-4 py-12 text-center">
               <Sparkles className="mx-auto size-8 text-primary" aria-hidden="true" />
               <h1 className="text-xl font-semibold text-foreground">Ask Spensa</h1>
               <p className="text-sm text-muted-foreground">Ask about your Safe-to-Spend, budgets, goals, or bills -- or ask Spensa to log an expense (you&apos;ll always confirm before anything is recorded).</p>
+              {/*
+                Phase 37 reference-fidelity addition (`Home screen.pdf` and
+                variants -1/-3, re-read this phase -- confirmed to depict
+                THIS surface, /spensa, not the dashboard /home route; see
+                docs/phase-37/reference-screen-matrix.md). The reference's
+                own starter-prompt row, reproduced verbatim. Each chip sends
+                a REAL message through the exact same conversational path
+                as typing it -- never a silent action of its own -- so this
+                doesn't reintroduce the "looks like navigation but actually
+                mutates" pattern this file's own header comment warns
+                against: a mutation still requires its own confirmation
+                step downstream, exactly like any typed message would.
+              */}
+              <div className="flex flex-wrap justify-center gap-2">
+                {["Add an expense", "Add income", "Show account balances", "See this month's summary", "How much can I spend?"].map((prompt) => (
+                  <Button key={prompt} type="button" variant="outline" size="sm" className="rounded-full" onClick={() => void handleSend(prompt)}>
+                    {prompt}
+                  </Button>
+                ))}
+              </div>
             </div>
           ) : null}
 

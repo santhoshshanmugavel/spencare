@@ -1,0 +1,38 @@
+# Local build caches — never upload
+.turbo/
+.next/
+dist/
+build/
+coverage/
+
+# Dependencies — Netlify installs these during build
+node_modules/
+.pnpm-store/
+
+# Git internals
+.git/
+
+# Environment files — never expose
+.env
+.env.local
+.env.*.local
+
+# TypeScript build info — regenerated
+*.tsbuildinfo
+next-env.d.ts
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Supabase local runtime — not needed for Netlify build
+supabase/.branches/
+supabase/.temp/
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Logs
+*.log

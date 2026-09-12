@@ -105,7 +105,10 @@ export function Money({
       : isAutoNegative
         ? "-"
         : "";
-  const digits = `${formatted.symbol}${formatted.integerPart}.${formatted.decimalPart}`;
+  const digits =
+    formatted.decimalPart.length > 0
+      ? `${formatted.symbol}${formatted.integerPart}.${formatted.decimalPart}`
+      : `${formatted.symbol}${formatted.integerPart}`;
   const display = `${signPrefix}${digits}`;
 
   return (
@@ -118,7 +121,7 @@ export function Money({
       )}
       aria-label={
         ariaLabel ??
-        `${formatted.isNegative ? "negative " : ""}${formatted.symbol}${formatted.integerPart} rupees ${formatted.decimalPart} paise`
+        `${formatted.isNegative ? "negative " : ""}${formatted.symbol}${formatted.integerPart}${formatted.decimalPart.length > 0 ? ` point ${formatted.decimalPart}` : ""}`
       }
     >
       {display}

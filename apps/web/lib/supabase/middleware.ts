@@ -28,7 +28,7 @@ import type { Database } from "@spencare/domain-infra";
 // exactly like any other protected page.
 const SELF_AUTHENTICATING_API_PATHS = ["/api/cron", "/api/mcp", "/oauth/token", "/oauth/register", "/.well-known"];
 
-const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth"];
+const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth", "/privacy", "/terms"];
 const MFA_EXEMPT_PATHS = ["/verify-2fa", "/auth", "/logout"];
 // Reachable regardless of onboarding-completion state -- /onboarding
 // itself, plus everything already exempt from the auth/2FA gates (a user
@@ -90,8 +90,13 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
+    // Encode the full path+query so OAuth params survive the login round-trip
+    // (e.g. /oauth/authorize?response_type=code&client_id=...&state=... must
+    // be preserved intact; setting only `path` loses the query string).
+    const fullRedirectPath = path + request.nextUrl.search;
     url.pathname = "/login";
-    url.searchParams.set("redirect", path);
+    url.search = "";
+    url.searchParams.set("redirect", fullRedirectPath);
     return NextResponse.redirect(url);
   }
 
@@ -119,15 +124,18 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   }
 
   if (user && !mfaPending && isPublicPath && path !== "/reset-password" && !path.startsWith("/auth")) {
-    const url = request.nextUrl.clone();
     if (!onboardingComplete) {
+      const url = request.nextUrl.clone();
       url.pathname = "/onboarding";
-    } else {
-      const target = safeRedirectTarget(request.nextUrl.searchParams.get("redirect"));
-      url.pathname = target ?? "/home";
+      url.search = "";
+      return NextResponse.redirect(url);
     }
-    url.search = "";
-    return NextResponse.redirect(url);
+    const target = safeRedirectTarget(request.nextUrl.searchParams.get("redirect"));
+    // target may include a query string (e.g. /oauth/authorize?response_type=code&...)
+    // -- use URL to reconstruct it rather than setting pathname + clearing search,
+    // which would strip the query params the OAuth flow needs.
+    const destination = new URL(request.nextUrl.origin + (target ?? "/home"));
+    return NextResponse.redirect(destination);
   }
 
   if (user && !mfaPending && !onboardingComplete && !isOnboardingExempt) {

@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_FT209JrlvoguUsfRLR4k655pWFiQ",
+  "orgId": "team_jtUoAnluAWbgpixV99c18iwc",
+  "projectName": "spencare",
+  "settings": {
+    "createdAt": 1789011503281,
+    "framework": "nextjs",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": ".next",
+    "rootDirectory": "apps/web",
+    "directoryListing": false,
+    "nodeVersion": "22.x"
+  }
+}

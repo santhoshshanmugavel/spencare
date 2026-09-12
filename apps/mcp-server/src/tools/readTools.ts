@@ -179,6 +179,20 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
   );
 
   server.registerTool(
+    "listCategories",
+    {
+      description:
+        "List all the user's transaction categories (id + name). Call this first whenever you need to resolve a category name (e.g. 'Dining', 'Groceries') to a categoryId UUID before calling proposeAddExpense, proposeAddIncome, or proposeCreateBudget.",
+      inputSchema: {},
+    },
+    async () =>
+      runScopedTool(ctx, "listCategories", "read", async () => {
+        const categories = await listCategories(ctx);
+        return categories.map((c) => ({ id: c.id, name: c.name }));
+      }),
+  );
+
+  server.registerTool(
     "getCashFlowSummary",
     { description: "Get this month's income/expense/net cash flow totals.", inputSchema: {} },
     async () =>

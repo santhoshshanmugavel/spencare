@@ -67,6 +67,9 @@ function toSafeValidationMessage(rawError: string | undefined): string {
   if (text.includes("provider_error (not a key problem)")) {
     return "The provider rejected this request for a reason unrelated to your key. Try again shortly, or contact support if this persists.";
   }
+  if (text.includes("api key not valid") || text.includes("api_key_invalid") || text.includes("api key is not valid") || text.includes("restricted") || text.includes("unrestricted")) {
+    return "That API key was rejected. For Gemini, you need an Auth key (not a Standard key) — create one at aistudio.google.com/api-keys.";
+  }
   if (text.includes("401") || text.includes("unauthorized") || text.includes("authentication") || text.includes("invalid")) {
     return "That API key appears to be invalid.";
   }

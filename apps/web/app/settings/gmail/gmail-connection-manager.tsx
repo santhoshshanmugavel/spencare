@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FormField } from "@/components/spencare/form-field";
 import { ConfirmDialog } from "@/components/spencare/confirm-dialog";
 import { Money } from "@/components/spencare/money";
+import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import {
   beginGmailConnectAction,
@@ -322,7 +323,7 @@ function GmailCandidateCard({
 }) {
   const [accountId, setAccountId] = useState(candidate.accountId ?? "");
   const [categoryId, setCategoryId] = useState(candidate.suggestedCategoryId ?? "");
-  const [amountDisplay, setAmountDisplay] = useState(candidate.normalizedAmountMinor ? String(Math.round(candidate.normalizedAmountMinor / 100)) : "");
+  const [amountDisplay, setAmountDisplay] = useState(candidate.normalizedAmountMinor ? minorUnitsToDisplay(candidate.normalizedAmountMinor, candidate.currency ?? "INR") : "");
   const [date, setDate] = useState(candidate.normalizedDate ?? "");
   const [merchant, setMerchant] = useState(candidate.normalizedMerchant ?? "");
 
@@ -391,9 +392,13 @@ function GmailCandidateCard({
             <FormField id={`amount-${candidate.id}`} label="Amount (INR ₹)">
               <Input
                 id={`amount-${candidate.id}`}
-                inputMode="numeric"
+                inputMode="decimal"
                 value={amountDisplay}
-                onChange={(e) => setAmountDisplay(e.target.value.replace(/[^0-9]/g, ""))}
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/[^0-9.]/g, "");
+                  const parts = cleaned.split(".");
+                  setAmountDisplay(parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned);
+                }}
               />
             </FormField>
             <FormField id={`date-${candidate.id}`} label="Date">
@@ -411,7 +416,7 @@ function GmailCandidateCard({
                   onSaveEdit({
                     accountId: accountId || undefined,
                     suggestedCategoryId: categoryId || undefined,
-                    normalizedAmountMinor: amountDisplay ? Number(amountDisplay) * 100 : undefined,
+                    normalizedAmountMinor: amountDisplay ? parseMoneyInput(amountDisplay, candidate.currency ?? "INR").minor : undefined,
                     normalizedDate: date || undefined,
                     normalizedMerchant: merchant || undefined,
                   })

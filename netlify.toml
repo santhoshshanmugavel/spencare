@@ -1,7 +1,7 @@
 [build]
-  base = "apps/web"
-  command = "cd ../.. && corepack enable && pnpm install --frozen-lockfile && pnpm --filter @spencare/web build"
-  publish = ".next"
+  base = "."
+  command = "export PATH=\"/Users/santhoshs/.nvm/versions/node/v20.20.2/bin:$PATH\" && export NEXT_PUBLIC_SUPABASE_URL=\"https://wjaxxoselhlbjrtuhqlq.supabase.co\" && export NEXT_PUBLIC_SUPABASE_ANON_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqYXh4b3NlbGhsYmpydHVocWxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5MjI1NDcsImV4cCI6MjEwNDQ5ODU0N30.MRCMWggPbqCojSK9M4FIAeB25awXX4VP028FXxsP4aE\" && pnpm install --frozen-lockfile && pnpm --filter @spencare/web build"
+  publish = "apps/web/.next"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"

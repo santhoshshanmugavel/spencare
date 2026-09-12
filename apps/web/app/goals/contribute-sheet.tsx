@@ -19,6 +19,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput } from "@/lib/money-input";
 import { addContributionAction } from "./actions";
 
 /**
@@ -36,9 +37,13 @@ import { addContributionAction } from "./actions";
 function useMoneyField(initial = "") {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number) => void) {
-    const digits = raw.replace(/[^0-9]/g, "");
-    setDisplay(digits);
-    set(digits === "" ? 0 : Number(digits) * 100);
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+    setDisplay(normalized);
+    if (normalized === "" || normalized === ".") { set(0); return; }
+    const { minor } = parseMoneyInput(normalized, "INR");
+    set(minor);
   }
   return { display, onChange };
 }
@@ -111,7 +116,7 @@ export function ContributeSheet({
               render={({ field }) => (
                 <Input
                   id="contribute-amount"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   placeholder="5000"
                   value={money.display}
                   onChange={(e) => money.onChange(e.target.value, field.onChange)}

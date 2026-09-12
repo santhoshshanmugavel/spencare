@@ -66,12 +66,23 @@ export const createGoal: Command<CreateGoalInput, GoalRow> = {
     if (!hasCapability(account.type, "goalFunding")) {
       return err({ code: "validation_error", message: "Goals can only be funded from a bank, cash, or investment account." });
     }
+    // Clamped, not rejected: the Goal Wizard's "already saved" step can't
+    // know the target amount the user will later confirm in the same
+    // conversation, so an over-large custom entry is silently capped
+    // rather than surfaced as a hard validation error the user can't see
+    // the cause of.
+    const initialSavedAmountMinor = Math.min(
+      parsed.data.initialSavedAmountMinor ?? 0,
+      parsed.data.targetAmountMinor,
+    );
     try {
       const row = await createGoalRow(ctx.supabase, ctx.userId, {
         name: parsed.data.name,
         targetAmountMinor: parsed.data.targetAmountMinor,
         targetDate: parsed.data.targetDate ?? null,
         fundingAccountId: parsed.data.fundingAccountId,
+        term: parsed.data.term ?? "short",
+        initialSavedAmountMinor,
       });
       return ok(row);
     } catch (e) {

@@ -1,7 +1,8 @@
 import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
-import { getSecurityStatus, type AuthContext } from "@spencare/domain-application";
+import { getProfile, getSecurityStatus, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -31,7 +32,7 @@ export default async function DataBackupSettingsPage() {
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
-  const security = await getSecurityStatus(ctx);
+  const [security, profile] = await Promise.all([getSecurityStatus(ctx), getProfile(ctx)]);
 
   return (
     <AppShell
@@ -47,6 +48,7 @@ export default async function DataBackupSettingsPage() {
               href: "/settings/profile",
             },
           ]}
+          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
         />
       }
     >

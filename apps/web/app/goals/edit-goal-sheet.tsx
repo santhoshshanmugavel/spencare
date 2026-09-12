@@ -17,8 +17,11 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
 import { updateGoalAction } from "./actions";
 
 /**
@@ -28,7 +31,7 @@ import { updateGoalAction } from "./actions";
  * explicitly and deliberately overridden -- a goal like "Europe Vacation"
  * can move from one savings account to another without recreating it.
  * The combobox below is the exact same `Controller` + `Select` shape
- * `AddGoalSheet` already uses for the same field; changing it here never
+ * `GoalWizardSheet` already uses for the same field; changing it here never
  * touches past `transactions`, `saved_amount_minor`, or any account
  * balance (see `UpdateGoalPatch` in `goalsRepo.ts`) -- it only changes
  * which account is associated with the goal going forward.
@@ -37,9 +40,13 @@ import { updateGoalAction } from "./actions";
 function useMoneyField(initial: string) {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number) => void) {
-    const digits = raw.replace(/[^0-9]/g, "");
-    setDisplay(digits);
-    set(digits === "" ? 0 : Number(digits) * 100);
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+    setDisplay(normalized);
+    if (normalized === "" || normalized === ".") { set(0); return; }
+    const { minor } = parseMoneyInput(normalized, "INR");
+    set(minor);
   }
   return { display, onChange };
 }
@@ -52,13 +59,13 @@ export function EditGoalSheet({
   onUpdated,
 }: {
   goal: GoalRow;
-  /** Funding-eligible (bank/cash) accounts, same filter `AddGoalSheet` receives -- the goal's CURRENT funding account is always included even if it were somehow no longer eligible, so the field never silently defaults away from it. */
+  /** Funding-eligible (bank/cash) accounts, same filter `GoalWizardSheet` receives -- the goal's CURRENT funding account is always included even if it were somehow no longer eligible, so the field never silently defaults away from it. */
   accounts: AccountRow[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdated: () => void;
 }) {
-  const money = useMoneyField(String(Math.round(goal.target_amount_minor / 100)));
+  const money = useMoneyField(minorUnitsToDisplay(goal.target_amount_minor, "INR"));
   const {
     control,
     register,
@@ -71,6 +78,7 @@ export function EditGoalSheet({
       targetAmountMinor: goal.target_amount_minor,
       targetDate: goal.target_date,
       fundingAccountId: goal.funding_account_id,
+      term: goal.term,
     },
   });
   const selectableAccounts = accounts.some((a) => a.id === goal.funding_account_id)
@@ -105,7 +113,7 @@ export function EditGoalSheet({
               render={({ field }) => (
                 <Input
                   id="edit-goal-target"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   value={money.display}
                   onChange={(e) => money.onChange(e.target.value, field.onChange)}
                   aria-describedby={errors.targetAmountMinor ? errorId("edit-goal-target") : undefined}
@@ -141,6 +149,25 @@ export function EditGoalSheet({
           <FormField id="edit-goal-date" label="Target date (optional)">
             <Input id="edit-goal-date" type="date" {...register("targetDate")} />
           </FormField>
+          <Controller
+            control={control}
+            name="term"
+            render={({ field }) => (
+              <div className="space-y-1.5">
+                <Label id="edit-goal-term-label">Goal length</Label>
+                <RadioGroup aria-labelledby="edit-goal-term-label" value={field.value} onValueChange={field.onChange}>
+                  <label htmlFor="edit-goal-term-short" className="flex items-center gap-2 text-sm text-foreground">
+                    <RadioGroupItem id="edit-goal-term-short" value="short" />
+                    Short term
+                  </label>
+                  <label htmlFor="edit-goal-term-long" className="flex items-center gap-2 text-sm text-foreground">
+                    <RadioGroupItem id="edit-goal-term-long" value="long" />
+                    Long term
+                  </label>
+                </RadioGroup>
+              </div>
+            )}
+          />
           <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? "Saving…" : "Save changes"}
           </Button>

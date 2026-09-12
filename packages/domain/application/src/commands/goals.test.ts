@@ -10,6 +10,7 @@ interface FakeGoal {
   funding_account_id: string;
   saved_amount_minor: number;
   status: "active" | "completed" | "archived";
+  term: "short" | "long";
   deleted_at: string | null;
   archived_at: string | null;
   completed_at: string | null;
@@ -82,8 +83,9 @@ vi.mock("@spencare/domain-infra", () => ({
       target_amount_minor: patch.targetAmountMinor as number,
       target_date: (patch.targetDate as string | null) ?? null,
       funding_account_id: patch.fundingAccountId as string,
-      saved_amount_minor: 0,
+      saved_amount_minor: (patch.initialSavedAmountMinor as number | undefined) ?? 0,
       status: "active",
+      term: (patch.term as "short" | "long") ?? "short",
       deleted_at: null,
       archived_at: null,
       completed_at: null,
@@ -224,6 +226,59 @@ describe("createGoal", () => {
       expect(result.value.status).toBe("active");
       expect(result.value.saved_amount_minor).toBe(0);
     }
+  });
+
+  it("defaults an omitted term to 'short' (Goals-9.pdf's Short term / Long term split)", async () => {
+    const result = await createGoal.execute(makeCtx(), {
+      name: "Emergency Fund",
+      targetAmountMinor: 1000000,
+      fundingAccountId: bankAccountId,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.term).toBe("short");
+  });
+
+  it("writes a Goal Wizard-supplied initial saved amount as plain metadata, never as a contribution transaction", async () => {
+    const result = await createGoal.execute(makeCtx(), {
+      name: "Vietnam Trip",
+      targetAmountMinor: 6_000_000,
+      fundingAccountId: bankAccountId,
+      initialSavedAmountMinor: 500_000,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.saved_amount_minor).toBe(500_000);
+  });
+
+  it("clamps an initial saved amount that exceeds the target rather than starting the goal over-funded", async () => {
+    const result = await createGoal.execute(makeCtx(), {
+      name: "Vietnam Trip",
+      targetAmountMinor: 1_000_000,
+      fundingAccountId: bankAccountId,
+      initialSavedAmountMinor: 5_000_000,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.saved_amount_minor).toBe(1_000_000);
+  });
+
+  it("defaults the initial saved amount to 0 when omitted", async () => {
+    const result = await createGoal.execute(makeCtx(), {
+      name: "Emergency Fund",
+      targetAmountMinor: 1000000,
+      fundingAccountId: bankAccountId,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.saved_amount_minor).toBe(0);
+  });
+
+  it("accepts an explicit 'long' term", async () => {
+    const result = await createGoal.execute(makeCtx(), {
+      name: "Bali Trip 2027",
+      targetAmountMinor: 20000000,
+      fundingAccountId: bankAccountId,
+      term: "long",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.term).toBe("long");
   });
 
   it("rejects a funding account that doesn't belong to the user or doesn't exist", async () => {

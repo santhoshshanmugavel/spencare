@@ -3,6 +3,7 @@ import { getProfile, listAccounts, listGoals, resolveGoalImageUrls, type AuthCon
 import { filterByCapability } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { GoalsGrid } from "./goals-grid";
@@ -60,6 +61,7 @@ export default async function GoalsPage() {
               href: "/settings/profile",
             },
           ]}
+          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
         />
       }
     >

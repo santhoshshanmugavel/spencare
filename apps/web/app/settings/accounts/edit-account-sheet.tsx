@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sheet";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
 import { updateAccountAction } from "./actions";
 
 /**
@@ -46,7 +47,7 @@ export function EditAccountSheet({
   onSaved: () => void;
 }) {
   const valueField = valueFieldFor(account);
-  const [display, setDisplay] = useState(String(Math.trunc(valueField.initial / 100)));
+  const [display, setDisplay] = useState(minorUnitsToDisplay(valueField.initial, account.currency));
   const {
     register,
     control,
@@ -90,12 +91,17 @@ export function EditAccountSheet({
               render={({ field }) => (
                 <Input
                   id="edit-value"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   value={display}
                   onChange={(e) => {
-                    const digits = e.target.value.replace(/[^0-9]/g, "");
-                    setDisplay(digits);
-                    field.onChange(digits === "" ? 0 : Number(digits) * 100);
+                    const raw = e.target.value;
+                    const cleaned = raw.replace(/[^0-9.]/g, "");
+                    const parts = cleaned.split(".");
+                    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+                    setDisplay(normalized);
+                    if (normalized === "" || normalized === ".") { field.onChange(0); return; }
+                    const { minor } = parseMoneyInput(normalized, account.currency);
+                    field.onChange(minor);
                   }}
                 />
               )}

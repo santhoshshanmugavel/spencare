@@ -16,23 +16,23 @@ export default async function SignUpPage(props: PageProps<"/signup">) {
         <CardTitle className="text-xl">Create your account</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <SignUpForm redirectTarget={redirectTarget} />
         {googleEnabled ? (
           <>
+            <GoogleButton
+              action={signInWithGoogleAction.bind(null, redirectTarget)}
+              label="Continue with Google"
+            />
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Or</span>
+                <span className="bg-card px-2 text-muted-foreground">or</span>
               </div>
             </div>
-            <GoogleButton
-              action={signInWithGoogleAction.bind(null, redirectTarget)}
-              label="Continue with Google"
-            />
           </>
         ) : null}
+        <SignUpForm redirectTarget={redirectTarget} />
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link href="/login" className="text-primary hover:underline">

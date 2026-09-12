@@ -1,8 +1,9 @@
 import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
 import { getConversation, getConversationMessages, listConversations } from "@spencare/ai";
-import { listAccounts, listCategories, listGoals, type AuthContext } from "@spencare/domain-application";
+import { getProfile, listAccounts, listCategories, listGoals, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { SpensaChat } from "./spensa-chat";
@@ -41,12 +42,13 @@ export default async function SpensaConversationPage(props: PageProps<"/spensa/[
   };
 
   const isNew = conversationId === "new";
-  const [conversations, accounts, categories, goals, existing] = await Promise.all([
+  const [conversations, accounts, categories, goals, existing, profile] = await Promise.all([
     listConversations(ctx),
     listAccounts(ctx),
     listCategories(ctx),
     listGoals(ctx),
     isNew ? Promise.resolve({ conversation: null, messages: [] }) : getConversationDataSafe(ctx, conversationId),
+    getProfile(ctx),
   ]);
 
   return (
@@ -60,6 +62,7 @@ export default async function SpensaConversationPage(props: PageProps<"/spensa/[
             { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             { key: "settings", label: "Settings", icon: <SettingsIcon className="size-5" />, href: "/settings/profile" },
           ]}
+          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
         />
       }
     >

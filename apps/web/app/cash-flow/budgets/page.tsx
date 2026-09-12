@@ -2,6 +2,7 @@ import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } fr
 import { getProfile, listBudgetsWithUsage, listCategories, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { CashFlowTabs } from "@/components/spencare/cash-flow-tabs";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
@@ -68,6 +69,7 @@ export default async function BudgetsPage(props: PageProps<"/cash-flow/budgets">
               href: "/settings/profile",
             },
           ]}
+          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
         />
       }
     >

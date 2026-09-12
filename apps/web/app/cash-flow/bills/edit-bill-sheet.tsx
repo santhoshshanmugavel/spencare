@@ -18,6 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
 import { updateBillAction } from "./actions";
 
 const RECURRENCE_LABELS: Record<(typeof RECURRENCE_INTERVALS)[number], string> = {
@@ -32,9 +33,13 @@ const RECURRENCE_LABELS: Record<(typeof RECURRENCE_INTERVALS)[number], string> =
 function useMoneyField(initial = "") {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number | null) => void) {
-    const digits = raw.replace(/[^0-9]/g, "");
-    setDisplay(digits);
-    set(digits === "" ? null : Number(digits) * 100);
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+    setDisplay(normalized);
+    if (normalized === "" || normalized === ".") { set(null); return; }
+    const { minor } = parseMoneyInput(normalized, "INR");
+    set(minor);
   }
   return { display, onChange };
 }
@@ -52,7 +57,7 @@ export function EditBillSheet({
   onOpenChange: (open: boolean) => void;
   onUpdated: () => void;
 }) {
-  const money = useMoneyField(bill.expected_amount_minor != null ? String(Math.round(bill.expected_amount_minor / 100)) : "");
+  const money = useMoneyField(bill.expected_amount_minor != null ? minorUnitsToDisplay(bill.expected_amount_minor, "INR") : "");
   const {
     control,
     register,
@@ -125,7 +130,7 @@ export function EditBillSheet({
               render={({ field }) => (
                 <Input
                   id="edit-bill-amount"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   value={money.display}
                   onChange={(e) => money.onChange(e.target.value, field.onChange)}
                   aria-describedby={errors.expectedAmountMinor ? errorId("edit-bill-amount") : undefined}

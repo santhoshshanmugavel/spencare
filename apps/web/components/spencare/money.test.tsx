@@ -83,7 +83,7 @@ describe("<Money> — hero sizing (information-architecture.md §4)", () => {
 describe("<Money> — accessibility", () => {
   it("has an accessible label describing the amount even when visually just digits", () => {
     render(<Money value={DomainMoney.fromMinorUnits(50000n, "INR")} />);
-    expect(screen.getByLabelText(/500 rupees 00 paise/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/₹500 point 00/)).toBeInTheDocument();
   });
 
   it("masked amounts announce as hidden, not silently omitted (accessibility-requirements.md §3)", () => {

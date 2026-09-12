@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, CalendarClock } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, CalendarClock, Search, Sparkles } from "lucide-react";
 import { Money as DomainMoney, ACCOUNT_TYPE_LABELS, filterByCapability, getSpendableMinor } from "@spencare/domain-core";
 import type {
   AccountRow,
@@ -16,38 +16,48 @@ import type {
 } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Progress, type ProgressTone } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { DonutChart, type DonutChartSlice } from "@/components/spencare/donut-chart";
-import {
-  SafeToSpendHeroCard,
-  FinancialLayersCard,
-  type SafeToSpendPlain,
-  type NetWorthPlain,
-} from "@/components/spencare/financial-overview-cards";
 import { formatMinorUnits } from "@/lib/currency-format";
-
-export type { SafeToSpendPlain, NetWorthPlain };
+import {
+  accountTag,
+  computeSpendingInsight,
+  daySubtotalMinor,
+  formatGroupDate,
+  groupByDate,
+  transactionHint,
+} from "@/lib/transaction-presentation";
+import { AddTransactionSheet } from "./transactions/add-transaction-sheet";
+import { TransactionDetailDialog } from "./transactions/transaction-detail-dialog";
+import { DeleteTransactionDialog } from "./transactions/delete-transaction-dialog";
+import { BillNowSheet } from "./bills/bill-now-sheet";
 
 /**
- * The Cash Flow Overview shell (SP-081, canonical toolbar/base per the
- * locked Phase 13 decision -- SP-089's alternate toolbar/Spensa-source-
- * filter is explicitly NOT built). Composes already-computed data only:
- * no query, no mutation, no business logic lives in this component.
+ * The Cash Flow workspace (SP-081 base, Phase 30B reference-fidelity
+ * correction). Region layout now follows the reference PDF's own
+ * structure rather than a generic dashboard:
  *
- * Two genuinely distinct tab constructs on this one page, per the
- * reconnaissance's own finding:
- *  - `CashFlowTabs` (rendered by the parent page) -- cross-ROUTE
- *    navigation between /cash-flow, /cash-flow/transactions,
- *    /cash-flow/budgets, /cash-flow/bills.
- *  - The `Tabs` used HERE -- a same-page preview switcher between Recent
- *    Transactions and Upcoming Bills (SP-081's own "tab switcher"), with
- *    a "View all" link out to the corresponding full route. Genuine
- *    Radix `Tabs` (not plain links), per the accessibility requirement
- *    that a same-page tab interface expose real tab semantics.
+ *  HEADER          -- title (left) / month nav (CENTERED) / +Add (right)
+ *  TOOLBAR         -- account filter + category filter, one row
+ *  INSIGHT BANNER  -- a real, computed (never fabricated) spending insight
+ *  FINANCIAL STRIP -- Safe-to-Spend/Net-Worth, compact -- never competes
+ *                     with the transaction workspace below it
+ *  WORKSPACE       -- left: Recent transactions / Upcoming bills (the
+ *                     page's PRIMARY, dominant surface -- full date
+ *                     grouping, search, per-row insight, hover actions,
+ *                     click opens the right-side Sidekick); right:
+ *                     Spending/Income analysis or the budget/spend-limits
+ *                     panel once a budget exists.
+ *
+ * Two genuinely distinct tab constructs on this one page (unchanged from
+ * the prior pass): `CashFlowTabs` (rendered by the parent page) for
+ * cross-ROUTE navigation, and the same-page `Tabs` here for the Recent
+ * Transactions / Upcoming Bills preview switcher.
  */
 
 const CURRENCY = "INR";
@@ -101,9 +111,6 @@ export function CashFlowOverview({
   recentTransactions,
   upcomingBills,
   budgetUsages,
-  safeToSpend,
-  netWorth,
-  investmentTotalMinor,
 }: {
   periodStart: string;
   accounts: AccountRow[];
@@ -117,16 +124,19 @@ export function CashFlowOverview({
   recentTransactions: TransactionRow[];
   upcomingBills: BillPredictionWithDefinition[];
   budgetUsages: BudgetWithUsage[];
-  safeToSpend: SafeToSpendPlain | null;
-  /** Phase 28 Part 15/16: kept SEPARATE from safeToSpend -- Net Worth and Safe-to-Spend are different concepts, never merged into one figure. */
-  netWorth: NetWorthPlain;
-  investmentTotalMinor: number;
 }) {
   const router = useRouter();
   const [previewTab, setPreviewTab] = useState<"transactions" | "bills">("transactions");
   const [donutMode, setDonutMode] = useState<"expense" | "income">("expense");
+  const [addOpen, setAddOpen] = useState(false);
+  const [detail, setDetail] = useState<TransactionRow | null>(null);
+  const [quickDeleting, setQuickDeleting] = useState<TransactionRow | null>(null);
+  const [billNowing, setBillNowing] = useState<BillPredictionWithDefinition | null>(null);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
   // Bank/Cash/Credit Card are filterable here (Investment still excluded
   // -- no per-account decomposition the architecture supports for it).
   // Deliberately uses `expenseSource`, not `safeToSpendEligible` -- Phase
@@ -138,6 +148,38 @@ export function CashFlowOverview({
   const cashAccounts = filterByCapability(accounts, "expenseSource");
   const hasAnyAccounts = accounts.length > 0;
   const hasBudget = budgetUsages.length > 0;
+
+  // Client-side narrowing of the already-fetched, already-correct rows --
+  // a display concern (which of the fetched items are shown), never a
+  // second computation of a financial figure. The category/search filters
+  // are local UI state, not URL params like the account filter, since
+  // they narrow within the current fetch rather than requesting different
+  // data from the server.
+  const query = search.trim().toLowerCase();
+  const filteredTransactions = useMemo(
+    () =>
+      recentTransactions.filter((t) => {
+        if (categoryFilter !== "all" && t.category_id !== categoryFilter) return false;
+        if (query === "") return true;
+        const title = (t.merchant || t.description || "").toLowerCase();
+        return title.includes(query);
+      }),
+    [recentTransactions, categoryFilter, query],
+  );
+  const filteredBills = useMemo(
+    () =>
+      upcomingBills.filter((b) => {
+        if (categoryFilter !== "all" && b.bill_definitions.category_id !== categoryFilter) return false;
+        if (query === "") return true;
+        return b.bill_definitions.merchant_pattern.toLowerCase().includes(query);
+      }),
+    [upcomingBills, categoryFilter, query],
+  );
+  const transactionGroups = useMemo(() => groupByDate(filteredTransactions, (t) => t.occurred_at), [filteredTransactions]);
+  const billGroups = useMemo(() => groupByDate(filteredBills, (b) => b.expected_date), [filteredBills]);
+
+  const expenseSlices = toDonutSlices(expenseByCategory, categories);
+  const insight = computeSpendingInsight(expenseSlices, comparison.expense.deltaPercent);
 
   function goToMonth(delta: number) {
     const [year, month] = periodStart.split("-").map(Number);
@@ -154,6 +196,10 @@ export function CashFlowOverview({
     query.set("month", periodStart);
     if (value !== "all") query.set("account", value);
     router.push(`/cash-flow?${query.toString()}`);
+  }
+
+  function handleMutated() {
+    router.refresh();
   }
 
   // Honest, source-supported empty state (system-model.md §25: "No
@@ -179,56 +225,101 @@ export function CashFlowOverview({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-4">
+      {/* HEADER: title left, month nav CENTERED, +Add right -- reference structure. */}
+      <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
         <h1 className="text-2xl font-semibold text-foreground">Cash Flow</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => goToMonth(-1)} aria-label="Previous month">
-            ← Previous
+            ←
           </Button>
-          <span className="text-sm font-medium text-muted-foreground">{shiftMonthLabel(periodStart)}</span>
+          <span className="whitespace-nowrap text-sm font-medium text-muted-foreground">{shiftMonthLabel(periodStart)}</span>
           <Button variant="ghost" size="sm" onClick={() => goToMonth(1)} aria-label="Next month">
-            Next →
+            →
+          </Button>
+        </div>
+        <div className="flex items-center justify-start gap-2 sm:justify-end">
+          <Button size="touch" onClick={() => setAddOpen(true)}>
+            + Add
           </Button>
         </div>
       </div>
 
-      {/*
-        Account filter: Bank/Cash/Credit Card, per the Phase 13 locked
-        decision -- Safe-to-Spend's own budget/goal-aware states (3/4/5)
-        have no per-account decomposition the architecture supports, so
-        this filter is deliberately scoped to the same "Safe-to-Spend-
-        eligible" universe Safe-to-Spend itself uses (Phase 28: that
-        universe now includes Credit Card), rather than inventing
-        undefined semantics for a filtered investment view (SP-092's
-        Accounts rollup panel is explicitly out of scope this phase).
-      */}
-      <Select value={selectedAccountId ?? "all"} onValueChange={onAccountChange}>
-        <SelectTrigger aria-label="Filter by account" className="w-full sm:w-64">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All accounts</SelectItem>
-          {cashAccounts.map((a) => (
-            <SelectItem key={a.id} value={a.id}>
-              {a.name} · {ACCOUNT_TYPE_LABELS[a.type]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {/* TOOLBAR: account filter + category filter, one row. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={selectedAccountId ?? "all"} onValueChange={onAccountChange}>
+          <SelectTrigger aria-label="Filter by account" className="w-full sm:w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All accounts</SelectItem>
+            {cashAccounts.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {a.name} · {ACCOUNT_TYPE_LABELS[a.type]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger aria-label="Filter by category" className="w-full sm:w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Category</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/*
-        Header metric -- the ONE place this page ever shows a headline
-        spendability figure, and the two cases are clearly, textually
-        distinguished (Phase 13 locked decision #4/#5): "Safe to Spend"
-        is the real, global `getSafeToSpend()` result (unmodified,
-        reused as-is); a specific account filter shows that account's own
-        plain balance under a different label ("Available Balance"),
-        never presented as if it were Safe-to-Spend.
+        INSIGHT BANNER: a real, computed spending insight (never
+        fabricated text) -- Phase 30B's "Main insight card" requirement.
+        Shown only on the aggregate view; a single selected account has
+        its own clearly-labeled figure below instead.
+      */}
+      {!selectedAccount && insight ? (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="space-y-1 py-4">
+            <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              <Sparkles className="size-4 text-primary" aria-hidden="true" />
+              {insight.title}
+            </div>
+            <p className="text-sm text-muted-foreground">{insight.body}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/*
+        Phase 35 reference-fidelity correction: an earlier phase (30B)
+        added a Safe-to-Spend/Net Worth "financial strip" here, reasoning
+        that Home and Cash Flow should "match by construction." Re-reading
+        the actual reference screens this phase (`Cash Flow.pdf`,
+        `Cash Flow-1.pdf`, `Cash Flow - Recent Transactions-1.pdf`, `Cash
+        Flow Overview.pdf`/`-1.pdf`/`After Budget.pdf` -- four independent
+        screens, all consistent) shows NONE of them render a global
+        Safe-to-Spend card on this page at all. Home already owns "how
+        much can I safely spend overall" as its own dedicated hero; this
+        page's own budget panel (below, in the right column) already
+        answers the page-scoped version of that question ("how much of
+        this month's budget is left") exactly as the reference shows it.
+        A THIRD, redundant "how much can I spend" figure competing for
+        the first thing a user sees on this page -- above even the AI
+        insight and the transaction list it's meant to support -- is
+        exactly the "supporting context must not overpower the workspace"
+        problem repeatedly flagged (Phase 34/35's own mandate text). Per
+        Section 32 ("financial correctness outranks pixel imitation, not
+        the other way — but pixel evidence still wins when nothing
+        financial is at stake"): removed for the "All accounts" view.
+        `getSafeToSpend`/`getNetWorth` are UNCHANGED and still correct;
+        this is a display decision on one page, not a formula change.
       */}
       {selectedAccount ? (
         <Card>
-          <CardContent className="space-y-1 py-5">
+          <CardContent className="space-y-1 py-4">
             <span className="text-sm font-medium text-muted-foreground">
               {selectedAccount.type === "credit_card" ? "Available Credit" : "Available Balance"} --{" "}
               {selectedAccount.name}
@@ -249,7 +340,7 @@ export function CashFlowOverview({
                 masked={masked}
                 size="hero"
                 tone="neutral"
-                className="text-3xl min-[375px]:text-4xl"
+                className="text-2xl"
               />
             </div>
             {selectedAccount.type === "credit_card" ? (
@@ -257,61 +348,86 @@ export function CashFlowOverview({
             ) : null}
           </CardContent>
         </Card>
-      ) : (
-        <>
-          {safeToSpend ? <SafeToSpendHeroCard safeToSpend={safeToSpend} masked={masked} /> : null}
-          {/*
-            Phase 29 Section 7/39: Home and Cash Flow render the exact
-            same shared component with the exact same data -- "does Home
-            match Cash Flow?" is true by construction, not by convention.
-            Only shown on the "All accounts" view -- a single filtered
-            account already has its own clearly-labeled figure above.
-          */}
-          <FinancialLayersCard
-            creditAvailableMinor={safeToSpend?.creditAvailableMinor ?? 0}
-            investmentTotalMinor={investmentTotalMinor}
-            netWorth={netWorth}
-            masked={masked}
-          />
-        </>
-      )}
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-4">
+        {/* WORKSPACE: the primary, dominant surface. */}
+        <div className="space-y-3">
           <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as typeof previewTab)}>
-            <TabsList>
-              <TabsTrigger value="transactions">Recent transactions</TabsTrigger>
-              <TabsTrigger value="bills">Upcoming bills{upcomingBills.length > 0 ? ` (${upcomingBills.length})` : ""}</TabsTrigger>
-            </TabsList>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <TabsList>
+                <TabsTrigger value="transactions">Recent transactions</TabsTrigger>
+                <TabsTrigger value="bills">Upcoming bills{upcomingBills.length > 0 ? ` (${upcomingBills.length})` : ""}</TabsTrigger>
+              </TabsList>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <Input
+                  type="search"
+                  placeholder="Search"
+                  aria-label="Search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-40 pl-9"
+                />
+              </div>
+            </div>
 
             <TabsContent value="transactions" className="space-y-3">
-              {recentTransactions.length === 0 ? (
+              {filteredTransactions.length === 0 ? (
                 <Card>
                   <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                    No transactions yet. Add an expense, income, or transfer to get started.
+                    {recentTransactions.length === 0
+                      ? "No transactions yet. Add an expense, income, or transfer to get started."
+                      : "No transactions match your search."}
                   </CardContent>
                 </Card>
               ) : (
-                <Card>
-                  <CardContent className="space-y-1">
-                    {recentTransactions.map((t) => {
-                      const account = accounts.find((a) => a.id === t.account_id);
-                      const category = t.category_id ? categoryById.get(t.category_id) : undefined;
-                      return (
-                        <ListRow
-                          key={t.id}
-                          icon={iconForTransaction(t.type)}
-                          title={t.merchant || t.description || (t.type === "transfer" ? "Transfer" : "Transaction")}
-                          metadata={[
-                            category ? <span key="cat">{category.name}</span> : null,
-                            account ? <span key="acct">{account.name}</span> : null,
-                          ].filter(Boolean)}
-                          trailing={trailingForTransaction(t, masked)}
+                transactionGroups.map((group) => {
+                  const subtotal = daySubtotalMinor(group.items);
+                  const subtotalMoney = DomainMoney.fromMinorUnits(BigInt(subtotal), group.items[0]?.currency ?? CURRENCY);
+                  return (
+                    <div key={group.date} className="space-y-1">
+                      <div className="flex items-center justify-between px-1">
+                        <h2 className="text-sm font-medium text-muted-foreground">{formatGroupDate(group.date)}</h2>
+                        <Money
+                          value={subtotalMoney}
+                          masked={masked}
+                          size="body"
+                          tone="auto"
+                          aria-label={`Net total for ${formatGroupDate(group.date)}`}
                         />
-                      );
-                    })}
-                  </CardContent>
-                </Card>
+                      </div>
+                      <Card>
+                        <CardContent className="space-y-1">
+                          {group.items.map((t) => {
+                            const account = accountById.get(t.account_id);
+                            const category = t.category_id ? categoryById.get(t.category_id) : undefined;
+                            return (
+                              <ListRow
+                                key={t.id}
+                                icon={iconForTransaction(t.type)}
+                                title={t.merchant || t.description || (t.type === "transfer" ? "Transfer" : "Transaction")}
+                                subtitle={transactionHint(t, category)}
+                                metadata={[
+                                  category ? <span key="cat">{category.name}</span> : null,
+                                  account ? <span key="acct">{accountTag(account)}</span> : null,
+                                ].filter(Boolean)}
+                                trailing={trailingForTransaction(t, masked)}
+                                onClick={() => setDetail(t)}
+                                aria-label={`${t.merchant || t.description || "Transaction"}, view details`}
+                                hoverActions={
+                                  <Button variant="ghost" size="sm" onClick={() => setQuickDeleting(t)}>
+                                    Delete
+                                  </Button>
+                                }
+                              />
+                            );
+                          })}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  );
+                })
               )}
               <div className="text-right">
                 <Link href="/cash-flow/transactions" className="text-sm font-medium text-primary hover:underline">
@@ -321,36 +437,72 @@ export function CashFlowOverview({
             </TabsContent>
 
             <TabsContent value="bills" className="space-y-3">
-              {upcomingBills.length === 0 ? (
+              {filteredBills.length === 0 ? (
                 <Card>
                   <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                    No upcoming bills tracked yet.
+                    {upcomingBills.length === 0 ? "No upcoming bills tracked yet." : "No upcoming bills match your search."}
                   </CardContent>
                 </Card>
               ) : (
-                <Card>
-                  <CardContent className="space-y-1">
-                    {upcomingBills.map((p) => (
-                      <ListRow
-                        key={p.id}
-                        icon={<CalendarClock className="size-4 text-muted-foreground" aria-hidden="true" />}
-                        title={p.bill_definitions.merchant_pattern}
-                        trailing={
-                          p.expected_amount_minor != null ? (
-                            <Money
-                              value={DomainMoney.fromMinorUnits(BigInt(p.expected_amount_minor), CURRENCY as never)}
-                              masked={masked}
-                              size="numeric"
-                              tone="neutral"
-                            />
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Amount varies</span>
-                          )
-                        }
-                      />
-                    ))}
-                  </CardContent>
-                </Card>
+                billGroups.map((group) => {
+                  const yetToSpend = group.items.reduce((sum, b) => sum + (b.expected_amount_minor ?? 0), 0);
+                  const yetToSpendMoney = DomainMoney.fromMinorUnits(BigInt(yetToSpend), CURRENCY as never);
+                  return (
+                    <div key={group.date} className="space-y-1">
+                      <div className="flex items-center justify-between px-1">
+                        <h2 className="text-sm font-medium text-muted-foreground">{formatGroupDate(group.date)}</h2>
+                        <span className="text-sm text-muted-foreground">
+                          Yet to spend{" "}
+                          <Money value={yetToSpendMoney} masked={masked} size="body" tone="neutral" className="inline" />
+                        </span>
+                      </div>
+                      <Card>
+                        <CardContent className="space-y-1">
+                          {group.items.map((p) => {
+                            const isToday = p.expected_date === new Date().toISOString().slice(0, 10);
+                            return (
+                              <ListRow
+                                key={p.id}
+                                icon={<CalendarClock className="size-4 text-muted-foreground" aria-hidden="true" />}
+                                title={p.bill_definitions.merchant_pattern}
+                                metadata={[
+                                  categoryById.get(p.bill_definitions.category_id ?? "")?.name ? (
+                                    <span key="cat">{categoryById.get(p.bill_definitions.category_id ?? "")?.name}</span>
+                                  ) : null,
+                                ].filter(Boolean)}
+                                trailing={
+                                  <div className="text-right">
+                                    {p.expected_amount_minor != null ? (
+                                      <Money
+                                        value={DomainMoney.fromMinorUnits(BigInt(p.expected_amount_minor), CURRENCY as never)}
+                                        masked={masked}
+                                        size="numeric"
+                                        tone="neutral"
+                                      />
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">Amount varies</span>
+                                    )}
+                                    {isToday ? (
+                                      <div>
+                                        <button
+                                          type="button"
+                                          className="text-xs font-medium text-primary hover:underline"
+                                          onClick={() => setBillNowing(p)}
+                                        >
+                                          Bill Now
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                }
+                              />
+                            );
+                          })}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  );
+                })
               )}
               <div className="text-right">
                 <Link href="/cash-flow/bills" className="text-sm font-medium text-primary hover:underline">
@@ -375,7 +527,7 @@ export function CashFlowOverview({
             <Card>
               <CardContent className="space-y-3 py-5">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Budget remaining</span>
+                  <span className="text-sm font-medium text-muted-foreground">Available to spend this month</span>
                 </div>
                 {(() => {
                   const totalLimit = budgetUsages.reduce((sum, u) => sum + u.limitMinor, 0);
@@ -385,36 +537,61 @@ export function CashFlowOverview({
                     totalLimit > 0 && totalSpent / totalLimit >= 1 ? "exceeded" : totalLimit > 0 && totalSpent / totalLimit >= 0.7 ? "near_limit" : "under";
                   return (
                     <>
-                      <Money
-                        value={DomainMoney.fromMinorUnits(BigInt(Math.max(totalRemaining, 0)), CURRENCY as never)}
-                        masked={masked}
-                        size="hero"
-                        tone="neutral"
-                        className="text-2xl"
-                      />
+                      <div className="flex items-baseline gap-1.5">
+                        <Money
+                          value={DomainMoney.fromMinorUnits(BigInt(Math.max(totalRemaining, 0)), CURRENCY as never)}
+                          masked={masked}
+                          size="hero"
+                          tone="neutral"
+                          className="text-2xl"
+                        />
+                        <span className="text-sm text-muted-foreground">
+                          /{" "}
+                          <Money
+                            value={DomainMoney.fromMinorUnits(BigInt(totalLimit), CURRENCY as never)}
+                            masked={masked}
+                            size="body"
+                            tone="neutral"
+                            className="inline text-sm text-muted-foreground"
+                          />{" "}
+                          budget
+                        </span>
+                      </div>
                       <Progress
                         value={totalLimit > 0 ? Math.min(100, (totalSpent / totalLimit) * 100) : 0}
                         tone={toneFor(overallStatus)}
                         aria-label="Overall budget usage"
                       />
                       <p className="text-xs text-muted-foreground">
-                        {masked ? "Amount hidden" : `${formatAmount(totalSpent, CURRENCY)} spent of ${formatAmount(totalLimit, CURRENCY)} budgeted`}
+                        {masked ? "Amount hidden" : `${formatAmount(totalSpent, CURRENCY)} spent`}
                       </p>
                     </>
                   );
                 })()}
-                <ul className="space-y-2 pt-2">
+                <div className="flex items-baseline justify-between pt-2">
+                  <span className="text-sm font-medium text-foreground">Spend limits</span>
+                  <span className="text-xs text-muted-foreground">Remaining</span>
+                </div>
+                <ul className="space-y-2">
                   {budgetUsages.map((u) => {
                     const category = categoryById.get(u.categoryId);
+                    const isOver = u.remainingMinor < 0;
                     return (
                       <li key={u.id} className="space-y-1">
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-foreground">{category?.name ?? "Category"}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {masked ? "Amount hidden" : `${formatAmount(u.remainingMinor, CURRENCY)} remaining`}
+                          <span className={isOver ? "text-xs font-medium text-destructive" : "text-xs text-muted-foreground"}>
+                            {masked
+                              ? "Amount hidden"
+                              : isOver
+                                ? `${formatAmount(-u.remainingMinor, CURRENCY)} over`
+                                : `${formatAmount(u.remainingMinor, CURRENCY)}`}
                           </span>
                         </div>
                         <Progress value={Math.min(100, u.percentUsed)} tone={toneFor(u.status)} aria-label={`${category?.name ?? "Category"} budget usage`} />
+                        <p className="text-xs text-muted-foreground">
+                          {masked ? "Amount hidden" : `${formatAmount(u.spentMinor, CURRENCY)} spent / ${formatAmount(u.limitMinor, CURRENCY)} budget`}
+                        </p>
                       </li>
                     );
                   })}
@@ -446,7 +623,7 @@ export function CashFlowOverview({
                   </Button>
                 </div>
                 <DonutChart
-                  slices={toDonutSlices(donutMode === "expense" ? expenseByCategory : incomeByCategory, categories)}
+                  slices={donutMode === "expense" ? expenseSlices : toDonutSlices(incomeByCategory, categories)}
                   totalMinor={
                     donutMode === "expense" ? comparison.current.expenseMinor : comparison.current.incomeMinor
                   }
@@ -460,6 +637,14 @@ export function CashFlowOverview({
                     {Math.round(comparison.expense.deltaPercent)}% vs last month
                   </p>
                 ) : null}
+                {donutMode === "expense" ? (
+                  <div className="space-y-1 border-t border-border pt-3 text-center">
+                    <p className="text-sm font-medium text-foreground">
+                      {masked ? "Amount hidden" : `You've spent totally ${formatAmount(comparison.current.expenseMinor, CURRENCY)} this month`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Set budgets to stay on track before the month ends.</p>
+                  </div>
+                ) : null}
                 <Button asChild variant="outline" size="touch" className="w-full">
                   <Link href="/cash-flow/budgets">Set up budgets</Link>
                 </Button>
@@ -468,6 +653,67 @@ export function CashFlowOverview({
           )}
         </div>
       </div>
+
+      <AddTransactionSheet
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        accounts={accounts}
+        categories={categories}
+        onCreated={() => {
+          setAddOpen(false);
+          handleMutated();
+        }}
+      />
+
+      {detail ? (
+        <TransactionDetailDialog
+          transaction={detail}
+          account={accountById.get(detail.account_id)}
+          category={detail.category_id ? categoryById.get(detail.category_id) : undefined}
+          accounts={accounts}
+          categories={categories}
+          open={!!detail}
+          onOpenChange={(o) => {
+            if (!o) setDetail(null);
+          }}
+          onMutated={() => {
+            setDetail(null);
+            handleMutated();
+          }}
+        />
+      ) : null}
+
+      {quickDeleting ? (
+        <DeleteTransactionDialog
+          transaction={quickDeleting}
+          account={accountById.get(quickDeleting.account_id)}
+          category={quickDeleting.category_id ? categoryById.get(quickDeleting.category_id) : undefined}
+          open={!!quickDeleting}
+          onOpenChange={(o) => {
+            if (!o) setQuickDeleting(null);
+          }}
+          onDeleted={() => {
+            setQuickDeleting(null);
+            handleMutated();
+          }}
+        />
+      ) : null}
+
+      {billNowing ? (
+        <BillNowSheet
+          prediction={billNowing}
+          accounts={accounts}
+          categories={categories}
+          open={!!billNowing}
+          onOpenChange={(o) => {
+            if (!o) setBillNowing(null);
+          }}
+          onPaid={() => {
+            setBillNowing(null);
+            handleMutated();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

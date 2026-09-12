@@ -3,20 +3,38 @@
 import { useState } from "react";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import type { AccountRow, CategoryRow, TransactionRow } from "@spencare/domain-application";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Money } from "@/components/spencare/money";
+import { accountTag, transactionHint } from "@/lib/transaction-presentation";
 import { EditTransactionSheet } from "./edit-transaction-sheet";
 import { DeleteTransactionDialog } from "./delete-transaction-dialog";
 
 /**
- * SP-093 is the only source screen for a transaction-detail surface, and
- * it's entirely Spensa-conversational (suggested-action chips: Mark as
- * recurring, Edit, Delete) -- fabricating a chat UI for it is explicitly
- * forbidden this phase (§11 of the approval). This is a plain read-only
- * detail view instead, built from SP-093's evidenced FIELD list (merchant,
- * category, account, amount, date) without its chat wrapper -- RECOMMENDED
- * for the surface itself, OBSERVED for which fields it shows.
+ * The "Transaction Spensa Sidekick" (Phase 30B reference-fidelity
+ * correction): clicking a transaction row opens a RIGHT-side panel, not a
+ * centered modal or a route navigation -- `Sheet` already defaults to
+ * `side="right"` (see `ui/sheet.tsx`), so this is a straight `Dialog` ->
+ * `Sheet` swap, not a new primitive. Header shows Merchant/Amount/Account/
+ * Date exactly as the reference structure specifies, followed by a "Spend
+ * Summary" section (the same non-fabricated `transactionHint` line the
+ * transaction row itself shows -- restated here with the row's own
+ * category context, not a different or fancier claim) and a "Configure"
+ * section (category/account, read-only here -- actual edits go through
+ * `EditTransactionSheet`, opened via the Edit action below).
+ *
+ * SP-093 is still the only source screen for this surface and is entirely
+ * Spensa-conversational (suggested-action chips) -- fabricating a chat UI
+ * remains out of scope (§11 of the original approval); this keeps the
+ * plain, read-only field list, just relocated into the reference's actual
+ * right-side surface instead of a centered dialog.
  */
 
 const TYPE_LABEL: Record<TransactionRow["type"], string> = {
@@ -50,49 +68,65 @@ export function TransactionDetailDialog({
   const [deleting, setDeleting] = useState(false);
   const value = DomainMoney.fromMinorUnits(BigInt(transaction.amount_minor), transaction.currency as never);
   const canEdit = transaction.type === "income" || transaction.type === "expense";
+  const title = transaction.merchant || transaction.description || TYPE_LABEL[transaction.type];
+  const hint = transactionHint(transaction, category);
 
   return (
     <>
-      <Dialog open={open && !editing && !deleting} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{transaction.merchant || transaction.description || TYPE_LABEL[transaction.type]}</DialogTitle>
-          </DialogHeader>
-          <dl className="space-y-2 text-sm">
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-muted-foreground">Amount</dt>
-              <dd>
-                <Money value={value} size="numeric" />
-              </dd>
+      <Sheet open={open && !editing && !deleting} onOpenChange={onOpenChange}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{title}</SheetTitle>
+            <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 text-foreground">
+              <Money value={value} size="body" className="inline" />
+              {accountTag(account) ? <span>· {accountTag(account)}</span> : null}
+              <span>
+                ·{" "}
+                {new Date(transaction.occurred_at + "T00:00:00").toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="space-y-6 px-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium text-foreground">Spend Summary</h3>
+              <p className="text-sm text-muted-foreground">{hint ?? `${TYPE_LABEL[transaction.type]} recorded.`}</p>
             </div>
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-muted-foreground">Type</dt>
-              <dd>{TYPE_LABEL[transaction.type]}</dd>
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-foreground">Configure</h3>
+              <dl className="space-y-2 text-sm">
+                <div className="flex items-baseline justify-between gap-4">
+                  <dt className="text-muted-foreground">Type</dt>
+                  <dd>{TYPE_LABEL[transaction.type]}</dd>
+                </div>
+                {category ? (
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-muted-foreground">Category</dt>
+                    <dd>{category.name}</dd>
+                  </div>
+                ) : null}
+                {account ? (
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-muted-foreground">Account</dt>
+                    <dd>{accountTag(account)}</dd>
+                  </div>
+                ) : null}
+                {transaction.description ? (
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-muted-foreground">Note</dt>
+                    <dd className="text-right">{transaction.description}</dd>
+                  </div>
+                ) : null}
+              </dl>
             </div>
-            {category ? (
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted-foreground">Category</dt>
-                <dd>{category.name}</dd>
-              </div>
-            ) : null}
-            {account ? (
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted-foreground">Account</dt>
-                <dd>{account.name}</dd>
-              </div>
-            ) : null}
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-muted-foreground">Date</dt>
-              <dd>{new Date(transaction.occurred_at + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</dd>
-            </div>
-            {transaction.description ? (
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted-foreground">Note</dt>
-                <dd className="text-right">{transaction.description}</dd>
-              </div>
-            ) : null}
-          </dl>
-          <DialogFooter>
+          </div>
+
+          <SheetFooter className="flex-row justify-end gap-2">
             {canEdit ? (
               <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                 Edit
@@ -101,9 +135,9 @@ export function TransactionDetailDialog({
             <Button type="button" variant="destructive" onClick={() => setDeleting(true)}>
               Delete
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {editing ? (
         <EditTransactionSheet

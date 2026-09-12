@@ -77,3 +77,49 @@ function monthsUntil(targetDateIso: string | null, today: Date): number | null {
   const months = monthDiff + dayAdjustment;
   return Math.max(months, 1);
 }
+
+/**
+ * Phase 31 (Financial Insights Dashboard) -- "Are my goals on track?" /
+ * "Goals at risk." A goal has no stored monthly PLAN (the "₹Y/month"
+ * figure in `GoalProgress` is recomputed fresh from whatever is left
+ * today, not a fixed commitment made at creation), so "at risk" cannot be
+ * "missed a payment" -- the only real, defensible signal available is
+ * whether SAVED PROGRESS is behind the LINEAR PACE a goal with this
+ * target date would need, measured from when the goal was created. This
+ * is a genuine computation from real stored fields (`created_at`,
+ * `target_date`, `target_amount_minor`, `saved_amount_minor`), never a
+ * fabricated claim.
+ *
+ * "reached" and "no_schedule" (no target date, or a nonsensical/expired
+ * one) are NOT "behind" -- a goal with no schedule has nothing to be
+ * behind on, and flagging it anyway would be a false alarm no user asked
+ * for. The 15-percentage-point cushion avoids flagging a goal "behind"
+ * over ordinary day-to-day timing noise (e.g. a contribution due in 3
+ * days that just hasn't landed yet).
+ */
+export type GoalPaceStatus = "reached" | "on_track" | "behind" | "no_schedule";
+
+export function calculateGoalPaceStatus(
+  targetAmountMinor: number,
+  savedAmountMinor: number,
+  createdAtIso: string,
+  targetDateIso: string | null,
+  today: Date = new Date(),
+): GoalPaceStatus {
+  if (savedAmountMinor >= targetAmountMinor) return "reached";
+  if (!targetDateIso) return "no_schedule";
+
+  const created = new Date(createdAtIso);
+  const target = new Date(targetDateIso + "T00:00:00Z");
+  if (Number.isNaN(created.getTime()) || Number.isNaN(target.getTime())) return "no_schedule";
+
+  const totalMs = target.getTime() - created.getTime();
+  if (totalMs <= 0) return "no_schedule"; // target date at/before creation -- no meaningful pace to measure
+
+  const elapsedFraction = Math.min(1, Math.max(0, (today.getTime() - created.getTime()) / totalMs));
+  const expectedPercent = elapsedFraction * 100;
+  const actualPercent = targetAmountMinor === 0 ? 0 : (savedAmountMinor / targetAmountMinor) * 100;
+
+  const BEHIND_CUSHION_POINTS = 15;
+  return actualPercent < expectedPercent - BEHIND_CUSHION_POINTS ? "behind" : "on_track";
+}

@@ -39,6 +39,7 @@ const goal: GoalRow = {
   funding_account_id: bankAccount.id,
   saved_amount_minor: 0,
   status: "active",
+  term: "short",
   image_url: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",

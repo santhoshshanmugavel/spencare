@@ -31,11 +31,42 @@ const targetDateSchema = z
   .nullable()
   .optional();
 
+/**
+ * Reference fidelity pass (Goals-9.pdf's "Short term / Long term" segmented
+ * control) -- kept optional (not `.default(...)`) so `CreateGoalInput`
+ * doesn't become a required field on every existing call site (tests, MCP,
+ * AI tools) that constructs a plain object literal without it; the actual
+ * "short" default is applied where `targetDate`'s own optionality is
+ * already resolved -- inside `createGoal`'s command (commands/goals.ts),
+ * not by the schema's inferred TS type.
+ */
+const goalTermSchema = z.enum(["short", "long"]).optional();
+
+/**
+ * Phase 33 §10: the conversational Goal Wizard (`Goal Creation.pdf`) asks
+ * "Do you already have some savings for this?" BEFORE the goal exists.
+ * This is metadata describing money the user says already sits in the
+ * funding account -- it must NOT be routed through `addContribution`
+ * (that RPC debits the account's real balance and records a real
+ * transaction; running it here would double-count money that never
+ * moved). Optional, defaults to 0 in the command, capped at the target
+ * amount so a goal can never start "already reached" via an over-large
+ * typo.
+ */
+const initialSavedAmountMinorSchema = z
+  .number()
+  .int("Amount must be a whole number of minor units.")
+  .nonnegative("Amount can't be negative.")
+  .max(1_000_000_000_000, "That amount is too large.")
+  .optional();
+
 export const createGoalSchema = z.object({
   name: z.string().trim().min(1, "Give this goal a name.").max(120, "That name is too long."),
   targetAmountMinor: targetAmountMinorSchema,
   targetDate: targetDateSchema,
   fundingAccountId: z.string().uuid(),
+  term: goalTermSchema,
+  initialSavedAmountMinor: initialSavedAmountMinorSchema,
 });
 export type CreateGoalInput = z.infer<typeof createGoalSchema>;
 
@@ -55,6 +86,7 @@ export const updateGoalSchema = z.object({
   targetAmountMinor: targetAmountMinorSchema.optional(),
   targetDate: targetDateSchema,
   fundingAccountId: z.string().uuid().optional(),
+  term: z.enum(["short", "long"]).optional(),
 });
 export type UpdateGoalInput = z.infer<typeof updateGoalSchema>;
 

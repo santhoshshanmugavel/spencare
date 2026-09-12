@@ -75,6 +75,40 @@ describe("<SpensaChat> — empty/new-conversation state", () => {
     expect(screen.getByRole("heading", { name: "Ask Spensa" })).toBeInTheDocument();
   });
 
+  /**
+   * Phase 37 reference-fidelity addition (`Home screen.pdf`/-1/-3, the
+   * actual reference for THIS surface -- see
+   * docs/phase-37/reference-screen-matrix.md): five starter-prompt chips,
+   * reproduced verbatim.
+   */
+  it("shows the reference's five starter-prompt chips", () => {
+    render(<SpensaChat {...baseProps} conversationId={null} />);
+    for (const prompt of ["Add an expense", "Add income", "Show account balances", "See this month's summary", "How much can I spend?"]) {
+      expect(screen.getByRole("button", { name: prompt })).toBeInTheDocument();
+    }
+  });
+
+  it("clicking a starter chip sends it as a real message through the normal path, not a silent action", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      sseResponse([{ type: "text_delta", text: "Sure, what did you spend on?" }, { type: "message_complete", messageId: "m-1" }]),
+    );
+    render(<SpensaChat {...baseProps} conversationId={null} />);
+    await user.click(screen.getByRole("button", { name: "Add an expense" }));
+
+    expect(screen.getByText("Add an expense")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Sure, what did you spend on?")).toBeInTheDocument());
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/spensa/chat",
+      expect.objectContaining({ body: JSON.stringify({ conversationId: null, content: "Add an expense" }) }),
+    );
+  });
+
+  it("the starter chips disappear once a real conversation has started (they are an empty-state affordance only)", () => {
+    render(<SpensaChat {...baseProps} initialMessages={[textMessage("m1", "user", "hi")]} />);
+    expect(screen.queryByRole("button", { name: "Add an expense" })).not.toBeInTheDocument();
+  });
+
   it("lists past conversations in the sidebar and links each to its own route", () => {
     render(<SpensaChat {...baseProps} conversations={[conversation({ id: "conv-old", title: "Budget check" })]} />);
     expect(screen.getByRole("link", { name: "Budget check" })).toHaveAttribute("href", "/spensa/conv-old");

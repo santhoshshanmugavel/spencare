@@ -85,6 +85,21 @@ export const profileUpdateSchema = z.object({
 });
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
 
+/**
+ * Phase 32 -- deliberately its OWN narrow schema/command, not a reuse of
+ * `profileUpdateSchema` above: that schema requires `preferredCurrency`/
+ * `timezone` on every call (it's a whole-form save for Settings > Profile),
+ * which would force every toggle click elsewhere in the product (nav rail,
+ * Settings > Privacy) to first know and resend the user's current currency
+ * and timezone just to flip one boolean. Same "narrow, single-purpose
+ * schema beside a general one" precedent as `avatarUploadSchema` beside
+ * `profileUpdateSchema`.
+ */
+export const updatePrivacyModeSchema = z.object({
+  enabled: z.boolean(),
+});
+export type UpdatePrivacyModeInput = z.infer<typeof updatePrivacyModeSchema>;
+
 export const totpVerifySchema = z.object({
   code: z
     .string()

@@ -1,8 +1,9 @@
 import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
-import { listAccounts, listCategories, type AuthContext } from "@spencare/domain-application";
+import { getProfile, listAccounts, listCategories, type AuthContext } from "@spencare/domain-application";
 import { filterByCapability } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { ImportWizard } from "./import-wizard";
@@ -30,7 +31,7 @@ export default async function ImportPage() {
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
-  const [accounts, categories] = await Promise.all([listAccounts(ctx), listCategories(ctx)]);
+  const [accounts, categories, profile] = await Promise.all([listAccounts(ctx), listCategories(ctx), getProfile(ctx)]);
   // Phase 28 Part 8: Credit Card is a valid import destination (expense
   // rows only -- confirm_import_batch itself rejects a batch containing
   // any income row against a credit card, never a silent partial
@@ -54,6 +55,7 @@ export default async function ImportPage() {
             { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
             { key: "settings", label: "Settings", icon: <SettingsIcon className="size-5" />, href: "/settings/profile" },
           ]}
+          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
         />
       }
     >

@@ -18,6 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput } from "@/lib/money-input";
 import { createBillAction } from "./actions";
 
 /**
@@ -42,9 +43,13 @@ const RECURRENCE_LABELS: Record<(typeof RECURRENCE_INTERVALS)[number], string> =
 function useMoneyField(initial = "") {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number | null) => void) {
-    const digits = raw.replace(/[^0-9]/g, "");
-    setDisplay(digits);
-    set(digits === "" ? null : Number(digits) * 100);
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+    setDisplay(normalized);
+    if (normalized === "" || normalized === ".") { set(null); return; }
+    const { minor } = parseMoneyInput(normalized, "INR");
+    set(minor);
   }
   return { display, onChange };
 }
@@ -136,7 +141,7 @@ export function AddBillSheet({
               render={({ field }) => (
                 <Input
                   id="bill-amount"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   placeholder="499"
                   value={money.display}
                   onChange={(e) => money.onChange(e.target.value, field.onChange)}

@@ -14,6 +14,7 @@ import {
   startTotpEnrollment,
   updateAvatar,
   updateProfile,
+  updatePrivacyMode,
   createMcpSession,
   listMcpSessions,
   revokeMcpSession,
@@ -29,6 +30,9 @@ import {
   MissingGmailOAuthConfigError,
   listAccounts,
   listCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
   exportUserData,
   deleteAccount,
   type AuthContext,
@@ -36,8 +40,10 @@ import {
   type GmailCandidateReviewStatus,
   type EditGmailCandidateInput,
   type DeleteAccountInput,
+  type UpdateCategoryInput,
+  type DeleteCategoryInput,
 } from "@spencare/domain-application";
-import type { ProfileUpdateInput } from "@spencare/validation";
+import type { ProfileUpdateInput, UpdatePrivacyModeInput } from "@spencare/validation";
 import { connectProvider, switchProvider, updateProviderKey, disconnectProvider, getProviderStatus } from "@spencare/ai";
 import type { ConnectProviderInput, SwitchProviderInput, UpdateProviderKeyInput } from "@spencare/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -73,6 +79,24 @@ export async function updateProfileAction(input: ProfileUpdateInput) {
   const ctx = await requireAuthContext();
   const result = await updateProfile.execute(ctx, input);
   if (result.ok) revalidatePath("/settings/profile");
+  return result;
+}
+
+/**
+ * Phase 32 -- the single entry point every Privacy Mode control calls
+ * (nav rail toggle, Settings > Privacy). `revalidatePath("/", "layout")`
+ * invalidates the ROOT layout and everything under it -- deliberate,
+ * since privacy_mode_enabled is read by ~10 different routes (Home, Cash
+ * Flow and its 4 sub-routes, Goals, Accounts, ...) and hand-listing every
+ * one here would silently rot the day a new masked page is added. This
+ * is the one action in the product that intentionally invalidates
+ * everything, because Privacy Mode is the one setting that legitimately
+ * affects everything.
+ */
+export async function updatePrivacyModeAction(input: UpdatePrivacyModeInput) {
+  const ctx = await requireAuthContext();
+  const result = await updatePrivacyMode.execute(ctx, input);
+  if (result.ok) revalidatePath("/", "layout");
   return result;
 }
 
@@ -315,5 +339,33 @@ export async function deleteAccountAction(input: DeleteAccountInput) {
   if (result.ok) {
     await supabase.auth.signOut();
   }
+  return result;
+}
+
+// ── Category management ────────────────────────────────────────────────────
+
+export async function listCategoriesAction() {
+  const ctx = await requireAuthContext();
+  return listCategories(ctx);
+}
+
+export async function createCategoryAction(input: { name: string; icon: string | null }) {
+  const ctx = await requireAuthContext();
+  const result = await createCategory.execute(ctx, input);
+  if (result.ok) revalidatePath("/settings/categories");
+  return result;
+}
+
+export async function updateCategoryAction(input: UpdateCategoryInput) {
+  const ctx = await requireAuthContext();
+  const result = await updateCategory.execute(ctx, input);
+  if (result.ok) revalidatePath("/settings/categories");
+  return result;
+}
+
+export async function deleteCategoryAction(input: DeleteCategoryInput) {
+  const ctx = await requireAuthContext();
+  const result = await deleteCategory.execute(ctx, input);
+  if (result.ok) revalidatePath("/settings/categories");
   return result;
 }

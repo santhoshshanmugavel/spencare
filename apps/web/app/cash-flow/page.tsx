@@ -1,10 +1,8 @@
 import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
 import {
   getCashFlowByCategory,
-  getNetWorth,
   getProfile,
   getRecentTransactions,
-  getSafeToSpend,
   getUpcomingBills,
   compareCashFlowPeriods,
   listAccounts,
@@ -15,6 +13,7 @@ import {
 import { lastDayOfMonth } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { CashFlowTabs } from "@/components/spencare/cash-flow-tabs";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
@@ -70,7 +69,7 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
 
-  const [accounts, categories, profile, comparison, expenseByCategory, incomeByCategory, recentTransactions, upcomingBills, budgetUsages, netWorthResult] =
+  const [accounts, categories, profile, comparison, expenseByCategory, incomeByCategory, recentTransactions, upcomingBills, budgetUsages] =
     await Promise.all([
       listAccounts(ctx),
       listCategories(ctx),
@@ -82,61 +81,23 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
       ),
       getCashFlowByCategory(ctx, { periodStart, periodEnd, accountId }, "expense"),
       getCashFlowByCategory(ctx, { periodStart, periodEnd, accountId }, "income"),
-      getRecentTransactions(ctx, { accountId, limit: 5 }),
-      getUpcomingBills(ctx, 5),
+      // Phase 30B reference-fidelity pass: the Cash Flow reference shows a
+      // full, date-grouped transaction workspace, not a 5-row preview --
+      // "Transactions must visually dominate the page." A larger fetch
+      // limit is a query-parameter change only, not new business logic;
+      // "View all transactions"/"View all bills" still link to the
+      // unbounded full-history routes for anything beyond this window.
+      getRecentTransactions(ctx, { accountId, limit: 25 }),
+      getUpcomingBills(ctx, 25),
       listBudgetsWithUsage(ctx, periodStart),
-      getNetWorth(ctx),
     ]);
 
-  // Phase 28 Part 15/16: Net Worth is a SEPARATE concept from Safe-to-
-  // Spend (the override's own repeated instruction -- "do not merge
-  // these concepts") -- passed as its own plain shape, same `Money`-
-  // crosses-the-Server/Client-boundary convention as `safeToSpend` below.
-  const netWorth = {
-    netWorthMinor: Number(netWorthResult.netWorth.amountMinorUnits),
-    totalAssetsMinor: Number(netWorthResult.totalAssets.amountMinorUnits),
-    totalLiabilitiesMinor: Number(netWorthResult.totalLiabilities.amountMinorUnits),
-    currency: netWorthResult.netWorth.currencyCode,
-  };
-  const investmentTotalMinor = accounts
-    .filter((a) => a.type === "investment")
-    .reduce((sum, a) => sum + (a.market_value_minor ?? 0), 0);
-
-  // Locked decision #5: only "All accounts" gets the real, global
-  // Safe-to-Spend (calculateSafeToSpend/getSafeToSpend are NOT extended
-  // with an account filter -- Budget/Goal-aware states 3/4/5 have no
-  // per-account decomposition the architecture supports). A specific
-  // account filter shows that account's own plain balance instead (its
-  // `AccountRow` is already in `accounts`, no extra query needed) -- the
-  // two figures are rendered with clearly different labels, never as if
-  // interchangeable.
-  //
-  // REAL DEFECT FOUND LIVE, fixed before this ever shipped: `getSafeToSpend`
-  // returns a `SafeToSpendResult` containing real `Money` class instances
-  // (they carry a `toJSON` method) -- Next.js's Server->Client Component
-  // boundary rejects any class instance, not just plain data, so passing
-  // the result straight through to the "use client" `CashFlowOverview`
-  // crashed the page. Every other page in this codebase already avoids
-  // this by only ever passing plain minor-unit numbers across that
-  // boundary and reconstructing `Money` client-side (e.g. `BudgetWithUsage`
-  // is plain numbers, not `Money`) -- this page now follows the same
-  // convention instead of being a first, accidental exception.
-  const safeToSpendResult = accountId ? null : await getSafeToSpend(ctx);
-  const safeToSpend = safeToSpendResult
-    ? {
-        state: safeToSpendResult.state,
-        amountMinor: Number(safeToSpendResult.amount.amountMinorUnits),
-        currency: safeToSpendResult.amount.currencyCode,
-        // Phase 29: composition breakdown -- owned Bank+Cash money (the
-        // ONLY thing Safe-to-Spend is made of, per the Phase 29 reversal)
-        // plus what was reserved out of it, and Credit Card's available
-        // credit shown as its own separate figure, never summed in.
-        ownedSpendableMinor: Number(safeToSpendResult.ownedSpendableTotal.amountMinorUnits),
-        creditAvailableMinor: Number(safeToSpendResult.creditAvailableTotal.amountMinorUnits),
-        goalReservedMinor: Number(safeToSpendResult.goalReservedTotal.amountMinorUnits),
-        upcomingBillsMinor: Number(safeToSpendResult.upcomingBillsTotal.amountMinorUnits),
-      }
-    : null;
+  // Phase 35 reference-fidelity correction: this page no longer computes
+  // a global Safe-to-Spend/Net Worth figure of its own -- see the render
+  // comment in `cash-flow-overview.tsx` for the full reasoning (four
+  // independent reference screens, none show one). Home remains the
+  // single owner of that global figure; `getSafeToSpend`/`getNetWorth`
+  // themselves are unchanged.
   const selectedAccount = accountId ? (accounts.find((a) => a.id === accountId) ?? null) : null;
 
   return (
@@ -160,6 +121,7 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
               href: "/settings/profile",
             },
           ]}
+          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
         />
       }
     >
@@ -180,9 +142,6 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
           recentTransactions={recentTransactions}
           upcomingBills={upcomingBills}
           budgetUsages={budgetUsages}
-          safeToSpend={safeToSpend}
-          netWorth={netWorth}
-          investmentTotalMinor={investmentTotalMinor}
         />
       </div>
     </AppShell>

@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput } from "@/lib/money-input";
 import { createAccountAction } from "./actions";
 import { ChangeCurrencyDialog } from "./change-currency-dialog";
 
@@ -44,18 +45,21 @@ const CURRENCIES = ["INR", "USD", "EUR", "GBP"];
  * unresolved, no schema column exists.
  */
 
-function useMoneyField(initial = "") {
+function useMoneyField(initial = "", currency = "INR") {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number) => void) {
-    const digits = raw.replace(/[^0-9]/g, "");
-    setDisplay(digits);
-    set(digits === "" ? 0 : Number(digits) * 100);
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+    setDisplay(normalized);
+    if (normalized === "" || normalized === ".") { set(0); return; }
+    const { minor } = parseMoneyInput(normalized, currency);
+    set(minor);
   }
   return { display, onChange };
 }
 
 function BankForm({ onDone }: { onDone: () => void }) {
-  const money = useMoneyField();
   const [currencyDialogOpen, setCurrencyDialogOpen] = useState(false);
   const {
     register,
@@ -69,6 +73,7 @@ function BankForm({ onDone }: { onDone: () => void }) {
     defaultValues: { type: "bank" as const, name: "", currency: "INR", balanceMinor: 0 },
   });
   const currency = watch("currency");
+  const money = useMoneyField("", currency);
 
   async function onSubmit(data: CreateAccountInput) {
     const result = await createAccountAction(data);
@@ -90,7 +95,7 @@ function BankForm({ onDone }: { onDone: () => void }) {
           control={control}
           name="balanceMinor"
           render={({ field }) => (
-            <Input id="bank-balance" inputMode="numeric" placeholder="50000" value={money.display} onChange={(e) => money.onChange(e.target.value, field.onChange)} />
+            <Input id="bank-balance" inputMode="decimal" placeholder="50000" value={money.display} onChange={(e) => money.onChange(e.target.value, field.onChange)} />
           )}
         />
       </FormField>
@@ -143,7 +148,7 @@ function CashForm({ onDone }: { onDone: () => void }) {
           control={control}
           name="balanceMinor"
           render={({ field }) => (
-            <Input id="cash-balance" inputMode="numeric" placeholder="5000" value={money.display} onChange={(e) => money.onChange(e.target.value, field.onChange)} />
+            <Input id="cash-balance" inputMode="decimal" placeholder="5000" value={money.display} onChange={(e) => money.onChange(e.target.value, field.onChange)} />
           )}
         />
       </FormField>
@@ -155,8 +160,6 @@ function CashForm({ onDone }: { onDone: () => void }) {
 }
 
 function CreditCardForm({ onDone }: { onDone: () => void }) {
-  const limitMoney = useMoneyField();
-  const usedMoney = useMoneyField();
   const {
     register,
     control,
@@ -176,6 +179,8 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
   });
   const [currencyDialogOpen, setCurrencyDialogOpen] = useState(false);
   const currency = watch("currency");
+  const limitMoney = useMoneyField("", currency);
+  const usedMoney = useMoneyField("", currency);
 
   async function onSubmit(data: CreateAccountInput) {
     const result = await createAccountAction(data);
@@ -197,7 +202,7 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
           control={control}
           name="creditLimitMinor"
           render={({ field }) => (
-            <Input id="cc-limit" inputMode="numeric" placeholder="100000" value={limitMoney.display} onChange={(e) => limitMoney.onChange(e.target.value, field.onChange)} />
+            <Input id="cc-limit" inputMode="decimal" placeholder="100000" value={limitMoney.display} onChange={(e) => limitMoney.onChange(e.target.value, field.onChange)} />
           )}
         />
       </FormField>
@@ -219,7 +224,7 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
           control={control}
           name="creditUsedMinor"
           render={({ field }) => (
-            <Input id="cc-used" inputMode="numeric" placeholder="20000" value={usedMoney.display} onChange={(e) => usedMoney.onChange(e.target.value, field.onChange)} />
+            <Input id="cc-used" inputMode="decimal" placeholder="20000" value={usedMoney.display} onChange={(e) => usedMoney.onChange(e.target.value, field.onChange)} />
           )}
         />
       </FormField>
@@ -231,16 +236,18 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
 }
 
 function InvestmentForm({ onDone }: { onDone: () => void }) {
-  const money = useMoneyField();
   const {
     register,
     control,
+    watch: watchInv,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(createInvestmentAccountSchema),
     defaultValues: { type: "investment" as const, name: "", currency: "INR", marketValueMinor: 0 },
   });
+  const invCurrency = watchInv("currency");
+  const money = useMoneyField("", invCurrency);
 
   async function onSubmit(data: CreateAccountInput) {
     const result = await createAccountAction(data);
@@ -277,7 +284,7 @@ function InvestmentForm({ onDone }: { onDone: () => void }) {
           control={control}
           name="marketValueMinor"
           render={({ field }) => (
-            <Input id="inv-value" inputMode="numeric" placeholder="100000" value={money.display} onChange={(e) => money.onChange(e.target.value, field.onChange)} />
+            <Input id="inv-value" inputMode="decimal" placeholder="100000" value={money.display} onChange={(e) => money.onChange(e.target.value, field.onChange)} />
           )}
         />
       </FormField>

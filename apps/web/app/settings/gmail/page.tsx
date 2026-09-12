@@ -2,6 +2,7 @@ import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
 import { getGmailStatus, listGmailCandidatesQuery, listAccounts, listCategories, getProfile, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -65,6 +66,7 @@ export default async function GmailSettingsPage(props: PageProps<"/settings/gmai
               href: "/settings/profile",
             },
           ]}
+          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
         />
       }
     >

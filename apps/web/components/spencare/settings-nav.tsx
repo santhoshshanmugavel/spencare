@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Landmark, Sparkles, User, ShieldCheck, DatabaseBackup, Plug, Mail } from "lucide-react";
+import { Landmark, Sparkles, User, ShieldCheck, DatabaseBackup, Plug, Mail, EyeOff, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
  * portion of the IA stays recognizable against its source.
  */
 
-export type SettingsNavKey = "accounts" | "ai" | "profile" | "security" | "data-backup" | "mcp" | "gmail";
+export type SettingsNavKey = "accounts" | "ai" | "profile" | "privacy" | "security" | "data-backup" | "mcp" | "gmail" | "categories";
 
 interface SettingsNavItem {
   key: SettingsNavKey;
@@ -43,10 +43,12 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { key: "accounts", label: "Accounts", href: "/settings/accounts", icon: <Landmark className="size-4" aria-hidden="true" /> },
   { key: "ai", label: "Spensa's Brain", href: "/settings/ai", icon: <Sparkles className="size-4" aria-hidden="true" /> },
   { key: "profile", label: "Profile", href: "/settings/profile", icon: <User className="size-4" aria-hidden="true" /> },
+  { key: "privacy", label: "Privacy", href: "/settings/privacy", icon: <EyeOff className="size-4" aria-hidden="true" /> },
   { key: "security", label: "Security", href: "/settings/security", icon: <ShieldCheck className="size-4" aria-hidden="true" /> },
   { key: "data-backup", label: "Data & Backup", href: "/settings/data-backup", icon: <DatabaseBackup className="size-4" aria-hidden="true" /> },
   { key: "mcp", label: "MCP", href: "/settings/mcp", icon: <Plug className="size-4" aria-hidden="true" /> },
   { key: "gmail", label: "Gmail", href: "/settings/gmail", icon: <Mail className="size-4" aria-hidden="true" /> },
+  { key: "categories", label: "Categories", href: "/settings/categories", icon: <Tag className="size-4" aria-hidden="true" /> },
 ];
 
 export function SettingsNav({ active }: { active: SettingsNavKey }) {

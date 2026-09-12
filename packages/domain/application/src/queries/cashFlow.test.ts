@@ -34,9 +34,8 @@ vi.mock("@spencare/domain-infra", () => ({
   listBillPredictions: (...args: unknown[]) => listBillPredictionsMock(...(args as [unknown, string, Record<string, unknown>])),
 }));
 
-const { getCashFlowOverview, getCashFlowByCategory, compareCashFlowPeriods, getRecentTransactions, getUpcomingBills } = await import(
-  "./cashFlow.js"
-);
+const { getCashFlowOverview, getCashFlowByCategory, compareCashFlowPeriods, getCashFlowTrend, getRecentTransactions, getUpcomingBills } =
+  await import("./cashFlow.js");
 
 function makeCtx(userId = "user-a"): AuthContext {
   return {
@@ -84,6 +83,32 @@ describe("compareCashFlowPeriods", () => {
     expect(result.previous.expenseMinor).toBe(0); // no July transactions in the fixture
     expect(result.expense.deltaMinor).toBe(5000);
     expect(result.expense.deltaPercent).toBeNull(); // previous was zero
+  });
+});
+
+describe("getCashFlowTrend", () => {
+  it("returns one point per month, oldest first, ending at the given period", async () => {
+    const result = await getCashFlowTrend(makeCtx(), 3, "2026-08-01");
+    expect(result.map((p) => p.periodStart)).toEqual(["2026-06-01", "2026-07-01", "2026-08-01"]);
+  });
+
+  it("computes real totals per month from the same aggregation getCashFlowOverview uses -- no separate calculation", async () => {
+    const result = await getCashFlowTrend(makeCtx(), 2, "2026-08-01");
+    const august = result.find((p) => p.periodStart === "2026-08-01")!;
+    expect(august.totals.incomeMinor).toBe(20000);
+    expect(august.totals.expenseMinor).toBe(5000);
+    const july = result.find((p) => p.periodStart === "2026-07-01")!;
+    expect(july.totals.incomeMinor).toBe(0);
+    expect(july.totals.expenseMinor).toBe(0);
+  });
+
+  it("passes accountId through to every month's query", async () => {
+    await getCashFlowTrend(makeCtx("real-user"), 2, "2026-08-01", bankAccountId);
+    expect(listTransactionsMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "real-user",
+      expect.objectContaining({ accountId: bankAccountId }),
+    );
   });
 });
 

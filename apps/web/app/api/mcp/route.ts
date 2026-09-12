@@ -92,9 +92,19 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   // Phase 24: checked before the Authorization header is even parsed, so
   // it bounds both legitimate traffic bursts and repeated invalid-token
   // probing equally -- see RATE_LIMITS.MCP_REQUEST's own doc comment.
-  const allowed = await checkRateLimit(createServiceRoleSupabaseClient(), `mcp:${clientIpKey(request)}`, RATE_LIMITS.MCP_REQUEST);
-  if (!allowed) {
-    return Response.json({ error: "rate_limited", message: "Too many requests. Try again shortly." }, { status: 429 });
+  // Wrapped in try/catch: if the Supabase rate-limit RPC is unavailable
+  // (e.g. a transient connectivity issue or a misconfigured service-role
+  // key), we degrade gracefully rather than returning 500 -- the auth
+  // check below still gates every unauthenticated request, so dropping
+  // the rate-limit check is far less harmful than breaking the entire
+  // endpoint on a monitoring/infrastructure failure.
+  try {
+    const allowed = await checkRateLimit(createServiceRoleSupabaseClient(), `mcp:${clientIpKey(request)}`, RATE_LIMITS.MCP_REQUEST);
+    if (!allowed) {
+      return Response.json({ error: "rate_limited", message: "Too many requests. Try again shortly." }, { status: 429 });
+    }
+  } catch {
+    // Rate-limit check failed; continue to auth gate below.
   }
 
   const authHeader = request.headers.get("authorization");

@@ -8,14 +8,30 @@ import { AddTransactionSheet } from "./add-transaction-sheet";
 vi.mock("./actions", () => ({
   createTransactionAction: vi.fn(async () => ({ ok: true, value: {} })),
   transferAction: vi.fn(async () => ({ ok: true, value: {} })),
+  createCategoryAction: vi.fn(async () => ({
+    ok: true,
+    value: { id: "user-cat-1", user_id: "u1", name: "Subscriptions", icon: null, is_system: false },
+  })),
+}));
+vi.mock("@/lib/toast", () => ({
+  toastConfirmed: vi.fn(),
+  toastError: vi.fn(),
 }));
 
 beforeEach(async () => {
-  const { createTransactionAction, transferAction } = await import("./actions");
+  const { createTransactionAction, transferAction, createCategoryAction } = await import("./actions");
   vi.mocked(createTransactionAction).mockReset();
   vi.mocked(createTransactionAction).mockResolvedValue({ ok: true, value: {} as never });
   vi.mocked(transferAction).mockReset();
   vi.mocked(transferAction).mockResolvedValue({ ok: true, value: {} as never });
+  vi.mocked(createCategoryAction).mockReset();
+  vi.mocked(createCategoryAction).mockResolvedValue({
+    ok: true,
+    value: { id: "user-cat-1", user_id: "u1", name: "Subscriptions", icon: null, is_system: false } as never,
+  });
+  const { toastConfirmed, toastError } = await import("@/lib/toast");
+  vi.mocked(toastConfirmed).mockReset();
+  vi.mocked(toastError).mockReset();
 });
 
 const accounts: AccountRow[] = [
@@ -129,6 +145,51 @@ describe("<AddTransactionSheet> — expense tab (default)", () => {
   });
 });
 
+describe("<AddTransactionSheet> — Phase 38: credit-card expense helper note", () => {
+  it("explains a credit-card expense adds to what's owed, once that account is selected", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    expect(screen.queryByText(/adds to what you owe/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Paid from" }));
+    await user.click(screen.getByRole("option", { name: "ICICI Credit Card · Credit Card" }));
+    expect(screen.getByText("This adds to what you owe on ICICI Credit Card -- it doesn't reduce cash in any other account.")).toBeInTheDocument();
+  });
+
+  it("does not show the note when a bank account is selected", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    await user.click(screen.getByRole("combobox", { name: "Paid from" }));
+    await user.click(screen.getByRole("option", { name: "HDFC Bank · Bank" }));
+    expect(screen.queryByText(/adds to what you owe/)).not.toBeInTheDocument();
+  });
+});
+
+describe("<AddTransactionSheet> — Phase 38: zero eligible accounts, per transaction kind", () => {
+  const creditCard = accounts[2]!;
+  const investment = accounts[3]!;
+
+  it("Income tab: explains the gap and links to Add an account, rather than an empty, silently-broken dropdown", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={[creditCard, investment]} categories={categories} />);
+    await user.click(screen.getByRole("tab", { name: "Income" }));
+    expect(screen.getByText("You need a bank or cash account to record income.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add an account" })).toHaveAttribute("href", "/settings/accounts");
+    expect(screen.queryByRole("combobox", { name: "Received into" })).not.toBeInTheDocument();
+  });
+
+  it("Expense tab: same treatment when only an Investment account exists", async () => {
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={[investment]} categories={categories} />);
+    expect(screen.getByText("You need a bank, cash, or credit card account to record an expense.")).toBeInTheDocument();
+  });
+
+  it("Transfer tab: explains a missing 'from' account (bank/cash only) even when a Credit Card exists", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={[creditCard, investment]} categories={categories} />);
+    await user.click(screen.getByRole("tab", { name: "Transfer" }));
+    expect(screen.getByText("You need a bank or cash account to transfer from.")).toBeInTheDocument();
+  });
+});
+
 describe("<AddTransactionSheet> — transfer tab", () => {
   it("submits a valid transfer via transferAction, not createTransactionAction", async () => {
     const { transferAction, createTransactionAction } = await import("./actions");
@@ -230,5 +291,37 @@ describe("<AddTransactionSheet> — Phase 28 account-type capability filtering",
         amountMinor: 150000,
       }),
     );
+  });
+});
+
+describe("<AddTransactionSheet> — inline category creation", () => {
+  it("shows '+ Create new category' in the category dropdown", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    await user.click(screen.getByRole("combobox", { name: "Category" }));
+    expect(screen.getByRole("option", { name: "Create new category" })).toBeInTheDocument();
+  });
+
+  it("opens CreateCategorySheet when '+ Create new category' is selected", async () => {
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    await user.click(screen.getByRole("combobox", { name: "Category" }));
+    await user.click(screen.getByRole("option", { name: "Create new category" }));
+    expect(screen.getByRole("heading", { name: "New category" })).toBeInTheDocument();
+  });
+
+  it("auto-selects the newly created category in the expense form and keeps the form open", async () => {
+    const { createCategoryAction } = await import("./actions");
+    const { toastConfirmed } = await import("@/lib/toast");
+    const user = userEvent.setup();
+    render(<AddTransactionSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={accounts} categories={categories} />);
+    await user.click(screen.getByRole("combobox", { name: "Category" }));
+    await user.click(screen.getByRole("option", { name: "Create new category" }));
+    await user.type(screen.getByLabelText("Category name"), "Subscriptions");
+    await user.click(screen.getByRole("button", { name: "Create category" }));
+    expect(createCategoryAction).toHaveBeenCalledWith({ name: "Subscriptions", icon: null });
+    expect(toastConfirmed).toHaveBeenCalledWith('"Subscriptions" category created.');
+    // CreateCategorySheet closes after creation; "New category" heading is gone
+    expect(screen.queryByRole("heading", { name: "New category" })).not.toBeInTheDocument();
   });
 });

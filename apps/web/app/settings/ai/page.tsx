@@ -1,9 +1,10 @@
 import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
 import { getProviderStatus, IMPLEMENTED_PROVIDERS, type AiProvider } from "@spencare/ai";
 import { AI_PROVIDERS } from "@spencare/validation";
-import type { AuthContext } from "@spencare/domain-application";
+import { getProfile, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -35,7 +36,7 @@ export default async function AiProviderSettingsPage() {
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
-  const status = await getProviderStatus(ctx);
+  const [status, profile] = await Promise.all([getProviderStatus(ctx), getProfile(ctx)]);
 
   return (
     <AppShell
@@ -51,6 +52,7 @@ export default async function AiProviderSettingsPage() {
               href: "/settings/profile",
             },
           ]}
+          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
         />
       }
     >

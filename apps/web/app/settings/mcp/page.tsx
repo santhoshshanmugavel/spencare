@@ -1,11 +1,13 @@
 import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
-import { listMcpSessions, type AuthContext } from "@spencare/domain-application";
+import { getProfile, listMcpSessions, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
+import { requestOrigin } from "@/lib/request-origin";
 import { McpSessionManager } from "./mcp-session-manager";
 
 /**
@@ -36,7 +38,8 @@ export default async function McpSettingsPage() {
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
-  const sessions = await listMcpSessions(ctx);
+  const [sessions, profile, origin] = await Promise.all([listMcpSessions(ctx), getProfile(ctx), requestOrigin()]);
+  const mcpServerUrl = `${origin}/api/mcp`;
 
   return (
     <AppShell
@@ -52,6 +55,7 @@ export default async function McpSettingsPage() {
               href: "/settings/profile",
             },
           ]}
+          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
         />
       }
     >
@@ -68,7 +72,7 @@ export default async function McpSettingsPage() {
             <CardTitle className="text-base">Tokens</CardTitle>
           </CardHeader>
           <CardContent>
-            <McpSessionManager initialSessions={sessions} />
+            <McpSessionManager initialSessions={sessions} mcpServerUrl={mcpServerUrl} />
           </CardContent>
         </Card>
       </SettingsShell>

@@ -4,15 +4,17 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from "lucide-react";
-import { Money as DomainMoney, ACCOUNT_TYPE_LABELS } from "@spencare/domain-core";
+import { Money as DomainMoney } from "@spencare/domain-core";
 import type { AccountRow, CategoryRow, TransactionRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { formatMinorUnits } from "@/lib/currency-format";
+import { accountTag, daySubtotalMinor, formatGroupDate, groupByDate, transactionHint } from "@/lib/transaction-presentation";
 import { AddTransactionSheet } from "./add-transaction-sheet";
 import { TransactionDetailDialog } from "./transaction-detail-dialog";
+import { DeleteTransactionDialog } from "./delete-transaction-dialog";
 
 /**
  * Row anatomy (icon → merchant/description → category → account →
@@ -30,61 +32,10 @@ import { TransactionDetailDialog } from "./transaction-detail-dialog";
  * for Accounts. Reused, not re-derived.
  */
 
-function formatGroupDate(iso: string): string {
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  if (iso === today) return "Today";
-  if (iso === yesterday) return "Yesterday";
-  return new Date(iso + "T00:00:00").toLocaleDateString("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-}
-
-function groupByDate(transactions: TransactionRow[]): { date: string; items: TransactionRow[] }[] {
-  const groups = new Map<string, TransactionRow[]>();
-  for (const t of transactions) {
-    const key = t.occurred_at;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(t);
-  }
-  return Array.from(groups.entries())
-    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-    .map(([date, items]) => ({ date, items }));
-}
-
-/**
- * Daily subtotal sums income (+) and expense (-) only -- a transfer is
- * never income or expense (invariant #4), so it's excluded here exactly
- * as CF-D07's recommendation says to generalize (SP-092's daily subtotal
- * correctly excludes goal rows; the same exclusion principle applies to
- * transfers, which this phase's data can actually contain).
- */
-function daySubtotalMinor(items: TransactionRow[]): number {
-  return items.reduce((sum, t) => {
-    if (t.type === "income") return sum + t.amount_minor;
-    if (t.type === "expense") return sum - t.amount_minor;
-    return sum;
-  }, 0);
-}
-
 function iconFor(type: TransactionRow["type"]) {
   if (type === "income") return <ArrowDownLeft className="size-4 text-success" aria-hidden="true" />;
   if (type === "expense") return <ArrowUpRight className="size-4 text-destructive" aria-hidden="true" />;
   return <ArrowLeftRight className="size-4 text-muted-foreground" aria-hidden="true" />;
-}
-
-/**
- * Phase 28 Part 12: every account reference in the transaction list is
- * tagged with its real type ("HDFC Savings · Bank") -- never left to look
- * bank-only-by-default. This also means a bank-debit-into-a-credit-card
- * repayment or a bank->investment transfer leg is never mislabeled as if
- * it came from the OTHER account in the pair: each leg shows its own
- * account's own type, exactly as recorded.
- */
-function accountTag(account: AccountRow | undefined): string | undefined {
-  return account ? `${account.name} · ${ACCOUNT_TYPE_LABELS[account.type]}` : undefined;
 }
 
 function rowAriaLabel(
@@ -131,10 +82,11 @@ export function TransactionList({
   const transactions = initialTransactions;
   const [addOpen, setAddOpen] = useState(false);
   const [detail, setDetail] = useState<TransactionRow | null>(null);
+  const [quickDeleting, setQuickDeleting] = useState<TransactionRow | null>(null);
 
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const categoryById = new Map(categories.map((c) => [c.id, c]));
-  const grouped = groupByDate(transactions);
+  const grouped = groupByDate(transactions, (t) => t.occurred_at);
 
   function handleMutated() {
     router.refresh();
@@ -187,6 +139,7 @@ export function TransactionList({
                       key={t.id}
                       icon={iconFor(t.type)}
                       title={t.merchant || t.description || (t.type === "transfer" ? "Transfer" : "Transaction")}
+                      subtitle={transactionHint(t, category)}
                       metadata={[
                         category ? <span key="cat">{category.name}</span> : null,
                         account ? <span key="acct">{accountTag(account)}</span> : null,
@@ -194,6 +147,11 @@ export function TransactionList({
                       trailing={trailingFor(t, masked)}
                       onClick={() => setDetail(t)}
                       aria-label={rowAriaLabel(t, account, category, masked)}
+                      hoverActions={
+                        <Button variant="ghost" size="sm" onClick={() => setQuickDeleting(t)}>
+                          Delete
+                        </Button>
+                      }
                     />
                   );
                 })}
@@ -227,6 +185,22 @@ export function TransactionList({
           }}
           onMutated={() => {
             setDetail(null);
+            handleMutated();
+          }}
+        />
+      ) : null}
+
+      {quickDeleting ? (
+        <DeleteTransactionDialog
+          transaction={quickDeleting}
+          account={accountById.get(quickDeleting.account_id)}
+          category={quickDeleting.category_id ? categoryById.get(quickDeleting.category_id) : undefined}
+          open={!!quickDeleting}
+          onOpenChange={(o) => {
+            if (!o) setQuickDeleting(null);
+          }}
+          onDeleted={() => {
+            setQuickDeleting(null);
             handleMutated();
           }}
         />

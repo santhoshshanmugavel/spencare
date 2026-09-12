@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
 import { calculateGoalProgress } from "@spencare/domain-core";
 import type { AccountRow, GoalRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GoalCard } from "@/components/spencare/goal-card";
-import { AddGoalSheet } from "./add-goal-sheet";
+import { GoalWizardSheet } from "@/components/spencare/goal-wizard-sheet";
 import { EditGoalSheet } from "./edit-goal-sheet";
 import { ContributeSheet } from "./contribute-sheet";
 import { WithdrawSheet } from "./withdraw-sheet";
@@ -20,12 +23,17 @@ import { GoalDetailDialog } from "./goal-detail-dialog";
  * Reached/celebratory goals are shown in the SAME grid as active ones
  * (SP-181: "reached/celebratory card variant present in-grid"), not
  * hidden or split into a separate tab -- `listGoals` already excludes
- * only archived/deleted goals by default. The Short-term/Long-term tab
- * toggle (SP-181) is not built -- its own doc note says Long-term content
- * was "not visually confirmed in source," and no data field distinguishes
- * short- vs long-term goals in the schema; a single grid is the honest
- * baseline until that's resolved.
+ * only archived/deleted goals by default.
+ *
+ * Reference fidelity pass (Goals-9.pdf / Goals-6.pdf): the Short term /
+ * Long term segmented control is a REAL filter, not cosmetic -- it's now
+ * backed by `goals.term` (migration 20260910000001) and narrows the grid
+ * exactly like the account-type filter narrows Accounts. Search filters by
+ * goal name across whichever term tab is active, same "narrows the
+ * already-filtered set" composition as Cash Flow's own account+category
+ * filters.
  */
+type GoalTermFilter = "short" | "long";
 export function GoalsGrid({
   initialGoals,
   accounts,
@@ -55,51 +63,99 @@ export function GoalsGrid({
   const [archiving, setArchiving] = useState<GoalRow | null>(null);
   const [deleting, setDeleting] = useState<GoalRow | null>(null);
   const [viewing, setViewing] = useState<GoalRow | null>(null);
+  const [termFilter, setTermFilter] = useState<GoalTermFilter>("short");
+  const [search, setSearch] = useState("");
 
   function handleMutated() {
     router.refresh();
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-foreground">Goals</h1>
-        <Button size="touch" onClick={() => setAddOpen(true)} disabled={fundingEligibleAccounts.length === 0}>
-          + Create goal
-        </Button>
-      </div>
+  const query = search.trim().toLowerCase();
+  const shortTermGoals = useMemo(
+    () => goals.filter((g) => g.term === "short" && (query === "" || g.name.toLowerCase().includes(query))),
+    [goals, query],
+  );
+  const longTermGoals = useMemo(
+    () => goals.filter((g) => g.term === "long" && (query === "" || g.name.toLowerCase().includes(query))),
+    [goals, query],
+  );
 
-      {goals.length === 0 ? (
+  function renderSection(list: GoalRow[], termLabel: "short term" | "long term") {
+    if (goals.length === 0) {
+      return (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             No goals yet. Create one to start saving toward something.
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {goals.map((goal) => {
-            const progress = calculateGoalProgress(goal.target_amount_minor, goal.saved_amount_minor, goal.target_date);
-            return (
-              <GoalCard
-                key={goal.id}
-                goal={goal}
-                progress={progress}
-                fundingAccount={accountById.get(goal.funding_account_id)}
-                masked={masked}
-                imageSignedUrl={imageSignedUrls[goal.id] ?? null}
-                onContribute={() => setContributing(goal)}
-                onWithdraw={() => setWithdrawing(goal)}
-                onEdit={() => setEditing(goal)}
-                onArchive={() => setArchiving(goal)}
-                onDelete={() => setDeleting(goal)}
-                onViewDetail={() => setViewing(goal)}
-              />
-            );
-          })}
-        </div>
-      )}
+      );
+    }
+    if (list.length === 0) {
+      return (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            {search ? `No ${termLabel} goals match "${search}".` : `No ${termLabel} goals yet.`}
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {list.map((goal) => {
+          const progress = calculateGoalProgress(goal.target_amount_minor, goal.saved_amount_minor, goal.target_date);
+          return (
+            <GoalCard
+              key={goal.id}
+              goal={goal}
+              progress={progress}
+              fundingAccount={accountById.get(goal.funding_account_id)}
+              masked={masked}
+              imageSignedUrl={imageSignedUrls[goal.id] ?? null}
+              onContribute={() => setContributing(goal)}
+              onWithdraw={() => setWithdrawing(goal)}
+              onEdit={() => setEditing(goal)}
+              onArchive={() => setArchiving(goal)}
+              onDelete={() => setDeleting(goal)}
+              onViewDetail={() => setViewing(goal)}
+            />
+          );
+        })}
+      </div>
+    );
+  }
 
-      <AddGoalSheet
+  return (
+    <div className="space-y-6">
+      <Tabs value={termFilter} onValueChange={(v) => setTermFilter(v as GoalTermFilter)} className="gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold text-foreground">Goals</h1>
+          <TabsList>
+            <TabsTrigger value="short">Short term</TabsTrigger>
+            <TabsTrigger value="long">Long term</TabsTrigger>
+          </TabsList>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input
+                type="search"
+                placeholder="Search goals"
+                aria-label="Search goals"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-44 pl-9"
+              />
+            </div>
+            <Button size="touch" onClick={() => setAddOpen(true)}>
+              + Create goal
+            </Button>
+          </div>
+        </div>
+
+        <TabsContent value="short">{renderSection(shortTermGoals, "short term")}</TabsContent>
+        <TabsContent value="long">{renderSection(longTermGoals, "long term")}</TabsContent>
+      </Tabs>
+
+      <GoalWizardSheet
         open={addOpen}
         onOpenChange={setAddOpen}
         accounts={fundingEligibleAccounts}

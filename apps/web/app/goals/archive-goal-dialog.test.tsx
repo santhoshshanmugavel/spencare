@@ -27,6 +27,7 @@ const goal: GoalRow = {
   funding_account_id: "8cad1f12-3b01-4a55-9aa9-3ce1fef58491",
   saved_amount_minor: 300000,
   status: "active",
+  term: "short",
   image_url: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",

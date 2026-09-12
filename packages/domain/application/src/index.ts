@@ -1,7 +1,7 @@
 export type { AuthContext, Command, Result, DomainError } from "./types.js";
 export { ok, err } from "./types.js";
 
-export { updateProfile } from "./commands/updateProfile.js";
+export { updateProfile, updatePrivacyMode } from "./commands/updateProfile.js";
 export { updateAvatar, removeAvatar, type UpdateAvatarInput, type UpdateAvatarOutput } from "./commands/updateAvatar.js";
 export {
   startTotpEnrollment,
@@ -49,6 +49,14 @@ export {
   type UpdateBudgetCommandInput,
   type DeleteBudgetInput,
 } from "./commands/budgets.js";
+
+export {
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  type UpdateCategoryInput,
+  type DeleteCategoryInput,
+} from "./commands/categories.js";
 
 export {
   createGoal,
@@ -155,10 +163,12 @@ export {
   getCashFlowOverview,
   getCashFlowByCategory,
   compareCashFlowPeriods,
+  getCashFlowTrend,
   getRecentTransactions,
   getUpcomingBills,
   type CashFlowPeriod,
   type CashFlowPeriodComparison,
+  type CashFlowTrendPoint,
   type GetRecentTransactionsOptions,
 } from "./queries/cashFlow.js";
 export type {

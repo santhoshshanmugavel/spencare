@@ -86,7 +86,10 @@ export async function restoreBillAction(billId: string) {
 export async function markPaidAction(input: MarkPaidInput) {
   const ctx = await requireAuthContext();
   const result = await markPaid.execute(ctx, input);
-  if (result.ok) revalidatePath("/cash-flow/bills");
+  if (result.ok) {
+    revalidatePath("/cash-flow/bills");
+    revalidatePath("/cash-flow");
+  }
   return result;
 }
 

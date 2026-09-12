@@ -8,10 +8,9 @@ import type {
   BudgetWithUsage,
   CashFlowPeriodComparison,
   CategoryRow,
-  SafeToSpendState,
   TransactionRow,
 } from "@spencare/domain-application";
-import { CashFlowOverview, type SafeToSpendPlain } from "./cash-flow-overview";
+import { CashFlowOverview } from "./cash-flow-overview";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -65,23 +64,6 @@ const transaction: TransactionRow = {
   updated_at: "2026-08-10T00:00:00Z",
 };
 
-// Deliberately plain data, matching the real defect fix (SafeToSpendPlain) --
-// a real `Money`-bearing `SafeToSpendResult` cannot cross the Server/Client
-// boundary in the real app (it carries a `toJSON` method), so this
-// component's actual prop type is this plain shape, not the domain-core one.
-function safeToSpend(overrides: Partial<SafeToSpendPlain> = {}): SafeToSpendPlain {
-  return {
-    state: "balance_only" as SafeToSpendState,
-    amountMinor: 100000,
-    currency: "INR",
-    ownedSpendableMinor: 100000,
-    creditAvailableMinor: 0,
-    goalReservedMinor: 0,
-    upcomingBillsMinor: 0,
-    ...overrides,
-  };
-}
-
 const baseProps = {
   periodStart: "2026-08-01",
   accounts: [bankAccount],
@@ -95,14 +77,11 @@ const baseProps = {
   recentTransactions: [transaction],
   upcomingBills: [] as BillPredictionWithDefinition[],
   budgetUsages: [] as BudgetWithUsage[],
-  safeToSpend: safeToSpend(),
-  netWorth: { netWorthMinor: 100000, totalAssetsMinor: 100000, totalLiabilitiesMinor: 0, currency: "INR" },
-  investmentTotalMinor: 0,
 };
 
 describe("<CashFlowOverview> — no accounts (empty state)", () => {
   it("shows an honest empty state with a setup CTA, nothing fabricated", async () => {
-    const { container } = render(<CashFlowOverview {...baseProps} accounts={[]} safeToSpend={null} />);
+    const { container } = render(<CashFlowOverview {...baseProps} accounts={[]} />);
     expect(screen.getByText(/add an account to see your cash flow/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add an account" })).toHaveAttribute("href", "/settings/accounts");
     expect(await axe(container)).toHaveNoViolations();
@@ -116,27 +95,45 @@ describe("<CashFlowOverview> — accounts but no transactions", () => {
   });
 });
 
-describe("<CashFlowOverview> — header metric (locked decision #4/#5)", () => {
-  it("shows the real Safe to Spend when All accounts is selected", () => {
-    render(<CashFlowOverview {...baseProps} safeToSpend={safeToSpend({ state: "budget_and_goals" })} />);
-    expect(screen.getByText("Safe to Spend")).toBeInTheDocument();
-    expect(screen.queryByText("Available to spend")).not.toBeInTheDocument();
+describe("<CashFlowOverview> — Phase 35 reference-fidelity correction: no global Safe-to-Spend/Net Worth strip on this page", () => {
+  /**
+   * `Cash Flow.pdf` / `Cash Flow-1.pdf` / `Cash Flow - Recent
+   * Transactions-1.pdf` / `Cash Flow Overview.pdf`/`-1.pdf`/`After
+   * Budget.pdf` -- four independent reference screens, all consistent --
+   * show NO global Safe-to-Spend or Net Worth card on this page. Home
+   * already owns that figure; this page's own budget panel already
+   * answers the page-scoped "how much can I spend" question. Removed in
+   * this phase; this test guards against it silently returning.
+   */
+  it("does not render a global Safe to Spend or Net Worth card on the All-accounts view", () => {
+    render(<CashFlowOverview {...baseProps} />);
+    expect(screen.queryByText("Safe to Spend")).not.toBeInTheDocument();
+    expect(screen.queryByText("Net Worth")).not.toBeInTheDocument();
+    expect(screen.queryByText("Investments")).not.toBeInTheDocument();
   });
 
-  it("labels a plain balance_only state 'Available Balance', not 'Safe to Spend'", () => {
-    render(<CashFlowOverview {...baseProps} safeToSpend={safeToSpend({ state: "balance_only" })} />);
-    expect(screen.getByText("Available Balance")).toBeInTheDocument();
-  });
-
-  it("shows the selected account's own plain balance, clearly labeled, when one account is filtered -- never as if it were Safe to Spend", () => {
-    render(<CashFlowOverview {...baseProps} selectedAccountId="acc-1" selectedAccount={bankAccount} safeToSpend={null} />);
+  it("still shows the selected account's own plain balance, clearly labeled, when one account is filtered", () => {
+    render(<CashFlowOverview {...baseProps} selectedAccountId="acc-1" selectedAccount={bankAccount} />);
     expect(screen.getByText(/Available Balance -- HDFC Bank/)).toBeInTheDocument();
     expect(screen.queryByText("Safe to Spend")).not.toBeInTheDocument();
   });
 });
 
-describe("<CashFlowOverview> — budget panel label (locked decision #4: never 'Available to spend' for budget-only)", () => {
-  it("shows 'Budget remaining', never 'Available to spend', once a budget exists", () => {
+describe("<CashFlowOverview> — budget panel label (Phase 30B reference-fidelity correction supersedes the prior locked decision #4 for THIS widget)", () => {
+  /**
+   * Phase 30B's reference PDF (Cash Flow - Recent Transactions-4.pdf)
+   * literally reads "Available to spend this month / ₹19,301 / ₹53,700
+   * budget" for this exact right-panel widget -- Phase 30B's own explicit,
+   * repeated rule is "If the implementation... differs from the
+   * reference, the reference wins," which supersedes the prior "never
+   * Available to spend for budget-only" decision for this one widget.
+   * The original rule's purpose -- not conflating this with the broader
+   * Safe-to-Spend feature -- still holds: Safe-to-Spend's own hero card
+   * (`SafeToSpendHeroCard`, tested above) never uses this phrase, and this
+   * widget's own "/ ₹Y budget" + "Spend limits" context scopes it
+   * unambiguously to the budget feature, matching the reference exactly.
+   */
+  it("shows 'Available to spend this month' with the budget total, once a budget exists", () => {
     render(
       <CashFlowOverview
         {...baseProps}
@@ -156,9 +153,42 @@ describe("<CashFlowOverview> — budget panel label (locked decision #4: never '
         ]}
       />,
     );
-    expect(screen.getByText("Budget remaining")).toBeInTheDocument();
-    expect(screen.queryByText(/available to spend/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Available to spend this month")).toBeInTheDocument();
+    expect(screen.getByText("Spend limits")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Edit budget" })).toHaveAttribute("href", "/cash-flow/budgets");
+  });
+
+  /**
+   * REGRESSION (Phase 32 live verification): the "/ ₹Y budget" total next
+   * to the remaining figure was built as a hardcoded `formatAmount(...)`
+   * string, bypassing `<Money masked>` entirely -- found live by toggling
+   * Privacy Mode on and reading real amounts still showing on screen next
+   * to correctly-masked ones. Every figure in this widget must route
+   * through `<Money masked>`, no exceptions for "just the total."
+   */
+  it("masks the budget total (never just the remaining figure) when Privacy Mode is on", () => {
+    render(
+      <CashFlowOverview
+        {...baseProps}
+        masked
+        budgetUsages={[
+          {
+            id: "b1",
+            categoryId: "dining",
+            periodStart: "2026-08-01",
+            periodEnd: "2026-08-31",
+            limitMinor: 600000,
+            spentMinor: 470000,
+            remainingMinor: 130000,
+            percentUsed: 78.3,
+            status: "near_limit",
+            isRecurring: false,
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText(/₹6,000/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("₹***").length).toBeGreaterThan(0);
   });
 
   it("shows the donut with a Spending/Income toggle when no budget exists", () => {
@@ -279,82 +309,8 @@ describe("<CashFlowOverview> — account filter and month stepper", () => {
       credit_limit_minor: 10_000_000,
       credit_used_minor: 3_500_000,
     };
-    render(<CashFlowOverview {...baseProps} accounts={[bankAccount, creditCard]} selectedAccountId="cc-1" selectedAccount={creditCard} safeToSpend={null} />);
+    render(<CashFlowOverview {...baseProps} accounts={[bankAccount, creditCard]} selectedAccountId="cc-1" selectedAccount={creditCard} />);
     expect(screen.getByText(/Available Credit -- Amex/)).toBeInTheDocument();
-  });
-
-  it("Phase 29 REVERSAL: shows an 'Owned money' breakdown line under the hero, never a 'Bank + Cash / Credit Available' composition implying credit is part of the number", () => {
-    render(
-      <CashFlowOverview
-        {...baseProps}
-        safeToSpend={safeToSpend({ state: "budget_and_goals", amountMinor: 5500000, ownedSpendableMinor: 5500000, creditAvailableMinor: 4000000 })}
-      />,
-    );
-    expect(screen.getByText("Safe to Spend")).toBeInTheDocument();
-    expect(screen.getByText(/Owned money/)).toBeInTheDocument();
-    expect(screen.queryByText(/Bank \+ Cash ₹/)).not.toBeInTheDocument();
-  });
-
-  it("Phase 29: shows Available Credit as its OWN separate card, explicitly labeled as not included in Safe to Spend", () => {
-    render(
-      <CashFlowOverview
-        {...baseProps}
-        safeToSpend={safeToSpend({ state: "budget_and_goals", amountMinor: 5500000, ownedSpendableMinor: 5500000, creditAvailableMinor: 4000000 })}
-      />,
-    );
-    expect(screen.getByText("Available Credit")).toBeInTheDocument();
-    expect(screen.getByText(/Not included in Safe to Spend/)).toBeInTheDocument();
-  });
-
-  it("does not show the Available Credit card when the user has no credit cards", () => {
-    render(<CashFlowOverview {...baseProps} safeToSpend={safeToSpend({ state: "budget_and_goals", creditAvailableMinor: 0 })} />);
-    expect(screen.queryByText("Available Credit")).not.toBeInTheDocument();
-  });
-
-  it("Phase 29: shows 'Reserved for goals' and 'Upcoming bills' breakdown lines when they're non-zero, never when zero", () => {
-    const { rerender } = render(
-      <CashFlowOverview {...baseProps} safeToSpend={safeToSpend({ state: "budget_and_goals", goalReservedMinor: 800000, upcomingBillsMinor: 700000 })} />,
-    );
-    expect(screen.getByText(/Reserved for goals/)).toBeInTheDocument();
-    // "Upcoming bills" also names the unrelated preview tab elsewhere on
-    // this page -- when the breakdown line is showing, there are two
-    // matches instead of the tab's one.
-    expect(screen.getAllByText(/Upcoming bills/)).toHaveLength(2);
-
-    rerender(<CashFlowOverview {...baseProps} safeToSpend={safeToSpend({ state: "balance_only", goalReservedMinor: 0, upcomingBillsMinor: 0 })} />);
-    expect(screen.queryByText(/Reserved for goals/)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Upcoming bills/)).toHaveLength(1);
-  });
-
-  it("Phase 28 Part 15/16: shows Investments and Net Worth as separate figures from Safe to Spend, never summed into it", () => {
-    render(
-      <CashFlowOverview
-        {...baseProps}
-        investmentTotalMinor={30_000_000}
-        netWorth={{ netWorthMinor: 33_500_000, totalAssetsMinor: 35_500_000, totalLiabilitiesMinor: 2_000_000, currency: "INR" }}
-      />,
-    );
-    expect(screen.getByText("Investments")).toBeInTheDocument();
-    expect(screen.getByText("Net Worth")).toBeInTheDocument();
-  });
-
-  it("does not show the Investments/Net Worth card for a user with no investments and no liabilities", () => {
-    render(<CashFlowOverview {...baseProps} investmentTotalMinor={0} netWorth={{ netWorthMinor: 0, totalAssetsMinor: 0, totalLiabilitiesMinor: 0, currency: "INR" }} />);
-    expect(screen.queryByText("Net Worth")).not.toBeInTheDocument();
-  });
-
-  it("hides the Investments/Net Worth card when a single account is filtered (it already has its own clearly-labeled figure)", () => {
-    render(
-      <CashFlowOverview
-        {...baseProps}
-        selectedAccountId="acc-1"
-        selectedAccount={bankAccount}
-        safeToSpend={null}
-        investmentTotalMinor={30_000_000}
-        netWorth={{ netWorthMinor: 33_500_000, totalAssetsMinor: 35_500_000, totalLiabilitiesMinor: 2_000_000, currency: "INR" }}
-      />,
-    );
-    expect(screen.queryByText("Net Worth")).not.toBeInTheDocument();
   });
 });
 

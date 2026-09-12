@@ -76,6 +76,33 @@ describe("createGoalSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("accepts an omitted term (the command layer, not the schema, applies the 'short' default)", () => {
+    const result = createGoalSchema.safeParse({ name: "Test", targetAmountMinor: 100000, fundingAccountId: accountId });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.term).toBeUndefined();
+  });
+
+  it("accepts an explicit 'long' term", () => {
+    const result = createGoalSchema.safeParse({
+      name: "Test",
+      targetAmountMinor: 100000,
+      fundingAccountId: accountId,
+      term: "long",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.term).toBe("long");
+  });
+
+  it("rejects an invalid term value", () => {
+    const result = createGoalSchema.safeParse({
+      name: "Test",
+      targetAmountMinor: 100000,
+      fundingAccountId: accountId,
+      term: "medium",
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("updateGoalSchema", () => {

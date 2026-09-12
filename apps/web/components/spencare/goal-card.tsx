@@ -49,6 +49,14 @@ function monthLabel(iso: string): string {
   return new Date(iso + "T00:00:00Z").toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
 }
 
+/** Whole calendar months between two ISO timestamps, floored at 0 -- matches `calculateGoalProgress`'s own month-counting convention rather than inventing a second one. */
+function monthsBetween(startIso: string, endIso: string): number {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  const months = (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth());
+  return Math.max(0, months);
+}
+
 function formatAmount(minor: number, currency: string): string {
   const f = formatMinorUnits(BigInt(minor), currency);
   return `${f.symbol}${f.integerPart}.${f.decimalPart}`;
@@ -134,7 +142,7 @@ export function GoalCard({
         />
 
         {isReached ? (
-          <p className="text-xs font-medium text-success">🎉 Goal reached</p>
+          <p className="text-xs font-medium text-success">🎉 You&apos;re all set</p>
         ) : (
           <p className="text-xs text-muted-foreground">
             {masked ? "Amount hidden" : `${formatAmount(progress.remainingMinor, currency)} left`}
@@ -146,7 +154,9 @@ export function GoalCard({
 
         <p className="text-xs text-muted-foreground">
           {isReached
-            ? "Completed"
+            ? goal.completed_at
+              ? `Completed in ${monthsBetween(goal.created_at, goal.completed_at)} month${monthsBetween(goal.created_at, goal.completed_at) === 1 ? "" : "s"} · ${monthLabel(goal.completed_at)}`
+              : "Completed"
             : progress.monthsLeft !== null && goal.target_date
               ? `${progress.monthsLeft} month${progress.monthsLeft === 1 ? "" : "s"} left · ${monthLabel(goal.target_date)}`
               : "No target date"}

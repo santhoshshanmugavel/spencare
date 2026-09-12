@@ -77,7 +77,8 @@ export async function registerOAuthClient(
   try {
     const row = await insertOAuthClient(serviceRoleSupabase, { clientId, clientName, redirectUris: input.redirectUris });
     return ok({ clientId: row.client_id, clientName: row.client_name, redirectUris: row.redirect_uris });
-  } catch {
+  } catch (err_) {
+    console.error("[oauth] insertOAuthClient failed:", err_);
     return err({ code: "registration_failed", message: "Couldn't register that client. Try again." });
   }
 }

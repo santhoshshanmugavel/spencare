@@ -132,3 +132,38 @@ describe("signInWithGoogleAction — rate limiting", () => {
     expect(vi.mocked(domainApp.checkRateLimit)).toHaveBeenCalledWith(expect.anything(), "oauth-initiate:203.0.113.5", domainApp.RATE_LIMITS.OAUTH_INITIATE);
   });
 });
+
+describe("signInWithGoogleAction — successful OAuth initiation", () => {
+  beforeEach(async () => {
+    // Rate-limit tests above leave checkRateLimit returning false;
+    // reset it to the default (allow) so these tests exercise the happy path.
+    const domainApp = await import("@spencare/domain-application");
+    vi.mocked(domainApp.checkRateLimit).mockResolvedValue(true);
+  });
+
+  it("redirects to the Google OAuth URL returned by Supabase", async () => {
+    const { signInWithGoogleAction } = await import("./actions.js");
+    await expect(signInWithGoogleAction(null)).rejects.toThrow(/REDIRECT:https:\/\/accounts\.google\.com/);
+  });
+
+  it("accepts a safe redirect param and passes it through the callback", async () => {
+    const { signInWithGoogleAction } = await import("./actions.js");
+    await expect(signInWithGoogleAction("/cash-flow/transactions")).rejects.toThrow(/REDIRECT:/);
+  });
+
+  it("redirects to /login with a user-facing error when Supabase returns no url", async () => {
+    const supabaseServer = await import("@/lib/supabase/server");
+    vi.mocked(supabaseServer.createServerSupabaseClient).mockResolvedValueOnce({
+      auth: {
+        signInWithOAuth: vi.fn(async () => ({ data: { url: null }, error: { message: "provider not configured" } })),
+        signUp: vi.fn(),
+        signInWithPassword: vi.fn(),
+        resetPasswordForEmail: vi.fn(),
+        getUser: vi.fn(async () => ({ data: { user: null } })),
+      },
+    } as never);
+
+    const { signInWithGoogleAction } = await import("./actions.js");
+    await expect(signInWithGoogleAction(null)).rejects.toThrow(/REDIRECT:\/login\?error=/);
+  });
+});

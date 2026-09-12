@@ -55,6 +55,7 @@ const goal: GoalRow = {
   funding_account_id: account.id,
   saved_amount_minor: 500000,
   status: "active",
+  term: "short",
   image_url: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
@@ -167,6 +168,68 @@ describe("<GoalDetailDialog> — content and behavior", () => {
     expect(screen.getAllByText("₹***").length).toBeGreaterThan(0);
   });
 
+  it("shows a real, grounded insight sentence for a goal with a target date (Phase 34 §11 — Goals-6.pdf's insight box)", async () => {
+    const scheduledGoal = { ...goal, target_date: "2027-03-01", saved_amount_minor: 3000000, target_amount_minor: 5300000, created_at: "2026-01-01T00:00:00Z" };
+    render(
+      <GoalDetailDialog
+        goal={scheduledGoal}
+        fundingAccount={account}
+        imageSignedUrl={null}
+        masked={false}
+        open
+        onOpenChange={noop}
+        onContribute={noop}
+        onWithdraw={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+      />,
+    );
+    expect(screen.getByText(/₹30,000 saved so far/)).toBeInTheDocument();
+    expect(screen.getByText(/will get you there by Mar 2027/)).toBeInTheDocument();
+  });
+
+  it("never claims a pace for a goal with no target date, rather than fabricating one", async () => {
+    render(
+      <GoalDetailDialog
+        goal={goal}
+        fundingAccount={account}
+        imageSignedUrl={null}
+        masked={false}
+        open
+        onOpenChange={noop}
+        onContribute={noop}
+        onWithdraw={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+      />,
+    );
+    expect(screen.queryByText(/on track|behind pace/)).not.toBeInTheDocument();
+    expect(screen.getByText(/saved.*toward your.*goal so far/)).toBeInTheDocument();
+  });
+
+  it("hides the insight sentence entirely under Privacy Mode rather than leaking its embedded rupee figures", async () => {
+    const scheduledGoal = { ...goal, target_date: "2027-03-01", saved_amount_minor: 3000000 };
+    render(
+      <GoalDetailDialog
+        goal={scheduledGoal}
+        fundingAccount={account}
+        imageSignedUrl={null}
+        masked
+        open
+        onOpenChange={noop}
+        onContribute={noop}
+        onWithdraw={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+      />,
+    );
+    expect(screen.getByText("Goal insight hidden while Privacy Mode is on.")).toBeInTheDocument();
+    expect(screen.queryByText(/₹30,000/)).not.toBeInTheDocument();
+  });
+
   it("renders the reached/celebratory treatment when saved >= target", async () => {
     const reachedGoal = { ...goal, saved_amount_minor: 5500000 };
     render(
@@ -184,7 +247,32 @@ describe("<GoalDetailDialog> — content and behavior", () => {
         onDelete={noop}
       />,
     );
-    expect(screen.getByText(/goal achieved/i)).toBeInTheDocument();
+    expect(screen.getByText(/you're all set/i)).toBeInTheDocument();
+  });
+
+  it("shows 'Completed in N months' once the goal has a completed_at timestamp", async () => {
+    const completedGoal = {
+      ...goal,
+      saved_amount_minor: 5500000,
+      created_at: "2026-01-01T00:00:00Z",
+      completed_at: "2026-06-15T00:00:00Z",
+    };
+    render(
+      <GoalDetailDialog
+        goal={completedGoal}
+        fundingAccount={account}
+        imageSignedUrl={null}
+        masked={false}
+        open
+        onOpenChange={noop}
+        onContribute={noop}
+        onWithdraw={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+      />,
+    );
+    expect(screen.getByText(/completed in 5 months/i)).toBeInTheDocument();
   });
 
   it("calls onContribute when 'Save more' is clicked", async () => {

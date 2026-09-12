@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput } from "@/lib/money-input";
 import { createBudgetAction } from "./actions";
 import { ApplyToUpcomingConfirmDialog } from "./apply-to-upcoming-confirm-dialog";
 
@@ -46,9 +47,13 @@ function monthToPeriodStart(month: string): string {
 function useMoneyField(initial = "") {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number) => void) {
-    const digits = raw.replace(/[^0-9]/g, "");
-    setDisplay(digits);
-    set(digits === "" ? 0 : Number(digits) * 100);
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+    setDisplay(normalized);
+    if (normalized === "" || normalized === ".") { set(0); return; }
+    const { minor } = parseMoneyInput(normalized, "INR");
+    set(minor);
   }
   return { display, onChange };
 }
@@ -66,7 +71,7 @@ export function AddBudgetSheet({
   periodStart: string;
   categories: CategoryRow[];
 }) {
-  const money = useMoneyField();
+  const money = useMoneyField("5000");
   const [applyToUpcoming, setApplyToUpcoming] = useState(false);
   const [pendingData, setPendingData] = useState<CreateBudgetInput | null>(null);
   const {
@@ -78,7 +83,7 @@ export function AddBudgetSheet({
     resolver: zodResolver(createBudgetSchema),
     defaultValues: {
       categoryId: "",
-      amountMinor: 0,
+      amountMinor: 500000,
       periodStart,
     },
   });
@@ -90,7 +95,7 @@ export function AddBudgetSheet({
       return;
     }
     toastConfirmed(apply ? "Budget created for this month and upcoming months." : "Budget created.");
-    reset({ categoryId: "", amountMinor: 0, periodStart });
+    reset({ categoryId: "", amountMinor: 500000, periodStart });
     setApplyToUpcoming(false);
     onCreated();
   }
@@ -140,7 +145,7 @@ export function AddBudgetSheet({
               render={({ field }) => (
                 <Input
                   id="budget-amount"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   placeholder="5000"
                   value={money.display}
                   onChange={(e) => money.onChange(e.target.value, field.onChange)}

@@ -28,23 +28,23 @@ export default async function LoginPage(props: PageProps<"/login">) {
             {error}
           </p>
         ) : null}
-        <LoginForm redirectTarget={redirectTarget} />
         {googleEnabled ? (
           <>
+            <GoogleButton
+              action={signInWithGoogleAction.bind(null, redirectTarget)}
+              label="Continue with Google"
+            />
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Or</span>
+                <span className="bg-card px-2 text-muted-foreground">or</span>
               </div>
             </div>
-            <GoogleButton
-              action={signInWithGoogleAction.bind(null, redirectTarget)}
-              label="Continue with Google"
-            />
           </>
         ) : null}
+        <LoginForm redirectTarget={redirectTarget} />
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="text-primary hover:underline">

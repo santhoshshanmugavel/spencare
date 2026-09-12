@@ -25,6 +25,8 @@ export interface GoalRow {
   funding_account_id: string;
   saved_amount_minor: number;
   status: "active" | "completed" | "archived";
+  /** Reference fidelity pass (Goals-9.pdf's "Short term / Long term" segmented control) -- pure display/filtering metadata, no financial effect. */
+  term: "short" | "long";
   image_url: string | null;
   created_at: string;
   updated_at: string;
@@ -33,13 +35,23 @@ export interface GoalRow {
 }
 
 const GOAL_COLUMNS =
-  "id, user_id, name, target_amount_minor, target_date, funding_account_id, saved_amount_minor, status, image_url, created_at, updated_at, completed_at, archived_at";
+  "id, user_id, name, target_amount_minor, target_date, funding_account_id, saved_amount_minor, status, term, image_url, created_at, updated_at, completed_at, archived_at";
 
 export interface CreateGoalPatch {
   name: string;
   targetAmountMinor: number;
   targetDate: string | null;
   fundingAccountId: string;
+  term: "short" | "long";
+  /**
+   * Phase 33 §10: money the user already has set aside for this goal,
+   * declared at creation time via the Goal Wizard. A plain column write,
+   * NOT a contribution -- see `initialSavedAmountMinorSchema`'s comment in
+   * `@spencare/validation`. Never touches `accounts.balance_minor` or
+   * inserts a `transactions` row; defaults to 0, same as the column's own
+   * DB default, when omitted.
+   */
+  initialSavedAmountMinor?: number;
 }
 
 export async function createGoal(client: TypedSupabaseClient, userId: string, patch: CreateGoalPatch): Promise<GoalRow> {
@@ -51,6 +63,8 @@ export async function createGoal(client: TypedSupabaseClient, userId: string, pa
       target_amount_minor: patch.targetAmountMinor,
       target_date: patch.targetDate,
       funding_account_id: patch.fundingAccountId,
+      term: patch.term,
+      saved_amount_minor: patch.initialSavedAmountMinor ?? 0,
     })
     .select(GOAL_COLUMNS)
     .single();
@@ -74,6 +88,8 @@ export interface UpdateGoalPatch {
    * goal's CURRENT association only, not a historical correction.
    */
   fundingAccountId?: string;
+  /** Moves a goal between the Short term / Long term grid tabs -- a display/filtering change only, same "metadata, not money" guarantee as `fundingAccountId` above. */
+  term?: "short" | "long";
 }
 
 export async function updateGoal(
@@ -89,6 +105,7 @@ export async function updateGoal(
       ...(patch.targetAmountMinor !== undefined ? { target_amount_minor: patch.targetAmountMinor } : {}),
       ...(patch.targetDate !== undefined ? { target_date: patch.targetDate } : {}),
       ...(patch.fundingAccountId !== undefined ? { funding_account_id: patch.fundingAccountId } : {}),
+      ...(patch.term !== undefined ? { term: patch.term } : {}),
     })
     .eq("id", goalId)
     .eq("user_id", userId)

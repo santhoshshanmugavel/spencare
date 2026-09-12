@@ -57,6 +57,7 @@ describe("<AddBudgetSheet> — behavior", () => {
     render(<AddBudgetSheet open onOpenChange={() => {}} onCreated={onCreated} periodStart="2026-08-01" categories={categories} />);
     await user.click(screen.getByRole("combobox", { name: "Category" }));
     await user.click(screen.getByRole("option", { name: "Dining" }));
+    await user.clear(screen.getByLabelText("Monthly limit (INR ₹)"));
     await user.type(screen.getByLabelText("Monthly limit (INR ₹)"), "6000");
     await user.click(screen.getByRole("button", { name: "Add budget" }));
     expect(createBudgetAction).toHaveBeenCalledWith({
@@ -75,6 +76,7 @@ describe("<AddBudgetSheet> — behavior", () => {
     expect(screen.getByRole("checkbox", { name: "Apply this budget to all upcoming months" })).not.toBeChecked();
     await user.click(screen.getByRole("combobox", { name: "Category" }));
     await user.click(screen.getByRole("option", { name: "Dining" }));
+    await user.clear(screen.getByLabelText("Monthly limit (INR ₹)"));
     await user.type(screen.getByLabelText("Monthly limit (INR ₹)"), "6000");
     await user.click(screen.getByRole("button", { name: "Add budget" }));
     expect(screen.queryByText("Apply to upcoming months?")).not.toBeInTheDocument();
@@ -87,6 +89,7 @@ describe("<AddBudgetSheet> — behavior", () => {
     render(<AddBudgetSheet open onOpenChange={() => {}} onCreated={() => {}} periodStart="2026-08-01" categories={categories} />);
     await user.click(screen.getByRole("combobox", { name: "Category" }));
     await user.click(screen.getByRole("option", { name: "Dining" }));
+    await user.clear(screen.getByLabelText("Monthly limit (INR ₹)"));
     await user.type(screen.getByLabelText("Monthly limit (INR ₹)"), "6000");
     await user.click(screen.getByRole("checkbox", { name: "Apply this budget to all upcoming months" }));
     await user.click(screen.getByRole("button", { name: "Add budget" }));
@@ -117,6 +120,7 @@ describe("<AddBudgetSheet> — behavior", () => {
     render(<AddBudgetSheet open onOpenChange={() => {}} onCreated={onCreated} periodStart="2026-08-01" categories={categories} />);
     await user.click(screen.getByRole("combobox", { name: "Category" }));
     await user.click(screen.getByRole("option", { name: "Dining" }));
+    await user.clear(screen.getByLabelText("Monthly limit (INR ₹)"));
     await user.type(screen.getByLabelText("Monthly limit (INR ₹)"), "6000");
     await user.click(screen.getByRole("button", { name: "Add budget" }));
     expect(toastError).toHaveBeenCalledWith("A budget for this category and month already exists.");

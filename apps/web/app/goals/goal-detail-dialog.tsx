@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, MoreHorizontal } from "lucide-react";
-import { Money as DomainMoney, calculateGoalProgress } from "@spencare/domain-core";
+import { ArrowDownLeft, ArrowUpRight, MoreHorizontal, Sparkles } from "lucide-react";
+import { Money as DomainMoney, calculateGoalPaceStatus, calculateGoalProgress } from "@spencare/domain-core";
 import type { AccountRow, GoalRow, TransactionRow } from "@spencare/domain-application";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
   DropdownMenu,
@@ -16,19 +17,45 @@ import {
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { GoalImageUploader } from "@/components/spencare/goal-image-uploader";
+import { getGoalInsight } from "@/lib/goal-insight";
 import { listContributionsAction } from "./actions";
+
+/** Whole calendar months between two ISO timestamps, floored at 0 -- same convention as `GoalCard`'s own `monthsBetween`. */
+function monthsBetween(startIso: string, endIso: string): number {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  const months = (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth());
+  return Math.max(0, months);
+}
 
 /**
  * SP-195 (in-progress) / SP-196 (reached/celebratory) -- financial fields
- * OBSERVED, the lavender "AI insight" box is Spensa-only and excluded
- * (§17: no scope expansion). The Contributions ledger (SP-195/196's
- * "Reserved date | Contributions | Amount" table) is rendered via
- * <ListRow>, an INFERRED reuse -- component-inventory.md §8 doesn't cite
- * SP-195/196 directly the way it cites SP-166 for Budgets, but the
- * anatomy (leading icon, description, trailing signed amount) matches
- * ListRow's own shape closely enough that reusing it, rather than
- * inventing a one-off row, is the more consistent choice; called out
- * explicitly rather than claimed as an observed citation.
+ * OBSERVED. The Contributions ledger (SP-195/196's "Reserved date |
+ * Contributions | Amount" table) is rendered via <ListRow>, an INFERRED
+ * reuse -- component-inventory.md §8 doesn't cite SP-195/196 directly the
+ * way it cites SP-166 for Budgets, but the anatomy (leading icon,
+ * description, trailing signed amount) matches ListRow's own shape
+ * closely enough that reusing it, rather than inventing a one-off row, is
+ * the more consistent choice; called out explicitly rather than claimed
+ * as an observed citation.
+ *
+ * Phase 34 §11 correction: an earlier phase's comment here claimed the
+ * insight box was "Spensa-only, no scope expansion" and excluded it
+ * without ever re-reading `Goals-6.pdf` to check. Re-read directly this
+ * phase: the reference DOES show a real, non-AI-chat insight sentence
+ * ("You're on track for your Bali Trip. ₹30,000 saved so far — ₹20,907
+ * left. Saving ₹3,500/month will get you there by Mar 2027.") in the same
+ * `border-primary/20 bg-primary/5` + Sparkles-icon card Cash Flow's own
+ * insight banner already uses (`computeSpendingInsight`'s render site) --
+ * reused here for the same reason, not invented fresh. `getGoalInsight`
+ * (`@/lib/goal-insight`) computes it purely from `calculateGoalProgress`/
+ * `calculateGoalPaceStatus` (both pure, already-tested domain-core
+ * functions) -- no live model call, nothing this function can't back with
+ * the numbers it was given. The reference's copy/regenerate/thumbs-up-
+ * down icons are deliberately NOT reproduced: this insight is
+ * deterministic, not a live AI generation, so a "regenerate" affordance
+ * implying a different answer next time would be exactly the fake-AI
+ * pattern this engagement's own UX-quality mandate forbids.
  */
 export function GoalDetailDialog({
   goal,
@@ -60,6 +87,11 @@ export function GoalDetailDialog({
   const currency = fundingAccount?.currency ?? "INR";
   const progress = calculateGoalProgress(goal.target_amount_minor, goal.saved_amount_minor, goal.target_date);
   const isReached = progress.isReached;
+  const paceStatus = calculateGoalPaceStatus(goal.target_amount_minor, goal.saved_amount_minor, goal.created_at, goal.target_date);
+  const targetDateLabel = goal.target_date
+    ? new Date(goal.target_date + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })
+    : null;
+  const insight = getGoalInsight(goal.name, progress, paceStatus, targetDateLabel);
 
   useEffect(() => {
     if (!open) return;
@@ -106,7 +138,12 @@ export function GoalDetailDialog({
             />
 
             {isReached ? (
-              <p className="text-sm font-medium text-success">🎉 Goal achieved!</p>
+              <p className="text-sm font-medium text-success">
+                🎉{" "}
+                {goal.completed_at
+                  ? `Completed in ${monthsBetween(goal.created_at, goal.completed_at)} month${monthsBetween(goal.created_at, goal.completed_at) === 1 ? "" : "s"}`
+                  : "You're all set"}
+              </p>
             ) : progress.monthsLeft !== null && goal.target_date ? (
               <p className="text-sm text-muted-foreground">
                 {progress.monthsLeft} month{progress.monthsLeft === 1 ? "" : "s"} left
@@ -172,7 +209,31 @@ export function GoalDetailDialog({
             </Button>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-4">
+            {/* Goals-6.pdf's insight box -- skipped entirely when masked,
+                same trade `<CashFlowTrendChart>` already makes: this
+                sentence embeds real rupee figures as plain text (it's a
+                sentence, not a `<Money>` tree), so there is no safe way to
+                surgically redact numbers inside it. Omitting the whole
+                card is the honest choice, not a masked-looking chip that
+                still leaks digit count. */}
+            {masked ? (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="flex items-center gap-1.5 py-4 text-sm text-muted-foreground">
+                  <Sparkles className="size-4 text-primary" aria-hidden="true" />
+                  Goal insight hidden while Privacy Mode is on.
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="flex items-start gap-1.5 py-4 text-sm text-foreground">
+                  <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                  <span>{insight}</span>
+                </CardContent>
+              </Card>
+            )}
+
+            <div className="space-y-1">
             <h3 className="text-sm font-medium text-muted-foreground">Contributions</h3>
             {contributions === null ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
@@ -206,6 +267,7 @@ export function GoalDetailDialog({
                 />
               ))
             )}
+            </div>
           </div>
         </div>
 

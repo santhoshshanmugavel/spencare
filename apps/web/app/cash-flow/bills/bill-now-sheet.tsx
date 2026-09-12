@@ -19,6 +19,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
+import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
 import { markPaidAction, undoPaidAction } from "./actions";
 
 /**
@@ -50,9 +51,13 @@ import { markPaidAction, undoPaidAction } from "./actions";
 function useMoneyField(initial = "") {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number) => void) {
-    const digits = raw.replace(/[^0-9]/g, "");
-    setDisplay(digits);
-    set(digits === "" ? 0 : Number(digits) * 100);
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
+    const normalized = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+    setDisplay(normalized);
+    if (normalized === "" || normalized === ".") { set(0); return; }
+    const { minor } = parseMoneyInput(normalized, "INR");
+    set(minor);
   }
   return { display, onChange };
 }
@@ -74,7 +79,7 @@ export function BillNowSheet({
 }) {
   const eligibleAccounts = filterByCapability(accounts, "expenseSource"); // Phase 28: Credit Card is now a valid bill-payment source (mark_bill_paid delegates to create_transaction, which already supports it)
   const money = useMoneyField(
-    prediction.expected_amount_minor != null ? String(Math.round(prediction.expected_amount_minor / 100)) : "",
+    prediction.expected_amount_minor != null ? minorUnitsToDisplay(prediction.expected_amount_minor, "INR") : "",
   );
   const {
     control,
@@ -169,7 +174,7 @@ export function BillNowSheet({
               render={({ field }) => (
                 <Input
                   id="bill-now-amount"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   placeholder="499"
                   value={money.display}
                   onChange={(e) => money.onChange(e.target.value, field.onChange)}

@@ -1,7 +1,9 @@
 import {
+  addMonthsToPeriodStart,
   calculateCashFlowTotals,
   calculateCategoryBreakdown,
   comparePeriods,
+  lastDayOfMonth,
   type CashFlowBreakdownMode,
   type CashFlowTotals,
   type CashFlowTransactionInput,
@@ -102,6 +104,40 @@ export async function compareCashFlowPeriods(
     expense: comparePeriods(current.expenseMinor, previous.expenseMinor),
     net: comparePeriods(current.netMinor, previous.netMinor),
   };
+}
+
+export interface CashFlowTrendPoint {
+  /** `YYYY-MM-01`. */
+  periodStart: string;
+  totals: CashFlowTotals;
+}
+
+/**
+ * Phase 31 (Financial Insights Dashboard) -- "Is my overall financial
+ * position improving?" / "How has my cash flow changed?" A THIN
+ * composition over the exact same `getCashFlowOverview` this file already
+ * exports (itself just `listTransactions` + the pure
+ * `calculateCashFlowTotals`) run once per month -- no new aggregation
+ * logic, no second computation of a figure that already has one owner.
+ * `monthsBack` includes the ending month itself (monthsBack=6 returns the
+ * ending month and the 5 before it, oldest first -- the order a line
+ * chart plots left-to-right).
+ */
+export async function getCashFlowTrend(
+  ctx: AuthContext,
+  monthsBack: number,
+  endingPeriodStart: string,
+  accountId?: string,
+): Promise<CashFlowTrendPoint[]> {
+  const periodStarts = Array.from({ length: monthsBack }, (_, i) =>
+    addMonthsToPeriodStart(endingPeriodStart, -(monthsBack - 1 - i)),
+  );
+  const totals = await Promise.all(
+    periodStarts.map((periodStart) =>
+      getCashFlowOverview(ctx, { periodStart, periodEnd: lastDayOfMonth(periodStart), accountId }),
+    ),
+  );
+  return periodStarts.map((periodStart, i) => ({ periodStart, totals: totals[i]! }));
 }
 
 export interface GetRecentTransactionsOptions {
