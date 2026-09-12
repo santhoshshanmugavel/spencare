@@ -1,7 +1,8 @@
-import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
-import { getProfile, listAccounts, listBillPredictions, listCategories, type AuthContext } from "@spencare/domain-application";
+import { getProfile, listAccounts, listBillPredictions, listCategories, type AuthContext, getProfileForDisplay,
+} from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PRIMARY_NAV_ITEMS } from "@/lib/nav-items";
 import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { CashFlowTabs } from "@/components/spencare/cash-flow-tabs";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -37,28 +38,17 @@ export default async function BillsPage() {
     getProfile(ctx),
   ]);
 
+
+  const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
+  const navAvatarUrl: string | null = _displayProfile?.avatarSignedUrl ?? (user.user_metadata?.avatar_url as string | null ?? null);
   return (
     <AppShell
       rail={
         <NavigationRail
           brand={<span className="text-lg font-bold text-primary">S</span>}
-          items={[
-            { key: "home", label: "Home", icon: <HomeIcon className="size-5" />, href: "/home" },
-            {
-              key: "cash-flow",
-              label: "Cash Flow",
-              icon: <ArrowLeftRight className="size-5" />,
-              href: "/cash-flow",
-            },
-            { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
-            {
-              key: "settings",
-              label: "Settings",
-              icon: <SettingsIcon className="size-5" />,
-              href: "/settings/profile",
-            },
-          ]}
+          items={PRIMARY_NAV_ITEMS}
           extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
+          userProfile={{ name: profile?.display_name ?? null, email: user.email ?? "", avatarUrl: navAvatarUrl }}
         />
       }
     >

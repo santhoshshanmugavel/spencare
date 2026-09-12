@@ -20,6 +20,8 @@ export interface ChatMessage {
   content: string;
   /** Present only on a "tool" role message -- which tool call this result answers. */
   toolCallId?: string;
+  /** Present only on a "tool" role message -- the name of the tool that was called. Required by Gemini's functionResponse.name. */
+  toolName?: string;
 }
 
 export type AiEvent =

@@ -41,7 +41,10 @@ import { createTransactionAction, transferAction } from "./actions";
  * consistency even though no transaction screen evidences it directly).
  */
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const nowLocalIso = () => {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
 
 function useMoneyField(initial = "", currency = "INR") {
   const [display, setDisplay] = useState(initial);
@@ -198,14 +201,14 @@ function ExpenseIncomeForm({
       amountMinor: 0,
       merchant: "",
       description: "",
-      occurredAt: todayIso(),
+      occurredAt: nowLocalIso(),
     },
   });
   const selectedAccountId = watch("accountId");
   const selectedAccount = eligibleAccounts.find((a) => a.id === selectedAccountId);
 
   async function onSubmit(data: CreateTransactionInput) {
-    const result = await createTransactionAction(data);
+    const result = await createTransactionAction({ ...data, occurredAt: new Date(data.occurredAt).toISOString() });
     if (!result.ok) {
       toastError(result.error.message);
       return;
@@ -274,8 +277,8 @@ function ExpenseIncomeForm({
       <FormField id="txn-merchant" label={kind === "expense" ? "Merchant (optional)" : "Source (optional)"}>
         <Input id="txn-merchant" placeholder="Eg: Swiggy, Amazon" {...register("merchant")} />
       </FormField>
-      <FormField id="txn-date" label="Date" error={errors.occurredAt?.message}>
-        <Input id="txn-date" type="date" aria-describedby={errors.occurredAt ? errorId("txn-date") : undefined} {...register("occurredAt")} />
+      <FormField id="txn-date" label="Date & time" error={errors.occurredAt?.message}>
+        <Input id="txn-date" type="datetime-local" aria-describedby={errors.occurredAt ? errorId("txn-date") : undefined} {...register("occurredAt")} />
       </FormField>
       <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? "Adding…" : kind === "expense" ? "Add expense" : "Add income"}
@@ -314,12 +317,12 @@ function TransferForm({ accounts, onDone }: { accounts: AccountRow[]; onDone: ()
       toAccountId: "",
       amountMinor: 0,
       description: "",
-      occurredAt: todayIso(),
+      occurredAt: nowLocalIso(),
     },
   });
 
   async function onSubmit(data: { fromAccountId: string; toAccountId: string; amountMinor: number; description?: string; occurredAt: string }) {
-    const result = await transferAction(data);
+    const result = await transferAction({ ...data, occurredAt: new Date(data.occurredAt).toISOString() });
     if (!result.ok) {
       toastError(result.error.message);
       return;
@@ -376,8 +379,8 @@ function TransferForm({ accounts, onDone }: { accounts: AccountRow[]; onDone: ()
       <FormField id="txn-transfer-note" label="Note (optional)">
         <Input id="txn-transfer-note" placeholder="Eg: Moving to savings" {...register("description")} />
       </FormField>
-      <FormField id="txn-transfer-date" label="Date">
-        <Input id="txn-transfer-date" type="date" {...register("occurredAt")} />
+      <FormField id="txn-transfer-date" label="Date & time">
+        <Input id="txn-transfer-date" type="datetime-local" {...register("occurredAt")} />
       </FormField>
       <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? "Transferring…" : "Transfer"}

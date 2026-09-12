@@ -60,6 +60,10 @@ export function EditTransactionSheet({
     : [...eligibleAccounts, ...accounts.filter((a) => a.id === transaction.account_id)];
   const txnCurrency = accounts.find((a) => a.id === transaction.account_id)?.currency ?? "INR";
   const [display, setDisplay] = useState(minorUnitsToDisplay(transaction.amount_minor, txnCurrency));
+  const toDatetimeLocal = (iso: string) => {
+    const d = new Date(iso);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
   const {
     control,
     register,
@@ -73,12 +77,12 @@ export function EditTransactionSheet({
       amountMinor: transaction.amount_minor,
       merchant: transaction.merchant ?? "",
       description: transaction.description ?? "",
-      occurredAt: transaction.occurred_at,
+      occurredAt: toDatetimeLocal(transaction.occurred_at),
     },
   });
 
   async function onSubmit(data: UpdateTransactionInput) {
-    const result = await updateTransactionAction(transaction.id, data);
+    const result = await updateTransactionAction(transaction.id, { ...data, occurredAt: new Date(data.occurredAt).toISOString() });
     if (!result.ok) {
       toastError(result.error.message);
       return;
@@ -153,8 +157,8 @@ export function EditTransactionSheet({
           <FormField id="edit-txn-merchant" label="Merchant / description">
             <Input id="edit-txn-merchant" {...register("merchant")} />
           </FormField>
-          <FormField id="edit-txn-date" label="Date">
-            <Input id="edit-txn-date" type="date" {...register("occurredAt")} />
+          <FormField id="edit-txn-date" label="Date & time">
+            <Input id="edit-txn-date" type="datetime-local" {...register("occurredAt")} />
           </FormField>
           <SheetFooter className="px-0">
             <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>

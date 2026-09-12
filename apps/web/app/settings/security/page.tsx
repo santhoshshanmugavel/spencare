@@ -1,7 +1,8 @@
-import { Home as HomeIcon, Settings as SettingsIcon } from "lucide-react";
-import { getProfile, getSecurityStatus, type AuthContext } from "@spencare/domain-application";
+import { getProfile, getSecurityStatus, type AuthContext, getProfileForDisplay,
+} from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PRIMARY_NAV_ITEMS } from "@/lib/nav-items";
 import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
 import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,21 +25,17 @@ export default async function SecuritySettingsPage() {
   };
   const [security, profile] = await Promise.all([getSecurityStatus(ctx), getProfile(ctx)]);
 
+
+  const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
+  const navAvatarUrl: string | null = _displayProfile?.avatarSignedUrl ?? (user.user_metadata?.avatar_url as string | null ?? null);
   return (
     <AppShell
       rail={
         <NavigationRail
           brand={<span className="text-lg font-bold text-primary">S</span>}
-          items={[
-            { key: "home", label: "Home", icon: <HomeIcon className="size-5" />, href: "/home" },
-            {
-              key: "settings",
-              label: "Settings",
-              icon: <SettingsIcon className="size-5" />,
-              href: "/settings/profile",
-            },
-          ]}
+          items={PRIMARY_NAV_ITEMS}
           extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
+          userProfile={{ name: profile?.display_name ?? null, email: user.email ?? "", avatarUrl: navAvatarUrl }}
         />
       }
     >

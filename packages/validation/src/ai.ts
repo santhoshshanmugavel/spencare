@@ -1,9 +1,11 @@
 import { z } from "zod";
-import { createExpenseSchema, createIncomeSchema } from "./transactions.js";
-import { addContributionSchema } from "./goals.js";
-import { markPaidSchema } from "./bills.js";
-import { createBudgetSchema } from "./budgets.js";
-import { createGoalSchema } from "./goals.js";
+import { createExpenseSchema, createIncomeSchema, updateTransactionSchema } from "./transactions.js";
+import { addContributionSchema, withdrawContributionSchema, createGoalSchema, updateGoalSchema } from "./goals.js";
+import { markPaidSchema, createBillSchema, updateBillSchema } from "./bills.js";
+import { createBudgetSchema, updateBudgetSchema } from "./budgets.js";
+import { updateAccountSchema } from "./accounts.js";
+import { createCategorySchema } from "./categories.js";
+import { profileUpdateSchema, updatePrivacyModeSchema } from "./auth.js";
 
 /**
  * Phase 16 -- AI tool input schemas. Every write tool's input schema is
@@ -15,6 +17,7 @@ import { createGoalSchema } from "./goals.js";
  * and the AI tool that proposes the identical mutation.
  */
 
+// ── Existing 6 propose schemas (Phase 16, unchanged) ──────────────────────
 export const proposeAddExpenseSchema = createExpenseSchema;
 export const proposeAddIncomeSchema = createIncomeSchema;
 export const proposeGoalContributionSchema = addContributionSchema;
@@ -29,16 +32,160 @@ export type ProposeMarkBillPaidInput = z.infer<typeof proposeMarkBillPaidSchema>
 export type ProposeCreateBudgetInput = z.infer<typeof proposeCreateBudgetSchema>;
 export type ProposeCreateGoalInput = z.infer<typeof proposeCreateGoalSchema>;
 
-/** The five distinct `pending_confirmations.command_type` values Phase 16 writes -- kept as a literal union, not a free-form string, so an unsupported type is a compile-time error, not a runtime surprise. */
+// ── 21 new propose schemas (Phase 6) ──────────────────────────────────────
+
+// updateTransactionSchema is a ZodObject — extend directly.
+export const proposeUpdateTransactionSchema = updateTransactionSchema.extend({
+  transactionId: z.string().uuid(),
+});
+export type ProposeUpdateTransactionInput = z.infer<typeof proposeUpdateTransactionSchema>;
+
+export const proposeDeleteTransactionSchema = z.object({
+  transactionId: z.string().uuid(),
+});
+export type ProposeDeleteTransactionInput = z.infer<typeof proposeDeleteTransactionSchema>;
+
+// Transfer: define as a plain object (no cross-field refine) so .shape is
+// accessible for MCP tool registration; the domain command enforces
+// fromAccountId !== toAccountId before executing the SQL RPC.
+export const proposeTransferSchema = z.object({
+  fromAccountId: z.string().uuid(),
+  toAccountId: z.string().uuid(),
+  amountMinor: z.number().int("Amount must be a whole number of minor units.").positive("Amount must be greater than zero.").max(1_000_000_000_000, "That amount is too large."),
+  occurredAt: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date."),
+  description: z.string().trim().max(500).optional(),
+});
+export type ProposeTransferInput = z.infer<typeof proposeTransferSchema>;
+
+// createAccountSchema is a discriminated union (no .shape). Define a flat
+// superset object for MCP; the domain command re-validates with the
+// discriminated schema before executing.
+export const proposeCreateAccountSchema = z.object({
+  type: z.enum(["bank", "cash", "credit_card", "investment"]),
+  name: z.string().trim().min(1, "Enter a name.").max(80, "Name is too long."),
+  currency: z.string().length(3).regex(/^[A-Z]{3}$/, "Currency must be a 3-letter ISO 4217 code."),
+  balanceMinor: z.number().int().max(1_000_000_000_000).optional(),
+  creditLimitMinor: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+  creditUsedMinor: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+  marketValueMinor: z.number().int().nonnegative().max(1_000_000_000_000).optional(),
+});
+export type ProposeCreateAccountInput = z.infer<typeof proposeCreateAccountSchema>;
+
+export const proposeUpdateAccountSchema = updateAccountSchema.extend({
+  accountId: z.string().uuid(),
+});
+export type ProposeUpdateAccountInput = z.infer<typeof proposeUpdateAccountSchema>;
+
+export const proposeArchiveAccountSchema = z.object({
+  accountId: z.string().uuid(),
+});
+export type ProposeArchiveAccountInput = z.infer<typeof proposeArchiveAccountSchema>;
+
+export const proposeCreateBillSchema = createBillSchema;
+export type ProposeCreateBillInput = z.infer<typeof proposeCreateBillSchema>;
+
+export const proposeUpdateBillSchema = updateBillSchema.extend({
+  billId: z.string().uuid(),
+});
+export type ProposeUpdateBillInput = z.infer<typeof proposeUpdateBillSchema>;
+
+export const proposeCreateCategorySchema = createCategorySchema;
+export type ProposeCreateCategoryInput = z.infer<typeof proposeCreateCategorySchema>;
+
+// No Zod schema exists for updateCategory in the domain; define inline,
+// matching the command's own validation rules (name 1–50 chars).
+export const proposeUpdateCategorySchema = z.object({
+  categoryId: z.string().uuid(),
+  name: z.string().trim().min(1, "Enter a category name.").max(50, "Name too long (max 50 characters).").optional(),
+  icon: z.string().trim().max(50).nullable().optional(),
+});
+export type ProposeUpdateCategoryInput = z.infer<typeof proposeUpdateCategorySchema>;
+
+export const proposeDeleteCategorySchema = z.object({
+  categoryId: z.string().uuid(),
+  reassignToCategoryId: z.string().uuid(),
+});
+export type ProposeDeleteCategoryInput = z.infer<typeof proposeDeleteCategorySchema>;
+
+export const proposeUpdateGoalSchema = updateGoalSchema.extend({
+  goalId: z.string().uuid(),
+});
+export type ProposeUpdateGoalInput = z.infer<typeof proposeUpdateGoalSchema>;
+
+export const proposeArchiveGoalSchema = z.object({
+  goalId: z.string().uuid(),
+});
+export type ProposeArchiveGoalInput = z.infer<typeof proposeArchiveGoalSchema>;
+
+export const proposeWithdrawContributionSchema = withdrawContributionSchema;
+export type ProposeWithdrawContributionInput = z.infer<typeof proposeWithdrawContributionSchema>;
+
+export const proposeUpdateBudgetSchema = updateBudgetSchema.extend({
+  budgetId: z.string().uuid(),
+});
+export type ProposeUpdateBudgetInput = z.infer<typeof proposeUpdateBudgetSchema>;
+
+export const proposeDeleteBudgetSchema = z.object({
+  budgetId: z.string().uuid(),
+});
+export type ProposeDeleteBudgetInput = z.infer<typeof proposeDeleteBudgetSchema>;
+
+export const proposeUpdateProfileSchema = profileUpdateSchema;
+export type ProposeUpdateProfileInput = z.infer<typeof proposeUpdateProfileSchema>;
+
+export const proposeUpdatePrivacyModeSchema = updatePrivacyModeSchema;
+export type ProposeUpdatePrivacyModeInput = z.infer<typeof proposeUpdatePrivacyModeSchema>;
+
+export const proposeAcceptGmailCandidateSchema = z.object({
+  candidateId: z.string().uuid(),
+});
+export type ProposeAcceptGmailCandidateInput = z.infer<typeof proposeAcceptGmailCandidateSchema>;
+
+export const proposeRejectGmailCandidateSchema = z.object({
+  candidateId: z.string().uuid(),
+});
+export type ProposeRejectGmailCandidateInput = z.infer<typeof proposeRejectGmailCandidateSchema>;
+
+export const proposeRevokeMcpSessionSchema = z.object({
+  sessionId: z.string().uuid(),
+});
+export type ProposeRevokeMcpSessionInput = z.infer<typeof proposeRevokeMcpSessionSchema>;
+
+// ── CONFIRMATION_COMMAND_TYPES ─────────────────────────────────────────────
+/** All distinct `pending_confirmations.command_type` values -- kept as a literal union so an unsupported type is a compile-time error, not a runtime surprise. */
 export const CONFIRMATION_COMMAND_TYPES = [
+  // Phase 16 originals
   "createTransaction",
   "addContribution",
   "markBillPaid",
   "createBudget",
   "createGoal",
+  // Phase 6 additions
+  "updateTransaction",
+  "deleteTransaction",
+  "transfer",
+  "createAccount",
+  "updateAccount",
+  "archiveAccount",
+  "createBill",
+  "updateBill",
+  "createCategory",
+  "updateCategory",
+  "deleteCategory",
+  "updateGoal",
+  "archiveGoal",
+  "withdrawContribution",
+  "updateBudget",
+  "deleteBudget",
+  "updateProfile",
+  "updatePrivacyMode",
+  "acceptGmailCandidate",
+  "rejectGmailCandidate",
+  "revokeMcpSession",
 ] as const;
 export type ConfirmationCommandType = (typeof CONFIRMATION_COMMAND_TYPES)[number];
 
+// ── Confirm / cancel schemas (unchanged) ──────────────────────────────────
 export const confirmCommandSchema = z.object({
   confirmationId: z.string().uuid(),
 });

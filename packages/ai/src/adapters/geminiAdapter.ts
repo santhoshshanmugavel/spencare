@@ -110,7 +110,7 @@ export class GeminiAdapter implements AiProviderAdapter {
           // Spencare's ChatMessage never carries the original tool name).
           return {
             role: "user",
-            parts: [{ functionResponse: { id: m.toolCallId, response: { output: m.content } } }],
+            parts: [{ functionResponse: { id: m.toolCallId, name: m.toolName ?? m.toolCallId ?? "tool", response: { output: m.content } } }],
           };
         }
         return { role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] };

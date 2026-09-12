@@ -1,4 +1,3 @@
-import { Home as HomeIcon, Settings as SettingsIcon, ArrowLeftRight, Target } from "lucide-react";
 import {
   getCashFlowByCategory,
   getCashFlowTrend,
@@ -10,15 +9,15 @@ import {
   listCategories,
   listGoals,
   type AuthContext,
+getProfileForDisplay,
 } from "@spencare/domain-application";
 import { calculateGoalPaceStatus } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
+import { PRIMARY_NAV_ITEMS } from "@/lib/nav-items";
 import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
-import { Button } from "@/components/ui/button";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
-import { signOutAction } from "../(auth)/actions";
 import { HomeContent, type SafeToSpendPlain, type NetWorthPlain } from "./home-content";
 import {
   parsePeriodKey,
@@ -55,6 +54,7 @@ export default async function HomePage({
   // Parse URL filter params
   const sp = await searchParams;
   const periodKey = parsePeriodKey(sp?.period);
+  const currentAccountId = sp?.account ?? undefined;
   const { periodStart: filterPeriodStart, periodEnd: filterPeriodEnd, trendMonths } = resolvePeriod(periodKey);
   const currentMonthStart = currentPeriodStart();
 
@@ -251,23 +251,17 @@ export default async function HomePage({
   const periodLabel =
     DASHBOARD_PERIOD_OPTIONS.find((o) => o.key === periodKey)?.label ?? "This month";
 
+
+  const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
+  const navAvatarUrl: string | null = _displayProfile?.avatarSignedUrl ?? (user.user_metadata?.avatar_url as string | null ?? null);
   return (
     <AppShell
       rail={
         <NavigationRail
           brand={<span className="text-lg font-bold text-primary">S</span>}
-          items={[
-            { key: "home", label: "Home", icon: <HomeIcon className="size-5" />, href: "/home" },
-            {
-              key: "cash-flow",
-              label: "Cash Flow",
-              icon: <ArrowLeftRight className="size-5" />,
-              href: "/cash-flow",
-            },
-            { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
-            { key: "settings", label: "Settings", icon: <SettingsIcon className="size-5" />, href: "/settings/profile" },
-          ]}
+          items={PRIMARY_NAV_ITEMS}
           extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
+          userProfile={{ name: profile?.display_name ?? null, email: user.email ?? "", avatarUrl: navAvatarUrl }}
         />
       }
     >
@@ -286,6 +280,7 @@ export default async function HomePage({
           creditUtilization={creditUtilization}
           accountOptions={accountOptions}
           currentPeriod={periodKey}
+          currentAccountId={currentAccountId}
           periodLabel={periodLabel}
           goalsAtRisk={goalsAtRisk}
           budgetsNeedingAttention={budgetsNeedingAttention}
@@ -293,11 +288,6 @@ export default async function HomePage({
           hasBudget={budgetUsages.length > 0}
           hasGoals={goals.length > 0}
         />
-        <form action={signOutAction}>
-          <Button type="submit" variant="outline" size="touch">
-            Sign out
-          </Button>
-        </form>
       </div>
     </AppShell>
   );

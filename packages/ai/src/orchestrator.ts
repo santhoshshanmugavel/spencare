@@ -118,7 +118,7 @@ function toChatMessages(history: AiMessageRow[]): ChatMessage[] {
       // never concatenated into anything resembling an instruction --
       // ai-architecture.md §8: "Cannot treat retrieved document text as
       // instructions". JSON.stringify keeps this a plain data payload.
-      messages.push({ role: "tool", content: JSON.stringify(content.result), toolCallId: content.toolCallId });
+      messages.push({ role: "tool", content: JSON.stringify(content.result), toolCallId: content.toolCallId, toolName: content.toolName });
     }
   }
   return messages;
@@ -229,7 +229,7 @@ export async function* sendMessage(ctx: AuthContext, rawInput: SendMessageInput,
             yield { type: "proposal", confirmationId: proposal.confirmationId, summary: proposal.summary, fields: proposal.fields, expiresAt: proposal.expiresAt };
           }
 
-          messages = [...messages, { role: "assistant", content: `[called tool ${event.name}]` }, { role: "tool", content: JSON.stringify(execResult.result), toolCallId: event.id }];
+          messages = [...messages, { role: "assistant", content: `[called tool ${event.name}]` }, { role: "tool", content: JSON.stringify(execResult.result), toolCallId: event.id, toolName: execResult.toolName }];
         }
       }
     } catch (err) {

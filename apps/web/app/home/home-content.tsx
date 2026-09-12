@@ -61,6 +61,7 @@ export function HomeContent({
   creditUtilization,
   accountOptions,
   currentPeriod,
+  currentAccountId,
   periodLabel,
   goalsAtRisk,
   budgetsNeedingAttention,
@@ -81,6 +82,7 @@ export function HomeContent({
   creditUtilization: CreditUtilization | null;
   accountOptions: AccountOption[];
   currentPeriod: DashboardPeriodKey;
+  currentAccountId?: string | undefined;
   periodLabel: string;
   goalsAtRisk: GoalAtRisk[];
   budgetsNeedingAttention: BudgetNeedingAttention[];
@@ -98,7 +100,7 @@ export function HomeContent({
       <DashboardFilterBar
         accounts={accountOptions}
         currentPeriod={currentPeriod}
-        currentAccountId={undefined}
+        currentAccountId={currentAccountId}
       />
 
       {/* ── Tier 1: Safe to Spend ─────────────────────────────────────── */}

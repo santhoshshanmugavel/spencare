@@ -93,7 +93,7 @@ export function BillNowSheet({
       accountId: "",
       categoryId: prediction.bill_definitions.category_id ?? "",
       amountMinor: prediction.expected_amount_minor ?? 0,
-      occurredAt: prediction.expected_date,
+      occurredAt: (() => { const d = new Date(prediction.expected_date); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); })(),
       merchant: prediction.bill_definitions.merchant_pattern,
     },
   });
@@ -105,7 +105,7 @@ export function BillNowSheet({
   }
 
   async function onSubmit(data: MarkPaidInput) {
-    const result = await markPaidAction(data);
+    const result = await markPaidAction({ ...data, occurredAt: new Date(data.occurredAt).toISOString() });
     if (!result.ok) {
       toastError(result.error.message);
       return;
@@ -183,10 +183,10 @@ export function BillNowSheet({
               )}
             />
           </FormField>
-          <FormField id="bill-now-date" label="Date paid" error={errors.occurredAt?.message}>
+          <FormField id="bill-now-date" label="Date & time paid" error={errors.occurredAt?.message}>
             <Input
               id="bill-now-date"
-              type="date"
+              type="datetime-local"
               aria-describedby={errors.occurredAt ? errorId("bill-now-date") : undefined}
               {...register("occurredAt")}
             />

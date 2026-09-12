@@ -1,10 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { isNavItemActive } from "@/lib/navigation";
+import { signOutAction } from "@/app/(auth)/actions";
 
 /**
  * <NavigationRail> — the persistent left icon rail, confirmed identical
@@ -33,14 +36,90 @@ export interface NavigationRailItem {
   active?: boolean;
 }
 
+export interface NavigationRailUserProfile {
+  name?: string | null;
+  email: string;
+  avatarUrl?: string | null;
+}
+
 export interface NavigationRailProps {
   brand: ReactNode;
   items: NavigationRailItem[];
   avatar?: ReactNode;
   /** Renders above the avatar -- the privacy/hide-balances toggle observed in some screens (CF-D03, not yet approved -- see design-decisions.md CF-04). */
   extraFooterSlot?: ReactNode;
+  /** When provided, renders a profile avatar at the bottom of the rail with a hover popup showing name, email, and sign-out. */
+  userProfile?: NavigationRailUserProfile;
   onNavigate?: (item: NavigationRailItem) => void;
   className?: string;
+}
+
+function ProfileButton({ profile }: { profile: NavigationRailUserProfile }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const initials = profile.name
+    ? profile.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+    : (profile.email[0] ?? "U").toUpperCase();
+
+  return (
+    <div ref={ref} className="relative">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-label="Account menu"
+            className={cn(
+              "flex size-9 items-center justify-center rounded-full text-xs font-semibold transition-colors overflow-hidden",
+              profile.avatarUrl
+                ? "border-2 border-border hover:border-primary/40"
+                : "bg-primary/10 text-primary hover:bg-primary/20",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            {profile.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.avatarUrl} alt={profile.name ?? profile.email} className="size-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              initials
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">{profile.name ?? profile.email}</TooltipContent>
+      </Tooltip>
+
+      {open ? (
+        <div className="absolute bottom-full left-full mb-0 ml-2 z-50 min-w-[200px] rounded-xl border border-border bg-background p-3 shadow-lg">
+          <div className="mb-3 space-y-0.5 border-b border-border pb-3">
+            {profile.name ? (
+              <p className="text-sm font-medium text-foreground leading-tight">{profile.name}</p>
+            ) : null}
+            <p className="text-xs text-muted-foreground leading-tight truncate">{profile.email}</p>
+          </div>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            >
+              <LogOut className="size-4" aria-hidden="true" />
+              Sign out
+            </button>
+          </form>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function NavigationRail({
@@ -48,6 +127,7 @@ export function NavigationRail({
   items,
   avatar,
   extraFooterSlot,
+  userProfile,
   onNavigate,
   className,
 }: NavigationRailProps) {
@@ -100,6 +180,7 @@ export function NavigationRail({
 
       {extraFooterSlot ? <div className="mb-2">{extraFooterSlot}</div> : null}
       {avatar ? <div>{avatar}</div> : null}
+      {userProfile ? <div className="mt-1"><ProfileButton profile={userProfile} /></div> : null}
     </nav>
   );
 }
