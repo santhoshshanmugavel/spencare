@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, CalendarClock, Search, Sparkles } from "lucide-react";
-import { Money as DomainMoney, ACCOUNT_TYPE_LABELS, filterByCapability, getSpendableMinor } from "@spencare/domain-core";
+import { Money as DomainMoney, ACCOUNT_TYPE_LABELS, filterByCapability, getSpendableMinor, getTransactionDisplay } from "@spencare/domain-core";
 import type {
   AccountRow,
   BillPredictionWithDefinition,
@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Progress, type ProgressTone } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/spencare/empty-state";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { DonutChart, type DonutChartSlice } from "@/components/spencare/donut-chart";
@@ -30,6 +31,7 @@ import {
   daySubtotalMinor,
   formatGroupDate,
   groupByDate,
+  toLocalDate,
   transactionHint,
 } from "@/lib/transaction-presentation";
 import { AddTransactionSheet } from "./transactions/add-transaction-sheet";
@@ -78,9 +80,12 @@ function toneFor(status: BudgetWithUsage["status"]): ProgressTone {
 }
 
 function iconForTransaction(type: TransactionRow["type"]) {
-  if (type === "income") return <ArrowDownLeft className="size-4 text-success" aria-hidden="true" />;
-  if (type === "expense") return <ArrowUpRight className="size-4 text-destructive" aria-hidden="true" />;
-  return <ArrowLeftRight className="size-4 text-muted-foreground" aria-hidden="true" />;
+  const base = "flex size-9 shrink-0 items-center justify-center rounded-xl";
+  if (type === "income")
+    return <div className={`${base} bg-income-subtle`} aria-hidden="true"><ArrowDownLeft className="size-4 text-income" /></div>;
+  if (type === "expense")
+    return <div className={`${base} bg-expense-subtle`} aria-hidden="true"><ArrowUpRight className="size-4 text-expense" /></div>;
+  return <div className={`${base} bg-transfer-subtle`} aria-hidden="true"><ArrowLeftRight className="size-4 text-transfer" /></div>;
 }
 
 function trailingForTransaction(t: TransactionRow, masked: boolean) {
@@ -161,7 +166,7 @@ export function CashFlowOverview({
       recentTransactions.filter((t) => {
         if (categoryFilter !== "all" && t.category_id !== categoryFilter) return false;
         if (query === "") return true;
-        const title = (t.merchant || t.description || "").toLowerCase();
+        const title = (t.item_name ?? t.merchant ?? t.description ?? "").toLowerCase();
         return title.includes(query);
       }),
     [recentTransactions, categoryFilter, query],
@@ -175,7 +180,7 @@ export function CashFlowOverview({
       }),
     [upcomingBills, categoryFilter, query],
   );
-  const transactionGroups = useMemo(() => groupByDate(filteredTransactions, (t) => t.occurred_at), [filteredTransactions]);
+  const transactionGroups = useMemo(() => groupByDate(filteredTransactions, (t) => toLocalDate(t.occurred_at)), [filteredTransactions]);
   const billGroups = useMemo(() => groupByDate(filteredBills, (b) => b.expected_date), [filteredBills]);
 
   const expenseSlices = toDonutSlices(expenseByCategory, categories);
@@ -211,13 +216,12 @@ export function CashFlowOverview({
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold text-foreground">Cash Flow</h1>
         <Card>
-          <CardContent className="space-y-3 py-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              Add an account to see your cash flow -- spending, upcoming bills, and your safe-to-spend amount.
-            </p>
-            <Button asChild size="touch">
-              <Link href="/settings/accounts">Add an account</Link>
-            </Button>
+          <CardContent className="p-0">
+            <EmptyState
+              title="No accounts yet"
+              description="Add an account to see your cash flow — spending, upcoming bills, and your safe-to-spend amount."
+              action={{ label: "Add an account", href: "/settings/accounts" }}
+            />
           </CardContent>
         </Card>
       </div>
@@ -375,10 +379,15 @@ export function CashFlowOverview({
             <TabsContent value="transactions" className="space-y-3">
               {filteredTransactions.length === 0 ? (
                 <Card>
-                  <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                    {recentTransactions.length === 0
-                      ? "No transactions yet. Add an expense, income, or transfer to get started."
-                      : "No transactions match your search."}
+                  <CardContent className="p-0">
+                    <EmptyState
+                      title={recentTransactions.length === 0 ? "No transactions yet" : "No matches"}
+                      description={recentTransactions.length === 0
+                        ? "Add an expense, income, or transfer to get started."
+                        : "No transactions match your search."}
+                      action={recentTransactions.length === 0 ? { label: "+ Add transaction", onClick: () => setAddOpen(true) } : undefined}
+                      size="sm"
+                    />
                   </CardContent>
                 </Card>
               ) : (
@@ -386,9 +395,10 @@ export function CashFlowOverview({
                   const subtotal = daySubtotalMinor(group.items);
                   const subtotalMoney = DomainMoney.fromMinorUnits(BigInt(subtotal), group.items[0]?.currency ?? CURRENCY);
                   return (
-                    <div key={group.date} className="space-y-1">
-                      <div className="flex items-center justify-between px-1">
-                        <h2 className="text-sm font-medium text-muted-foreground">{formatGroupDate(group.date)}</h2>
+                    <div key={group.date} className="space-y-1.5">
+                      <div className="flex items-center gap-3 px-1">
+                        <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{formatGroupDate(group.date)}</h2>
+                        <div className="flex-1 h-px bg-border" />
                         <Money
                           value={subtotalMoney}
                           masked={masked}
@@ -398,23 +408,24 @@ export function CashFlowOverview({
                         />
                       </div>
                       <Card>
-                        <CardContent className="space-y-1">
+                        <CardContent className="px-2 py-1.5 space-y-0.5">
                           {group.items.map((t) => {
                             const account = accountById.get(t.account_id);
                             const category = t.category_id ? categoryById.get(t.category_id) : undefined;
+                            const { displayTitle, effectiveItemName, displayMerchant } = getTransactionDisplay(t);
                             return (
                               <ListRow
                                 key={t.id}
                                 icon={iconForTransaction(t.type)}
-                                title={t.merchant || t.description || (t.type === "transfer" ? "Transfer" : "Transaction")}
-                                subtitle={transactionHint(t, category)}
+                                title={displayTitle}
+                                subtitle={effectiveItemName && displayMerchant ? displayMerchant : transactionHint(t, category)}
                                 metadata={[
                                   category ? <span key="cat">{category.name}</span> : null,
                                   account ? <span key="acct">{accountTag(account)}</span> : null,
                                 ].filter(Boolean)}
                                 trailing={trailingForTransaction(t, masked)}
                                 onClick={() => setDetail(t)}
-                                aria-label={`${t.merchant || t.description || "Transaction"}, view details`}
+                                aria-label={`${displayTitle}, view details`}
                                 hoverActions={
                                   <Button variant="ghost" size="sm" onClick={() => setQuickDeleting(t)}>
                                     Delete
@@ -439,8 +450,13 @@ export function CashFlowOverview({
             <TabsContent value="bills" className="space-y-3">
               {filteredBills.length === 0 ? (
                 <Card>
-                  <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                    {upcomingBills.length === 0 ? "No upcoming bills tracked yet." : "No upcoming bills match your search."}
+                  <CardContent className="p-0">
+                    <EmptyState
+                      title={upcomingBills.length === 0 ? "No upcoming bills" : "No matches"}
+                      description={upcomingBills.length === 0 ? "Add a recurring bill so Spencare can predict when it's due." : "No upcoming bills match your search."}
+                      action={upcomingBills.length === 0 ? { label: "Go to Bills", onClick: () => router.push("/cash-flow/bills") } : undefined}
+                      size="sm"
+                    />
                   </CardContent>
                 </Card>
               ) : (
@@ -448,22 +464,27 @@ export function CashFlowOverview({
                   const yetToSpend = group.items.reduce((sum, b) => sum + (b.expected_amount_minor ?? 0), 0);
                   const yetToSpendMoney = DomainMoney.fromMinorUnits(BigInt(yetToSpend), CURRENCY as never);
                   return (
-                    <div key={group.date} className="space-y-1">
-                      <div className="flex items-center justify-between px-1">
-                        <h2 className="text-sm font-medium text-muted-foreground">{formatGroupDate(group.date)}</h2>
-                        <span className="text-sm text-muted-foreground">
+                    <div key={group.date} className="space-y-1.5">
+                      <div className="flex items-center gap-3 px-1">
+                        <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{formatGroupDate(group.date)}</h2>
+                        <div className="flex-1 h-px bg-border" />
+                        <span className="text-xs text-muted-foreground">
                           Yet to spend{" "}
                           <Money value={yetToSpendMoney} masked={masked} size="body" tone="neutral" className="inline" />
                         </span>
                       </div>
                       <Card>
-                        <CardContent className="space-y-1">
+                        <CardContent className="px-2 py-1.5 space-y-0.5">
                           {group.items.map((p) => {
                             const isToday = p.expected_date === new Date().toISOString().slice(0, 10);
                             return (
                               <ListRow
                                 key={p.id}
-                                icon={<CalendarClock className="size-4 text-muted-foreground" aria-hidden="true" />}
+                                icon={
+                                  <div className="flex size-9 items-center justify-center rounded-xl bg-muted" aria-hidden="true">
+                                    <CalendarClock className="size-4 text-muted-foreground" />
+                                  </div>
+                                }
                                 title={p.bill_definitions.merchant_pattern}
                                 metadata={[
                                   categoryById.get(p.bill_definitions.category_id ?? "")?.name ? (
@@ -527,7 +548,7 @@ export function CashFlowOverview({
             <Card>
               <CardContent className="space-y-3 py-5">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Available to spend this month</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-primary/70">Available to spend this month</span>
                 </div>
                 {(() => {
                   const totalLimit = budgetUsages.reduce((sum, u) => sum + u.limitMinor, 0);

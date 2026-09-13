@@ -31,6 +31,7 @@ export interface GmailCandidateRow {
   currency: string | null;
   normalizedDate: string | null;
   normalizedMerchant: string | null;
+  itemName: string | null;
   referenceId: string | null;
   confidenceScore: number;
   duplicateOfTransactionId: string | null;
@@ -68,6 +69,7 @@ function toCandidate(row: CandidateDbRow): GmailCandidateRow {
     currency: row.currency,
     normalizedDate: row.normalized_date,
     normalizedMerchant: row.normalized_merchant,
+    itemName: row.item_name,
     referenceId: row.reference_id,
     confidenceScore: row.confidence_score,
     duplicateOfTransactionId: row.duplicate_of_transaction_id,
@@ -97,6 +99,7 @@ export interface InsertGmailCandidateInput {
   currency: string | null;
   normalizedDate: string | null;
   normalizedMerchant: string | null;
+  itemName: string | null;
   referenceId: string | null;
   confidenceScore: number;
   duplicateOfTransactionId: string | null;
@@ -136,6 +139,7 @@ export async function upsertGmailCandidate(serviceClient: TypedSupabaseClient, u
         currency: input.currency,
         normalized_date: input.normalizedDate,
         normalized_merchant: input.normalizedMerchant,
+        item_name: input.itemName,
         reference_id: input.referenceId,
         confidence_score: input.confidenceScore,
         duplicate_of_transaction_id: input.duplicateOfTransactionId,

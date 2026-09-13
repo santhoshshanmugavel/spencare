@@ -325,3 +325,39 @@ export {
 export { exportUserData, type ExportBundle } from "./commands/exportData.js";
 export { deleteAccount, type DeleteAccountInput } from "./commands/deleteAccount.js";
 export { checkRateLimit, RATE_LIMITS } from "./commands/rateLimit.js";
+
+// Notification platform
+export {
+  markNotificationRead,
+  markAllNotificationsRead,
+  saveNotificationPreference,
+  disconnectNotificationChannel,
+  generateTelegramLinkToken,
+} from "./commands/notifications.js";
+export {
+  listNotificationsQuery,
+  getUnreadCountQuery,
+  listChannelConnectionsQuery,
+  getChannelConnectionQuery,
+  listNotificationPreferencesQuery,
+  type ListNotificationsOptions,
+} from "./queries/notifications.js";
+export {
+  composeNotificationMessage,
+  type NotificationMessage,
+  type NotificationEventType,
+} from "./notifications/messageComposer.js";
+export type {
+  NotificationRow,
+  NotificationDeliveryRow,
+  CreateNotificationInput,
+  NotificationSeverity,
+  NotificationCategory,
+  NotificationChannel,
+  DeliveryStatus,
+  ChannelConnectionRow,
+  TelegramMetadata,
+  SlackMetadata,
+  NotificationPreferenceRow,
+  UpsertPreferenceInput,
+} from "@spencare/domain-infra";

@@ -4,6 +4,7 @@ import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { PRIMARY_NAV_ITEMS } from "@/lib/nav-items";
 import { PrivacyModeToggle } from "@/components/spencare/privacy-mode-toggle";
+import { NotificationBell } from "@/components/spencare/notification-bell";
 import { SettingsShell } from "@/components/spencare/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -60,9 +61,9 @@ export default async function GmailSettingsPage(props: PageProps<"/settings/gmai
     <AppShell
       rail={
         <NavigationRail
-          brand={<span className="text-lg font-bold text-primary">S</span>}
+          brand={<img src="/spencare-icon.svg" alt="Spencare" width={24} height={24} className="shrink-0" />}
           items={PRIMARY_NAV_ITEMS}
-          extraFooterSlot={<PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} />}
+          extraFooterSlot={<><PrivacyModeToggle initialEnabled={profile?.privacy_mode_enabled ?? false} /><NotificationBell /></>}
           userProfile={{ name: profile?.display_name ?? null, email: user.email ?? "", avatarUrl: navAvatarUrl }}
         />
       }
@@ -70,9 +71,10 @@ export default async function GmailSettingsPage(props: PageProps<"/settings/gmai
       <SettingsShell active="gmail">
         <h1 className="text-2xl font-semibold text-foreground">Gmail</h1>
         <p className="text-sm text-muted-foreground">
-          Connect Gmail so Spencare can find bank, credit-card, receipt, and bill emails and suggest
-          transactions from them. Nothing is added to your finances automatically -- you review and
-          confirm every item.
+          Connect Gmail once and Spencare automatically checks new emails for bank alerts,
+          credit-card purchases, receipts, and bills — once per day, and any time you tap "Check now".
+          Every detected transaction goes to your review queue first — nothing is added to your
+          finances without your explicit confirmation.
         </p>
 
         <Card>

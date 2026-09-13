@@ -36,5 +36,45 @@ export async function register() {
       }
       (globalThis as Record<string, unknown>).DOMMatrix = DOMMatrixStub;
     }
+
+    // Register Telegram webhook + bot commands on cold start (idempotent).
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (botToken) {
+      void (async () => {
+        try {
+          const TARGET_URL = "https://spencare.vercel.app/api/telegram/webhook";
+
+          // Register webhook only when the URL has changed
+          const infoRes = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`);
+          const info = (await infoRes.json()) as { ok: boolean; result?: { url: string } };
+          if (info.result?.url !== TARGET_URL) {
+            const body: Record<string, string> = { url: TARGET_URL };
+            const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+            if (secret) body.secret_token = secret;
+            await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+          }
+
+          // Register bot commands (idempotent — safe every cold start)
+          await fetch(`https://api.telegram.org/bot${botToken}/setMyCommands`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              commands: [
+                { command: "start", description: "Connect your Spencare account" },
+                { command: "help", description: "See what Spensa can help with" },
+                { command: "settings", description: "Manage notification preferences" },
+                { command: "disconnect", description: "Disconnect Telegram from Spencare" },
+              ],
+            }),
+          });
+        } catch {
+          // Non-fatal — bot token may not be set in dev/preview
+        }
+      })();
+    }
   }
 }

@@ -6,6 +6,7 @@ import { Pencil, Trash2, Plus, Lock, Tag } from "lucide-react";
 import type { CategoryRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/spencare/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -242,13 +243,19 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
 
       {/* Custom categories */}
       <section aria-labelledby="custom-heading">
-        <h2 id="custom-heading" className="mb-3 text-sm font-medium text-muted-foreground">
-          Custom
-        </h2>
+        <div className="mb-3 flex items-center gap-3">
+          <h2 id="custom-heading" className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Custom</h2>
+          <div className="flex-1 h-px bg-border" />
+        </div>
         {customCategories.length === 0 ? (
           <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              No custom categories yet. Add one to start organising your transactions your way.
+            <CardContent className="p-0">
+              <EmptyState
+                title="No custom categories"
+                description="Add one to start organising your transactions your way."
+                action={{ label: "+ Add category", onClick: () => setCreateOpen(true) }}
+                size="sm"
+              />
             </CardContent>
           </Card>
         ) : (
@@ -256,7 +263,7 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
             <ul className="divide-y">
               {customCategories.map((cat) => (
                 <li key={cat.id} className="flex items-center gap-3 px-4 py-3">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted">
                     <CategoryIconDisplay iconName={cat.icon} />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{cat.name}</span>
@@ -288,14 +295,15 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
 
       {/* System categories */}
       <section aria-labelledby="system-heading">
-        <h2 id="system-heading" className="mb-3 text-sm font-medium text-muted-foreground">
-          System
-        </h2>
+        <div className="mb-3 flex items-center gap-3">
+          <h2 id="system-heading" className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">System</h2>
+          <div className="flex-1 h-px bg-border" />
+        </div>
         <Card>
           <ul className="divide-y">
             {systemCategories.map((cat) => (
               <li key={cat.id} className="flex items-center gap-3 px-4 py-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted">
                   <CategoryIconDisplay iconName={cat.icon} />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{cat.name}</span>

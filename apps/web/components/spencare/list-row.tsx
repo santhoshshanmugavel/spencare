@@ -1,17 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/**
- * <ListRow> — the one shared row composition for Transaction, Bill, and
- * Budget-category lists (design-system-specification.md §1,
- * component-inventory.md §8). Row height/spacing rhythm is defined once
- * here rather than reimplemented per feature.
- *
- * Anatomy (component-inventory.md §8): leading icon slot -> two-line text
- * stack (title + subtitle) -> zero or more metadata columns -> trailing
- * slot (an amount, typically a <Money>).
- */
-
 export interface ListRowProps {
   icon?: ReactNode;
   title: ReactNode;
@@ -19,7 +8,7 @@ export interface ListRowProps {
   /** Middle metadata columns, e.g. category / account text — rendered in row order. */
   metadata?: ReactNode[];
   trailing?: ReactNode;
-  /** Hover-revealed actions (desktop) -- component-inventory.md §8's row-hover pattern. */
+  /** Hover-revealed actions (desktop). */
   hoverActions?: ReactNode;
   onClick?: () => void;
   className?: string;
@@ -50,17 +39,17 @@ export function ListRow({
 
   const content = (
     <>
-      {icon ? <div className="flex size-9 shrink-0 items-center justify-center">{icon}</div> : null}
+      {icon ? <div className="shrink-0">{icon}</div> : null}
 
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-foreground">{title}</div>
+        <div className="truncate text-sm font-medium text-foreground leading-snug">{title}</div>
         {subtitle ? (
-          <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
+          <div className="truncate text-xs text-muted-foreground mt-0.5">{subtitle}</div>
         ) : null}
       </div>
 
       {metadata.map((item, i) => (
-        <div key={i} className="hidden shrink-0 text-sm text-muted-foreground sm:block">
+        <div key={i} className="hidden shrink-0 text-xs text-muted-foreground sm:block">
           {item}
         </div>
       ))}
@@ -70,7 +59,7 @@ export function ListRow({
   );
 
   return (
-    <div className={cn("group/row flex min-h-14 items-center gap-3 rounded-lg px-3 py-2", className)}>
+    <div className={cn("group/row flex min-h-[3.25rem] items-center gap-3 rounded-xl px-3 py-2 transition-colors", className)}>
       {isInteractive ? (
         // A real <button>, not a div[role=button] wrapping the whole row --
         // when `hoverActions` also contains real buttons (Delete), nesting
@@ -84,7 +73,7 @@ export function ListRow({
           type="button"
           onClick={onClick}
           aria-label={ariaLabel}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl px-3 py-2 -mx-3 -my-2 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
         >
           {content}
         </button>

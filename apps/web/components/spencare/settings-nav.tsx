@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Landmark, Sparkles, User, ShieldCheck, DatabaseBackup, Plug, Mail, EyeOff, Tag } from "lucide-react";
+import { Landmark, Sparkles, User, ShieldCheck, DatabaseBackup, Plug, Mail, EyeOff, Tag, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
  * portion of the IA stays recognizable against its source.
  */
 
-export type SettingsNavKey = "accounts" | "ai" | "profile" | "privacy" | "security" | "data-backup" | "mcp" | "gmail" | "categories";
+export type SettingsNavKey = "accounts" | "ai" | "profile" | "privacy" | "security" | "data-backup" | "mcp" | "gmail" | "categories" | "notifications";
 
 interface SettingsNavItem {
   key: SettingsNavKey;
@@ -49,6 +49,7 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { key: "mcp", label: "MCP", href: "/settings/mcp", icon: <Plug className="size-4" aria-hidden="true" /> },
   { key: "gmail", label: "Gmail", href: "/settings/gmail", icon: <Mail className="size-4" aria-hidden="true" /> },
   { key: "categories", label: "Categories", href: "/settings/categories", icon: <Tag className="size-4" aria-hidden="true" /> },
+  { key: "notifications", label: "Notifications", href: "/settings/notifications", icon: <Bell className="size-4" aria-hidden="true" /> },
 ];
 
 export function SettingsNav({ active }: { active: SettingsNavKey }) {

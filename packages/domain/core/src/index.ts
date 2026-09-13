@@ -92,6 +92,7 @@ export {
   extractCardOrAccountLastFour,
   extractDirection,
   extractMerchant,
+  extractItemName,
   extractDate,
   extractReferenceId,
   classifyCandidateType,
@@ -118,6 +119,8 @@ export {
 } from "./cashFlow.js";
 
 export { generateMcpToken, hashMcpToken } from "./mcpToken.js";
+
+export { getTransactionDisplay, type TransactionDisplayFields } from "./transactionDisplay.js";
 
 export {
   generateAuthorizationCode,

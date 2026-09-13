@@ -17,6 +17,7 @@ export interface TransactionRow {
   amount_minor: number;
   currency: string;
   category_id: string | null;
+  item_name: string | null;
   merchant: string | null;
   description: string | null;
   occurred_at: string;
@@ -37,7 +38,7 @@ export interface CategoryRow {
 }
 
 const TRANSACTION_COLUMNS =
-  "id, user_id, account_id, type, amount_minor, currency, category_id, merchant, description, occurred_at, status, transfer_pair_id, goal_id, bill_prediction_id, created_at, updated_at";
+  "id, user_id, account_id, type, amount_minor, currency, category_id, item_name, merchant, description, occurred_at, status, transfer_pair_id, goal_id, bill_prediction_id, created_at, updated_at";
 
 export interface ListTransactionsOptions {
   accountId?: string;
@@ -66,8 +67,21 @@ export async function listTransactions(
     .eq("user_id", userId)
     .is("deleted_at", null);
   if (options.accountId) query = query.eq("account_id", options.accountId);
-  if (options.occurredFrom) query = query.gte("occurred_at", options.occurredFrom);
-  if (options.occurredTo) query = query.lte("occurred_at", options.occurredTo);
+  if (options.occurredFrom) {
+    // Date-only strings are IST calendar dates; anchor to IST midnight so timestamps
+    // from 00:00 IST (+05:30) onward are included, not just UTC midnight onward.
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(options.occurredFrom)
+      ? options.occurredFrom + "T00:00:00+05:30"
+      : options.occurredFrom;
+    query = query.gte("occurred_at", from);
+  }
+  if (options.occurredTo) {
+    // Date-only strings: include the full IST day through 23:59:59.999 IST.
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(options.occurredTo)
+      ? options.occurredTo + "T23:59:59.999+05:30"
+      : options.occurredTo;
+    query = query.lte("occurred_at", to);
+  }
   query = query.order("occurred_at", { ascending: false }).order("created_at", { ascending: false });
   if (options.limit) query = query.limit(options.limit);
   const { data, error } = await query;
@@ -193,6 +207,7 @@ export interface CreateExpenseOrIncomePatch {
   accountId: string;
   categoryId: string;
   amountMinor: number;
+  itemName?: string;
   merchant?: string;
   description?: string;
   occurredAt: string;
@@ -209,6 +224,7 @@ export async function callCreateTransaction(
     p_type: patch.type,
     p_amount_minor: patch.amountMinor,
     p_category_id: patch.categoryId,
+    p_item_name: patch.itemName ?? undefined,
     p_merchant: patch.merchant ?? undefined,
     p_description: patch.description ?? undefined,
     p_occurred_at: patch.occurredAt,
@@ -254,6 +270,7 @@ export interface UpdateTransactionPatch {
   accountId: string;
   categoryId: string;
   amountMinor: number;
+  itemName?: string;
   merchant?: string;
   description?: string;
   occurredAt: string;
@@ -271,6 +288,7 @@ export async function callUpdateTransaction(
     p_account_id: patch.accountId,
     p_amount_minor: patch.amountMinor,
     p_category_id: patch.categoryId,
+    p_item_name: patch.itemName ?? undefined,
     p_merchant: patch.merchant ?? undefined,
     p_description: patch.description ?? undefined,
     p_occurred_at: patch.occurredAt,

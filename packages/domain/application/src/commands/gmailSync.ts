@@ -5,6 +5,7 @@ import {
   extractCardOrAccountLastFour,
   extractDate,
   extractDirection,
+  extractItemName,
   extractMerchant,
   extractReferenceId,
   scoreGmailConfidence,
@@ -190,6 +191,7 @@ interface ExtractedFields {
   direction: "income" | "expense" | null;
   date: string | null;
   merchant: string | null;
+  itemName: string | null;
   referenceId: string | null;
   lastFour: string | null;
 }
@@ -203,6 +205,7 @@ function extractFieldsFromText(subject: string | null, text: string): ExtractedF
     direction: extractDirection(combined),
     date: extractDate(combined),
     merchant: extractMerchant(subject, text),
+    itemName: extractItemName(subject, text),
     referenceId: extractReferenceId(combined),
     lastFour: extractCardOrAccountLastFour(combined),
   };
@@ -287,6 +290,7 @@ async function stageCandidate(ctx: AuthContext, message: GmailMessageDetail, att
     currency: fields.currency,
     normalizedDate: fields.date,
     normalizedMerchant: fields.merchant,
+    itemName: fields.itemName,
     referenceId: fields.referenceId,
     confidenceScore: confidence,
     duplicateOfTransactionId,

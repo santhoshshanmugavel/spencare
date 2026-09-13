@@ -19,8 +19,12 @@ const amountMinorSchema = z
   .max(1_000_000_000_000, "That amount is too large.");
 
 const merchantSchema = z.string().trim().max(120).optional();
+const itemNameSchema = z.string().trim().max(200).optional();
 const descriptionSchema = z.string().trim().max(500).optional();
-const occurredAtSchema = z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date.");
+const occurredAtSchema = z
+  .string()
+  .transform((v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v + "T00:00:00+05:30" : v))
+  .pipe(z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date."));
 
 /**
  * Income/expense share a shape (account + category required, per the DB
@@ -34,6 +38,7 @@ export const createExpenseSchema = z.object({
   accountId: z.string().uuid(),
   categoryId: z.string().uuid(),
   amountMinor: amountMinorSchema,
+  itemName: itemNameSchema,
   merchant: merchantSchema,
   description: descriptionSchema,
   occurredAt: occurredAtSchema,
@@ -43,6 +48,7 @@ export const createIncomeSchema = z.object({
   accountId: z.string().uuid(),
   categoryId: z.string().uuid(),
   amountMinor: amountMinorSchema,
+  itemName: itemNameSchema,
   merchant: merchantSchema,
   description: descriptionSchema,
   occurredAt: occurredAtSchema,
@@ -88,6 +94,7 @@ export const updateTransactionSchema = z.object({
   accountId: z.string().uuid(),
   categoryId: z.string().uuid(),
   amountMinor: amountMinorSchema,
+  itemName: itemNameSchema,
   merchant: merchantSchema,
   description: descriptionSchema,
   occurredAt: occurredAtSchema,

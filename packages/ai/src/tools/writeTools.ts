@@ -63,7 +63,7 @@ const proposeAddExpenseTool: WriteToolHandler = {
   definition: {
     name: "proposeAddExpense",
     description: "Propose recording a new expense. This does NOT create the transaction -- it only creates a proposal the user must explicitly confirm in the app before anything is recorded.",
-    inputSchema: { type: "object", properties: { accountId: { type: "string" }, categoryId: { type: "string" }, amountMinor: { type: "number" }, merchant: { type: "string" }, description: { type: "string" }, occurredAt: { type: "string" } }, required: ["accountId", "categoryId", "amountMinor", "occurredAt"] },
+    inputSchema: { type: "object", properties: { accountId: { type: "string" }, categoryId: { type: "string" }, amountMinor: { type: "number" }, itemName: { type: "string", description: "What was purchased (e.g. 'MacBook Pro', 'Netflix subscription')" }, merchant: { type: "string", description: "Store or merchant name (e.g. 'Swiggy', 'Amazon')" }, description: { type: "string", description: "Free-form note or additional context about the transaction" }, occurredAt: { type: "string" } }, required: ["accountId", "categoryId", "amountMinor", "occurredAt"] },
   },
   execute: async ({ ctx, privacyModeEnabled }, rawInput) => {
     const input = proposeAddExpenseSchema.parse(rawInput);
@@ -77,7 +77,7 @@ const proposeAddIncomeTool: WriteToolHandler = {
   definition: {
     name: "proposeAddIncome",
     description: "Propose recording new income. This does NOT create the transaction -- it only creates a proposal the user must explicitly confirm.",
-    inputSchema: { type: "object", properties: { accountId: { type: "string" }, categoryId: { type: "string" }, amountMinor: { type: "number" }, merchant: { type: "string" }, description: { type: "string" }, occurredAt: { type: "string" } }, required: ["accountId", "categoryId", "amountMinor", "occurredAt"] },
+    inputSchema: { type: "object", properties: { accountId: { type: "string" }, categoryId: { type: "string" }, amountMinor: { type: "number" }, itemName: { type: "string", description: "What the income is for (e.g. 'Salary', 'Freelance project')" }, merchant: { type: "string", description: "Source or payer name (e.g. 'Acme Corp', 'Client XYZ')" }, description: { type: "string", description: "Free-form note or additional context about the income" }, occurredAt: { type: "string" } }, required: ["accountId", "categoryId", "amountMinor", "occurredAt"] },
   },
   execute: async ({ ctx, privacyModeEnabled }, rawInput) => {
     const input = proposeAddIncomeSchema.parse(rawInput);

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EmptyState } from "@/components/spencare/empty-state";
 import { FormField } from "@/components/spencare/form-field";
 import { Money } from "@/components/spencare/money";
 import { ConsequentialActionPreview, type ActionPreview } from "@/components/spencare/consequential-action-preview";
@@ -242,7 +243,7 @@ function UploadStep({
     <Card>
       <CardContent className="space-y-4 py-6">
         {accounts.length === 0 ? (
-          <div className="space-y-3 text-center">
+          <div className="space-y-3 py-6 text-center">
             <p className="text-sm text-muted-foreground">Add a bank, cash, or credit card account before importing a statement.</p>
             <Button asChild size="touch">
               <Link href="/settings/accounts">Add an account</Link>
@@ -347,11 +348,13 @@ function ReviewStep({
   if (stagedRows.length === 0) {
     return (
       <Card>
-        <CardContent className="space-y-4 py-10 text-center">
-          <p className="text-sm text-muted-foreground">No transactions were found in this file.</p>
-          <Button variant="outline" size="touch" onClick={onCancel}>
-            Start over
-          </Button>
+        <CardContent className="p-0">
+          <EmptyState
+            title="No transactions found"
+            description="No transactions were found in this file."
+            action={{ label: "Start over", onClick: onCancel }}
+            size="sm"
+          />
         </CardContent>
       </Card>
     );

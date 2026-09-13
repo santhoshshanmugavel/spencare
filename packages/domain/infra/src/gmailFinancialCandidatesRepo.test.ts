@@ -31,6 +31,7 @@ function baseInsertInput(overrides: Partial<InsertGmailCandidateInput> = {}): In
     duplicateOfTransactionId: null,
     accountMatchRequired: false,
     extractionWarnings: null,
+    itemName: null,
     ...overrides,
   };
 }
@@ -61,6 +62,7 @@ function candidateRow(overrides: Record<string, unknown> = {}) {
     transfer_pair_candidate_id: null,
     account_match_required: false,
     extraction_warnings: null,
+    item_name: null,
     review_status: "pending",
     created_transaction_id: null,
     created_at: "2026-08-30T00:00:01Z",

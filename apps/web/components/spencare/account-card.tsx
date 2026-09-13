@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Landmark, Banknote, CreditCard, TrendingUp } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import type { AccountRow } from "@spencare/domain-application";
 import { Card } from "@/components/ui/card";
@@ -38,6 +38,24 @@ import { Money } from "@/components/spencare/money";
 
 const CREDIT_UTILIZATION_THRESHOLDS = { warning: 70, danger: 90 } as const;
 
+function typeIcon(type: AccountRow["type"]) {
+  const base = "flex size-10 items-center justify-center rounded-xl";
+  if (type === "credit_card")
+    return <div className={`${base} bg-expense-subtle`}><CreditCard className="size-5 text-expense" aria-hidden="true" /></div>;
+  if (type === "investment")
+    return <div className={`${base} bg-income-subtle`}><TrendingUp className="size-5 text-income" aria-hidden="true" /></div>;
+  if (type === "cash")
+    return <div className={`${base} bg-transfer-subtle`}><Banknote className="size-5 text-transfer" aria-hidden="true" /></div>;
+  return <div className={`${base} bg-primary/10`}><Landmark className="size-5 text-primary" aria-hidden="true" /></div>;
+}
+
+const TYPE_LABELS: Record<AccountRow["type"], string> = {
+  bank: "Bank",
+  cash: "Cash",
+  credit_card: "Credit card",
+  investment: "Investment",
+};
+
 function utilizationTone(usedMinor: number, limitMinor: number): { percent: number; tone: ProgressTone } {
   const percent = limitMinor > 0 ? Math.min(100, Math.round((usedMinor / limitMinor) * 100)) : 0;
   const tone: ProgressTone =
@@ -68,19 +86,22 @@ export function AccountCard({
   const labels = actionLabels(account.type);
 
   return (
-    <Card className="gap-3 p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 font-medium text-foreground">
-          <span className="block truncate">{account.name}</span>
+    <Card className="gap-0 p-0 overflow-hidden">
+      <div className="flex items-start gap-3 p-4 pb-3">
+        {typeIcon(account.type)}
+        <div className="min-w-0 flex-1 pt-0.5">
+          <p className="truncate font-semibold text-foreground text-sm leading-tight">{account.name}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{TYPE_LABELS[account.type]}</p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
               variant="ghost"
-              size="touch"
+              size="icon"
               aria-label={`Actions for ${account.name}`}
-              className="shrink-0 px-0"
+              className="shrink-0 -mt-1 -mr-1"
+              data-size="touch"
             >
               <MoreHorizontal className="size-4" aria-hidden="true" />
             </Button>
@@ -94,7 +115,9 @@ export function AccountCard({
         </DropdownMenu>
       </div>
 
-      <AccountCardBody account={account} masked={masked} />
+      <div className="border-t border-border/60 px-4 pb-4 pt-3">
+        <AccountCardBody account={account} masked={masked} />
+      </div>
     </Card>
   );
 }

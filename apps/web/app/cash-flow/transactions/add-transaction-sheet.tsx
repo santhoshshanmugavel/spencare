@@ -15,6 +15,7 @@ import { ACCOUNT_TYPE_LABELS, filterByCapability } from "@spencare/domain-core";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -199,6 +200,7 @@ function ExpenseIncomeForm({
       accountId: "",
       categoryId: "",
       amountMinor: 0,
+      itemName: "",
       merchant: "",
       description: "",
       occurredAt: nowLocalIso(),
@@ -274,8 +276,14 @@ function ExpenseIncomeForm({
           )}
         />
       </FormField>
-      <FormField id="txn-merchant" label={kind === "expense" ? "Merchant (optional)" : "Source (optional)"}>
+      <FormField id="txn-item-name" label="Item name (optional)">
+        <Input id="txn-item-name" placeholder="Eg: MacBook Pro, Netflix subscription" {...register("itemName")} />
+      </FormField>
+      <FormField id="txn-merchant" label={kind === "expense" ? "Merchant / Store name (optional)" : "Source (optional)"}>
         <Input id="txn-merchant" placeholder="Eg: Swiggy, Amazon" {...register("merchant")} />
+      </FormField>
+      <FormField id="txn-note" label="Note (optional)">
+        <Textarea id="txn-note" placeholder="Any extra context about this transaction" {...register("description")} />
       </FormField>
       <FormField id="txn-date" label="Date & time" error={errors.occurredAt?.message}>
         <Input id="txn-date" type="datetime-local" aria-describedby={errors.occurredAt ? errorId("txn-date") : undefined} {...register("occurredAt")} />

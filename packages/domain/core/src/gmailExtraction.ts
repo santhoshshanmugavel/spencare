@@ -89,6 +89,23 @@ export function extractDate(text: string): string | null {
   return normalizeStagedDate(match[1]!);
 }
 
+/**
+ * "Item: MacBook Pro" / "Product: iPhone 15" / "For: Netflix subscription" --
+ * explicit product/item labels that appear in receipts and order confirmations.
+ * Only returns a value when a label-colon pattern is present; never infers an
+ * item name from free prose (Part 46: "never fabricate missing values").
+ */
+const ITEM_NAME_RE = /\b(?:item|product|description|for|order)\s*:\s*([^\n,]{2,80}?)(?:\s*(?:qty|quantity|x\s*\d|on\s+\d|\n|$))/i;
+
+export function extractItemName(subject: string | null, bodyText: string | null): string | null {
+  for (const source of [bodyText, subject]) {
+    if (!source) continue;
+    const match = ITEM_NAME_RE.exec(source);
+    if (match) return match[1]!.trim();
+  }
+  return null;
+}
+
 /** "Ref No. ABC123" / "Transaction ID: XYZ789" / "Reference: 12345" -- alphanumeric reference tokens banks/processors commonly include, useful for duplicate detection and provenance, never fabricated when absent. */
 const REFERENCE_RE = /(?:ref(?:erence)?(?:\s*no\.?)?|transaction\s*id|txn\s*id)[:\s#]+([A-Za-z0-9-]{4,30})/i;
 

@@ -142,6 +142,7 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
         return transactions.map((t) => ({
           id: t.id,
           type: t.type,
+          itemName: t.item_name,
           merchant: t.merchant,
           category: t.category_id ? (categoryNameById.get(t.category_id) ?? null) : null,
           occurredAt: t.occurred_at,
@@ -265,6 +266,7 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
         return {
           id: txn.id,
           type: txn.type,
+          itemName: txn.item_name,
           merchant: txn.merchant,
           description: txn.description,
           category: txn.category_id ? (categoryNameById.get(txn.category_id) ?? null) : null,

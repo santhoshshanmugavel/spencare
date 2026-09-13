@@ -66,6 +66,7 @@ const expenseTxn: TransactionRow = {
   currency: "INR",
   category_id: category.id,
   merchant: "Swiggy",
+  item_name: null,
   description: null,
   occurred_at: "2026-08-25",
   status: "posted",
@@ -139,7 +140,7 @@ describe("<EditTransactionSheet> — pre-fill and submission", () => {
       <EditTransactionSheet transaction={expenseTxn} accounts={[account]} categories={[category]} open onOpenChange={() => {}} onSaved={() => {}} />,
     );
     expect(screen.getByLabelText("Amount (INR ₹)")).toHaveValue("450");
-    expect(screen.getByLabelText("Merchant / description")).toHaveValue("Swiggy");
+    expect(screen.getByLabelText("Merchant / Store name (optional)")).toHaveValue("Swiggy");
   });
 
   it("submits the updated amount scoped to this transaction's id", async () => {

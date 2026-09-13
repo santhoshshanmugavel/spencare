@@ -54,7 +54,7 @@ function toStatus(row: GmailConnectionSafeRow): GmailConnectionStatus {
 
 /** Own RLS-scoped client -- the safe view is fine for the user's own row. */
 export async function getGmailConnectionStatus(client: TypedSupabaseClient, userId: string): Promise<GmailConnectionStatus | null> {
-  const { data, error } = await client.from("gmail_connections").select(SAFE_COLUMNS).eq("user_id", userId).maybeSingle();
+  const { data, error } = await client.from("gmail_connections").select(SAFE_COLUMNS).eq("user_id", userId).is("revoked_at", null).maybeSingle();
   if (error) throw error;
   return data ? toStatus(data as GmailConnectionSafeRow) : null;
 }

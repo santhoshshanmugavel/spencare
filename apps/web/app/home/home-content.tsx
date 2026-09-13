@@ -96,6 +96,13 @@ export function HomeContent({
 
   return (
     <div className="space-y-6">
+      {/* ── Greeting ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-foreground">
+          {displayName ? `Hi, ${displayName.split(" ")[0]}` : "Welcome"}
+        </h1>
+      </div>
+
       {/* ── Filter bar — period + account pills ─────────────────────────── */}
       <DashboardFilterBar
         accounts={accountOptions}
@@ -115,10 +122,6 @@ export function HomeContent({
         netWorth={netWorth}
         masked={masked}
       />
-
-      <h1 className="text-2xl font-semibold text-foreground">
-        Welcome{displayName ? `, ${displayName}` : ""}
-      </h1>
 
       {/* ── Attention card (surfaced early — visibility of system status) ── */}
       {attentionCount > 0 ? (
@@ -171,16 +174,18 @@ export function HomeContent({
       />
 
       {/* ── Tier 5: Spensa AI ─────────────────────────────────────────────── */}
-      <Card>
-        <CardContent className="flex items-center gap-4 py-5">
-          <Sparkles className="size-6 shrink-0 text-primary" aria-hidden="true" />
+      <Card className="overflow-hidden border-primary/20 shadow-card">
+        <CardContent className="relative flex items-center gap-4 py-5 bg-primary/[0.03]">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+            <Sparkles className="size-5 text-primary" aria-hidden="true" />
+          </div>
           <div className="flex-1 space-y-0.5">
-            <p className="font-medium text-foreground">Ask Spensa</p>
-            <p className="text-sm text-muted-foreground">
-              Ask about your Safe-to-Spend, budgets, goals, or bills.
+            <p className="font-semibold text-foreground">Ask Spensa</p>
+            <p className="text-xs text-muted-foreground">
+              Your AI financial companion — budgets, goals, bills, insights.
             </p>
           </div>
-          <Button asChild size="touch" variant="outline">
+          <Button asChild size="touch">
             <Link href="/spensa/new">Chat</Link>
           </Button>
         </CardContent>
@@ -194,7 +199,9 @@ export function HomeContent({
             {!hasAccounts ? (
               <Card size="sm">
                 <CardContent className="flex flex-col items-start gap-3">
-                  <Landmark className="size-6 text-primary" aria-hidden="true" />
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10">
+                    <Landmark className="size-5 text-primary" aria-hidden="true" />
+                  </div>
                   <div className="space-y-1">
                     <p className="font-medium text-foreground">Set up accounts</p>
                     <p className="text-sm text-muted-foreground">Link a bank, cash, or credit account.</p>
@@ -208,7 +215,9 @@ export function HomeContent({
             {!hasBudget ? (
               <Card size="sm">
                 <CardContent className="flex flex-col items-start gap-3">
-                  <PiggyBank className="size-6 text-primary" aria-hidden="true" />
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10">
+                    <PiggyBank className="size-5 text-primary" aria-hidden="true" />
+                  </div>
                   <div className="space-y-1">
                     <p className="font-medium text-foreground">Create a budget</p>
                     <p className="text-sm text-muted-foreground">Set spending limits by category.</p>
@@ -222,7 +231,9 @@ export function HomeContent({
             {!hasGoals ? (
               <Card size="sm">
                 <CardContent className="flex flex-col items-start gap-3">
-                  <Target className="size-6 text-primary" aria-hidden="true" />
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10">
+                    <Target className="size-5 text-primary" aria-hidden="true" />
+                  </div>
                   <div className="space-y-1">
                     <p className="font-medium text-foreground">Set a goal</p>
                     <p className="text-sm text-muted-foreground">Save toward something specific.</p>

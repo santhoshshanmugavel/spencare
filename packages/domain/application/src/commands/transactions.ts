@@ -54,6 +54,7 @@ export const createTransaction: Command<CreateTransactionInput, TransactionRow> 
         accountId: parsed.data.accountId,
         categoryId: parsed.data.categoryId,
         amountMinor: parsed.data.amountMinor,
+        itemName: parsed.data.itemName,
         merchant: parsed.data.merchant,
         description: parsed.data.description,
         occurredAt: parsed.data.occurredAt,

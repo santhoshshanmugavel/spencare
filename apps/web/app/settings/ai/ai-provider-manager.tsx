@@ -121,8 +121,11 @@ export function AiProviderManager({
 
   return (
     <div className="space-y-6">
-      <fieldset>
-        <legend className="mb-3 text-sm font-medium text-foreground">AI Provider</legend>
+      <fieldset aria-labelledby="ai-provider-heading">
+        <div className="mb-3 flex items-center gap-3">
+          <h2 id="ai-provider-heading" className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">AI Provider</h2>
+          <div className="flex-1 h-px bg-border" />
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {providers.map((provider) => {
             const implemented = isImplemented(provider);

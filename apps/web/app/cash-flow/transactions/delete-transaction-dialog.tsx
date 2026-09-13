@@ -61,7 +61,7 @@ export function DeleteTransactionDialog({
       { label: "Amount", value: `${amountField.symbol}${amountField.integerPart}.${amountField.decimalPart}`, emphasis: true },
       ...(category ? [{ label: "Category", value: category.name }] : []),
       ...(account ? [{ label: "Account", value: account.name }] : []),
-      { label: "Date", value: new Date(transaction.occurred_at + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+      { label: "Date", value: new Date(transaction.occurred_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
     ],
     undoable: !isTransfer,
   };

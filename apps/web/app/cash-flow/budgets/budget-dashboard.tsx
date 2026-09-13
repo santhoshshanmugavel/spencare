@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress, type ProgressTone } from "@/components/ui/progress";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
+import { EmptyState } from "@/components/spencare/empty-state";
 import { formatMinorUnits } from "@/lib/currency-format";
 import { AddBudgetSheet } from "./add-budget-sheet";
 import { EditBudgetSheet } from "./edit-budget-sheet";
@@ -45,15 +46,20 @@ function toneFor(status: BudgetWithUsage["status"]): ProgressTone {
 }
 
 function iconFor(iconName: string | null) {
+  let IconComp: ComponentType<{ className?: string }> = Tag;
   if (iconName) {
     const pascal = iconName
       .split("-")
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join("");
-    const Comp = (LucideIcons as unknown as Record<string, ComponentType<{ className?: string }>>)[pascal];
-    if (Comp) return <Comp className="size-4 text-muted-foreground" aria-hidden="true" />;
+    const found = (LucideIcons as unknown as Record<string, ComponentType<{ className?: string }>>)[pascal];
+    if (found) IconComp = found;
   }
-  return <Tag className="size-4 text-muted-foreground" aria-hidden="true" />;
+  return (
+    <div className="flex size-9 items-center justify-center rounded-xl bg-muted" aria-hidden="true">
+      <IconComp className="size-4 text-muted-foreground" />
+    </div>
+  );
 }
 
 function shiftMonth(periodStart: string, delta: number): string {
@@ -155,36 +161,32 @@ export function BudgetDashboard({
 
       {usages.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No budgets set for {formatMonthLabel(periodStart)}. Add a budget to start tracking a category.
+          <CardContent className="p-0">
+            <EmptyState
+              title={`No budgets set for ${formatMonthLabel(periodStart)}`}
+              description="Add a budget to start tracking your spending by category."
+              action={availableCategories.length > 0 ? { label: "+ Add budget", onClick: () => setAddOpen(true) } : undefined}
+            />
           </CardContent>
         </Card>
       ) : (
         <>
-          <Card>
-            <CardContent className="space-y-2 py-5">
-              {/*
-                Phase 27 fix: this used to put the label and the hero
-                figure side-by-side in one `justify-between` row, which
-                overflowed at 320-375px (a long label plus a large
-                `text-4xl` figure have no room to share one line). Home's
-                own Safe-to-Spend card (home-content.tsx) already solved
-                this correctly -- label on its own line, hero figure
-                stacked below -- so this now matches that exact pattern
-                instead of inventing a new one.
-              */}
-              <span className="text-sm font-medium text-muted-foreground">
+          <Card className="overflow-hidden">
+            <div className="bg-primary/5 px-5 pt-5 pb-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-primary/70">
                 {totalRemaining < 0 ? "Over budget" : "Budget remaining"}
               </span>
-              <div>
+              <div className="mt-1">
                 <Money
                   value={DomainMoney.fromMinorUnits(BigInt(remainingDisplay(totalRemaining).magnitude), CURRENCY as never)}
                   masked={masked}
                   size="hero"
                   tone={remainingDisplay(totalRemaining).tone}
-                  className="text-2xl min-[375px]:text-3xl sm:text-4xl"
+                  className="text-2xl min-[375px]:text-3xl sm:text-4xl tabular-nums"
                 />
               </div>
+            </div>
+            <CardContent className="space-y-2 pt-3 pb-4">
               <Progress
                 value={totalLimit > 0 ? Math.min(100, (totalSpent / totalLimit) * 100) : 0}
                 tone={toneFor(overallStatus)}

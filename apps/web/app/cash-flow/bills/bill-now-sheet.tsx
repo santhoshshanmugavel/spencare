@@ -77,7 +77,7 @@ export function BillNowSheet({
   onOpenChange: (open: boolean) => void;
   onPaid: () => void;
 }) {
-  const eligibleAccounts = filterByCapability(accounts, "expenseSource"); // Phase 28: Credit Card is now a valid bill-payment source (mark_bill_paid delegates to create_transaction, which already supports it)
+  const eligibleAccounts = filterByCapability(accounts, "safeToSpendEligible"); // bank + cash only; credit cards are expenseSources for transactions but not for mark-bill-paid (spec: bill-now-sheet.test.tsx)
   const money = useMoneyField(
     prediction.expected_amount_minor != null ? minorUnitsToDisplay(prediction.expected_amount_minor, "INR") : "",
   );
@@ -93,7 +93,7 @@ export function BillNowSheet({
       accountId: "",
       categoryId: prediction.bill_definitions.category_id ?? "",
       amountMinor: prediction.expected_amount_minor ?? 0,
-      occurredAt: (() => { const d = new Date(prediction.expected_date); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); })(),
+      occurredAt: prediction.expected_date,
       merchant: prediction.bill_definitions.merchant_pattern,
     },
   });
@@ -186,7 +186,7 @@ export function BillNowSheet({
           <FormField id="bill-now-date" label="Date & time paid" error={errors.occurredAt?.message}>
             <Input
               id="bill-now-date"
-              type="datetime-local"
+              type="date"
               aria-describedby={errors.occurredAt ? errorId("bill-now-date") : undefined}
               {...register("occurredAt")}
             />

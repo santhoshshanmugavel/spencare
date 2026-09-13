@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { TrendingDown, TrendingUp, Minus } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Money } from "@/components/spencare/money";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import { CategorySpendingChart, type CategorySlicePlain } from "./category-spending-chart";
@@ -51,27 +52,10 @@ function StatTile({
   );
 }
 
-// ── Budget bar ─────────────────────────────────────────────────────────────
-
-function BudgetBar({ percent, status }: { percent: number; status: string }) {
-  const clamped = Math.min(Math.max(percent, 0), 100);
-  const color = status === "exceeded" ? "bg-destructive" : status === "near_limit" ? "bg-warning" : "bg-success";
-  return (
-    <div className="h-1.5 w-full rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(clamped)} aria-valuemin={0} aria-valuemax={100}>
-      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${clamped}%` }} />
-    </div>
-  );
-}
-
-// ── Goal progress bar ─────────────────────────────────────────────────────
-
-function GoalBar({ savedMinor, targetMinor }: { savedMinor: number; targetMinor: number }) {
-  const percent = targetMinor > 0 ? Math.min((savedMinor / targetMinor) * 100, 100) : 0;
-  return (
-    <div className="h-1.5 w-full rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
-      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
-    </div>
-  );
+function budgetTone(status: string): "danger" | "warning" | "success" {
+  if (status === "exceeded") return "danger";
+  if (status === "near_limit") return "warning";
+  return "success";
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -156,9 +140,10 @@ export function DashboardSection({
     <div className="space-y-6">
       {/* ── Tier 2: Income / Spending / Net / Savings Rate ──────────── */}
       <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wide">
-          {periodLabel}
-        </h2>
+        <div className="mb-3 flex items-center gap-3">
+          <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{periodLabel}</h2>
+          <div className="flex-1 h-px bg-border" />
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatTile
             label="Income"
@@ -205,38 +190,37 @@ export function DashboardSection({
 
       {/* ── Cash Flow Trend Chart ────────────────────────────────────── */}
       <Card>
-        <CardHeader className="pb-2 pt-5">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Cash Flow</CardTitle>
-        </CardHeader>
-        <CardContent className="pb-5">
+        <CardContent className="pt-5 pb-5">
+          <div className="mb-4 flex items-center gap-3">
+            <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cash Flow</h2>
+            <div className="flex-1 h-px bg-border" />
+          </div>
           <CashFlowTrendChart points={trendPoints} currency={currency} masked={masked} />
         </CardContent>
       </Card>
 
       {/* ── Category Spending Chart ──────────────────────────────────── */}
       <Card>
-        <CardHeader className="pb-2 pt-5">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Category Spending</CardTitle>
-        </CardHeader>
-        <CardContent className="pb-5">
+        <CardContent className="pt-5 pb-5">
+          <div className="mb-4 flex items-center gap-3">
+            <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Category Spending</h2>
+            <div className="flex-1 h-px bg-border" />
+            {categorySlices.length > 0 && (
+              <Link href="/cash-flow" className="shrink-0 text-xs text-primary hover:underline">Full breakdown →</Link>
+            )}
+          </div>
           <CategorySpendingChart slices={categorySlices} currency={currency} masked={masked} />
-          {categorySlices.length > 0 && (
-            <p className="mt-2 text-right text-xs text-muted-foreground">
-              <Link href="/cash-flow" className="text-primary hover:underline">Full breakdown →</Link>
-            </p>
-          )}
         </CardContent>
       </Card>
 
       {/* ── Projected Cash Flow Chart ────────────────────────────────── */}
       <Card>
-        <CardHeader className="pb-2 pt-5">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Projected Cash Flow
-            <span className="ml-2 text-[10px] font-normal text-muted-foreground/60 uppercase tracking-wide">Estimate</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pb-5">
+        <CardContent className="pt-5 pb-5">
+          <div className="mb-4 flex items-center gap-3">
+            <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Projected Cash Flow</h2>
+            <span className="text-[10px] font-normal text-muted-foreground/60 uppercase tracking-wide">Estimate</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
           <ProjectedCashFlowChart history={trendPoints} currency={currency} masked={masked} />
         </CardContent>
       </Card>
@@ -244,13 +228,12 @@ export function DashboardSection({
       {/* ── Tier 3: Budget Utilization ───────────────────────────────── */}
       {budgets.length > 0 && (
         <Card>
-          <CardHeader className="pb-2 pt-5">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Budget Utilization</CardTitle>
-              <Link href="/cash-flow/budgets" className="text-xs text-primary hover:underline">View all</Link>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 pb-5">
+          <CardContent className="space-y-4 pt-5 pb-5">
+          <div className="flex items-center gap-3">
+            <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Budget Utilization</h2>
+            <div className="flex-1 h-px bg-border" />
+            <Link href="/cash-flow/budgets" className="shrink-0 text-xs text-primary hover:underline">View all</Link>
+          </div>
             {budgets.slice(0, 6).map((b) => (
               <div key={b.id} className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
@@ -259,7 +242,7 @@ export function DashboardSection({
                     {masked ? "—" : `${Math.round(b.percentUsed)}%`}
                   </span>
                 </div>
-                <BudgetBar percent={b.percentUsed} status={b.status} />
+                <Progress value={b.percentUsed} tone={budgetTone(b.status)} aria-label={`${b.categoryName} budget usage`} />
                 {!masked && (
                   <p className="text-xs text-muted-foreground">
                     {b.status === "exceeded"
@@ -277,15 +260,15 @@ export function DashboardSection({
       {creditUtilization && creditUtilization.limitMinor > 0 && (
         <Card>
           <CardContent className="space-y-2 py-4">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-foreground">Credit Utilization</span>
-              <span className="text-muted-foreground">
-                {masked ? "—" : `${Math.round(creditUtilization.percent)}%`}
-              </span>
+            <div className="flex items-center gap-3">
+              <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Credit Utilization</h2>
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground">{masked ? "—" : `${Math.round(creditUtilization.percent)}%`}</span>
             </div>
-            <BudgetBar
-              percent={creditUtilization.percent}
-              status={creditUtilization.percent > 90 ? "exceeded" : creditUtilization.percent > 70 ? "near_limit" : "ok"}
+            <Progress
+              value={creditUtilization.percent}
+              tone={budgetTone(creditUtilization.percent > 90 ? "exceeded" : creditUtilization.percent > 70 ? "near_limit" : "ok")}
+              aria-label="Credit utilization"
             />
             {!masked && (
               <p className="text-xs text-muted-foreground">
@@ -299,13 +282,13 @@ export function DashboardSection({
       {/* ── Tier 3: Upcoming Commitments ────────────────────────────── */}
       {upcomingBills.length > 0 && (
         <Card>
-          <CardHeader className="pb-2 pt-5">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Upcoming Commitments</CardTitle>
-              <Link href="/cash-flow/bills" className="text-xs text-primary hover:underline">View all</Link>
-            </div>
-          </CardHeader>
-          <CardContent className="divide-y divide-border pb-2">
+          <CardContent className="pt-5 pb-2">
+          <div className="mb-3 flex items-center gap-3">
+            <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upcoming Commitments</h2>
+            <div className="flex-1 h-px bg-border" />
+            <Link href="/cash-flow/bills" className="shrink-0 text-xs text-primary hover:underline">View all</Link>
+          </div>
+          <div className="divide-y divide-border">
             {upcomingBills.slice(0, 5).map((bill) => (
               <div key={bill.id} className="flex items-center justify-between py-2.5">
                 <div>
@@ -319,6 +302,7 @@ export function DashboardSection({
                 </span>
               </div>
             ))}
+          </div>
           </CardContent>
         </Card>
       )}
@@ -326,13 +310,12 @@ export function DashboardSection({
       {/* ── Tier 4: Goal Progress ────────────────────────────────────── */}
       {goals.length > 0 && (
         <Card>
-          <CardHeader className="pb-2 pt-5">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Goal Progress</CardTitle>
-              <Link href="/goals" className="text-xs text-primary hover:underline">View all</Link>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-5 pb-5">
+          <CardContent className="space-y-5 pt-5 pb-5">
+          <div className="flex items-center gap-3">
+            <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Goal Progress</h2>
+            <div className="flex-1 h-px bg-border" />
+            <Link href="/goals" className="shrink-0 text-xs text-primary hover:underline">View all</Link>
+          </div>
             {goals.slice(0, 4).map((g) => (
               <div key={g.id} className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
@@ -341,7 +324,7 @@ export function DashboardSection({
                     {masked ? "—" : `${Math.round(g.percentComplete)}%`}
                   </span>
                 </div>
-                <GoalBar savedMinor={g.savedMinor} targetMinor={g.targetMinor} />
+                <Progress value={g.targetMinor > 0 ? Math.min((g.savedMinor / g.targetMinor) * 100, 100) : 0} tone="success" aria-label={`${g.name} goal progress`} />
                 {!masked && (
                   <p className="text-xs text-muted-foreground">
                     {formatAmountSimple(g.savedMinor, currency)} of {formatAmountSimple(g.targetMinor, currency)}

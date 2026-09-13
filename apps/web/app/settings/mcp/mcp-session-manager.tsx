@@ -132,7 +132,10 @@ export function McpSessionManager({ initialSessions, mcpServerUrl = "" }: { init
     <div className="space-y-6">
       {/* Server URL + connection guidance */}
       <div className="space-y-3">
-        <p className="text-sm font-medium text-foreground">Connect an AI assistant</p>
+        <div className="flex items-center gap-3">
+          <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Connect an AI assistant</h2>
+          <div className="flex-1 h-px bg-border" />
+        </div>
         <p className="text-xs text-muted-foreground">
           Use this remote MCP server URL with any compatible AI assistant or MCP client.
         </p>
@@ -232,7 +235,10 @@ export function McpSessionManager({ initialSessions, mcpServerUrl = "" }: { init
       )}
 
       <div className="space-y-3">
-        <p className="text-sm font-medium text-foreground">Active tokens</p>
+        <div className="flex items-center gap-3">
+          <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Active tokens</h2>
+          <div className="flex-1 h-px bg-border" />
+        </div>
         {sessions.length === 0 ? (
           <p className="text-sm text-muted-foreground">No tokens yet.</p>
         ) : (

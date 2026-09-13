@@ -76,7 +76,7 @@ async function goalName(ctx: McpAuthContext, goalId: string): Promise<string> {
   return goals.find((g) => g.id === goalId)?.name ?? "the selected goal";
 }
 
-function buildExpenseIncomePreview(kind: "expense" | "income", accName: string, catName: string, amountMinor: number, privacyModeEnabled: boolean): { summary: string; fields: ProposalPreviewField[] } {
+function buildExpenseIncomePreview(kind: "expense" | "income", accName: string, catName: string, amountMinor: number, occurredAt: string, privacyModeEnabled: boolean): { summary: string; fields: ProposalPreviewField[] } {
   const amountText = describeAmountForProvider(amountMinor, "INR", privacyModeEnabled);
   return {
     summary: `Record a ${amountText} ${kind} on ${accName}, category ${catName}.`,
@@ -85,6 +85,7 @@ function buildExpenseIncomePreview(kind: "expense" | "income", accName: string, 
       { label: "Account", value: accName },
       { label: "Category", value: catName },
       { label: "Amount", value: amountText },
+      { label: "Date & time", value: occurredAt },
     ],
   };
 }
@@ -94,26 +95,26 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
 
   server.registerTool(
     "proposeAddExpense",
-    { description: "Propose recording a new expense. This does NOT create the transaction -- it only creates a proposal; the user must confirm via confirmPendingAction before anything is recorded.", inputSchema: proposeAddExpenseSchema.shape },
+    { description: "Propose recording a new expense. This does NOT create the transaction -- it only creates a proposal; the user must confirm via confirmPendingAction before anything is recorded. occurredAt: use a full ISO 8601 timestamp with timezone offset when the user gives a specific time, e.g. '2026-09-12T20:20:00+05:30' for 8:20 PM IST. Use YYYY-MM-DD date-only when no time was mentioned.", inputSchema: proposeAddExpenseSchema.shape },
     async (rawInput: unknown) =>
       runScopedTool(ctx, "proposeAddExpense", "write", async () => {
         const input = proposeAddExpenseSchema.parse(rawInput);
         const privacyModeEnabled = await isPrivacyModeEnabled(ctx);
         const [accName, catName] = await Promise.all([accountName(ctx, input.accountId), categoryName(ctx, input.categoryId)]);
-        const preview = buildExpenseIncomePreview("expense", accName, catName, input.amountMinor, privacyModeEnabled);
+        const preview = buildExpenseIncomePreview("expense", accName, catName, input.amountMinor, input.occurredAt, privacyModeEnabled);
         return proposeCommand(ctx, "mcp", "createTransaction", { ...input, type: "expense" }, preview);
       }),
   );
 
   server.registerTool(
     "proposeAddIncome",
-    { description: "Propose recording new income. This does NOT create the transaction -- it only creates a proposal; the user must confirm via confirmPendingAction.", inputSchema: proposeAddIncomeSchema.shape },
+    { description: "Propose recording new income. This does NOT create the transaction -- it only creates a proposal; the user must confirm via confirmPendingAction. occurredAt: use a full ISO 8601 timestamp with timezone offset when the user gives a specific time, e.g. '2026-09-12T20:20:00+05:30' for 8:20 PM IST. Use YYYY-MM-DD date-only when no time was mentioned.", inputSchema: proposeAddIncomeSchema.shape },
     async (rawInput: unknown) =>
       runScopedTool(ctx, "proposeAddIncome", "write", async () => {
         const input = proposeAddIncomeSchema.parse(rawInput);
         const privacyModeEnabled = await isPrivacyModeEnabled(ctx);
         const [accName, catName] = await Promise.all([accountName(ctx, input.accountId), categoryName(ctx, input.categoryId)]);
-        const preview = buildExpenseIncomePreview("income", accName, catName, input.amountMinor, privacyModeEnabled);
+        const preview = buildExpenseIncomePreview("income", accName, catName, input.amountMinor, input.occurredAt, privacyModeEnabled);
         return proposeCommand(ctx, "mcp", "createTransaction", { ...input, type: "income" }, preview);
       }),
   );
@@ -205,22 +206,51 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
     "proposeUpdateTransaction",
     {
       description:
-        "Propose editing an existing income or expense transaction (full replace: account, category, amount, and date are all required). Does NOT edit the transaction -- creates a proposal; the user must confirm via confirmPendingAction. Transfers cannot be edited; delete and recreate them.",
+        "Propose editing an existing income or expense transaction. PATCH semantics: only supply the fields you want to change — everything else is preserved from the existing transaction. Only transactionId is required. Transfers cannot be edited; delete and recreate them. occurredAt: use a full ISO 8601 timestamp with timezone offset to preserve time-of-day, e.g. '2026-09-12T20:20:00+05:30'. Never default to the current time; omit occurredAt entirely if the user did not mention a new time.",
       inputSchema: proposeUpdateTransactionSchema.shape,
     },
     async (rawInput: unknown) =>
       runScopedTool(ctx, "proposeUpdateTransaction", "write", async () => {
         const input = proposeUpdateTransactionSchema.parse(rawInput);
         const privacyModeEnabled = await isPrivacyModeEnabled(ctx);
-        const [txn, accName, catName] = await Promise.all([getTransaction(ctx, input.transactionId), accountName(ctx, input.accountId), categoryName(ctx, input.categoryId)]);
-        const amountText = describeAmountForProvider(input.amountMinor, "INR", privacyModeEnabled);
-        return proposeCommand(ctx, "mcp", "updateTransaction", input, {
-          summary: `Update transaction ${txn ? `"${txn.merchant ?? txn.id}"` : input.transactionId}: ${amountText} on ${accName}, category ${catName}.`,
+
+        // Load existing transaction to fill in fields the AI did not provide.
+        const txn = await getTransaction(ctx, input.transactionId);
+        if (!txn) throw new Error(`Transaction ${input.transactionId} not found.`);
+
+        // Merge: AI-supplied fields win; existing transaction fields are the fallback.
+        // account_id / category_id / amount_minor / occurred_at are never null on a
+        // valid transaction row, so the non-null cast is safe.
+        const mergedAccountId = (input.accountId ?? txn.account_id) as string;
+        const mergedCategoryId = (input.categoryId ?? txn.category_id) as string;
+        const mergedAmountMinor = (input.amountMinor ?? txn.amount_minor) as number;
+        const mergedOccurredAt = (input.occurredAt ?? txn.occurred_at) as string;
+        const mergedItemName = input.itemName !== undefined ? input.itemName : (txn.item_name ?? undefined);
+        const mergedMerchant = input.merchant !== undefined ? input.merchant : (txn.merchant ?? undefined);
+        const mergedDescription = input.description !== undefined ? input.description : (txn.description ?? undefined);
+
+        const merged = {
+          transactionId: input.transactionId,
+          accountId: mergedAccountId,
+          categoryId: mergedCategoryId,
+          amountMinor: mergedAmountMinor,
+          occurredAt: mergedOccurredAt,
+          itemName: mergedItemName,
+          merchant: mergedMerchant,
+          description: mergedDescription,
+        };
+
+        const [accName, catName] = await Promise.all([accountName(ctx, mergedAccountId), categoryName(ctx, mergedCategoryId)]);
+        const amountText = describeAmountForProvider(mergedAmountMinor, "INR", privacyModeEnabled);
+        const label = txn.item_name ?? txn.merchant ?? txn.id;
+        return proposeCommand(ctx, "mcp", "updateTransaction", merged, {
+          summary: `Update transaction "${label}": ${amountText} on ${accName}, category ${catName}.`,
           fields: [
+            { label: "Transaction", value: label },
             { label: "Account", value: accName },
             { label: "Category", value: catName },
             { label: "Amount", value: amountText },
-            { label: "Date", value: input.occurredAt },
+            { label: "Date & time", value: mergedOccurredAt },
           ],
         });
       }),
@@ -237,8 +267,8 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
         const input = proposeDeleteTransactionSchema.parse(rawInput);
         const txn = await getTransaction(ctx, input.transactionId);
         return proposeCommand(ctx, "mcp", "deleteTransaction", input, {
-          summary: `Delete transaction ${txn ? `"${txn.merchant ?? txn.id}"` : input.transactionId}.`,
-          fields: [{ label: "Transaction", value: txn?.merchant ?? input.transactionId }],
+          summary: `Delete transaction ${txn ? `"${txn.item_name ?? txn.merchant ?? txn.id}"` : input.transactionId}.`,
+          fields: [{ label: "Transaction", value: txn?.item_name ?? txn?.merchant ?? input.transactionId }],
         });
       }),
   );
@@ -246,7 +276,7 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
   server.registerTool(
     "proposeTransfer",
     {
-      description: "Propose transferring money between two accounts atomically. Does NOT move any money -- creates a proposal; the user must confirm via confirmPendingAction.",
+      description: "Propose transferring money between two accounts atomically. Does NOT move any money -- creates a proposal; the user must confirm via confirmPendingAction. occurredAt: use a full ISO 8601 timestamp with timezone offset when the user gives a specific time, e.g. '2026-09-12T20:20:00+05:30' for 8:20 PM IST. Use YYYY-MM-DD date-only when no time was mentioned.",
       inputSchema: proposeTransferSchema.shape,
     },
     async (rawInput: unknown) =>

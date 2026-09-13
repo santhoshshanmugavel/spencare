@@ -137,7 +137,7 @@ export function NavigationRail({
     <nav
       aria-label="Primary"
       className={cn(
-        "flex h-full w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-4",
+        "flex h-full w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-sidebar py-4",
         className,
       )}
     >

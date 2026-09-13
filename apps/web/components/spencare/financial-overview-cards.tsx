@@ -60,20 +60,29 @@ export function SafeToSpendHeroCard({
     return (
       <Card>
         <CardContent className="space-y-1 py-6">
-          <span className="text-sm font-medium text-muted-foreground">Safe to Spend</span>
-          <p className="text-lg text-muted-foreground">Add a bank or cash account to see how much you can safely spend.</p>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Safe to Spend</span>
+          <p className="text-base text-muted-foreground">Add a bank or cash account to see how much you can safely spend.</p>
         </CardContent>
       </Card>
     );
   }
 
+  // Show the breakdown whenever there's anything to explain: goal/bill reservations, OR credit
+  // available (Phase 29: always anchor "Owned money" when credit exists, so the user never
+  // mistakes Safe-to-Spend as including credit capacity).
+  const hasBreakdown =
+    safeToSpend.goalReservedMinor > 0 ||
+    safeToSpend.upcomingBillsMinor > 0 ||
+    safeToSpend.creditAvailableMinor > 0;
+
   return (
-    <Card>
-      <CardContent className="space-y-1 py-5">
-        <span className="text-sm font-medium text-muted-foreground">
+    <Card className="overflow-hidden shadow-card">
+      {/* Subtle tinted header strip */}
+      <div className="bg-primary/5 px-5 pt-5 pb-4">
+        <span className="text-xs font-semibold uppercase tracking-wide text-primary/70">
           {safeToSpend.state === "balance_only" ? "Available Balance" : "Safe to Spend"}
         </span>
-        <div>
+        <div className="mt-1">
           <Money
             value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.amountMinor), safeToSpend.currency as never)}
             masked={masked}
@@ -82,46 +91,52 @@ export function SafeToSpendHeroCard({
             className={heroClassName}
           />
         </div>
-        <p className="text-xs text-muted-foreground">
-          What you can safely use from your owned money (Bank + Cash) after goals, budget, and upcoming bills.
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          From your Bank + Cash after reservations
         </p>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
-          <span>
-            Owned money{" "}
-            <Money
-              value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.ownedSpendableMinor), safeToSpend.currency as never)}
-              masked={masked}
-              size="numeric"
-              tone="neutral"
-              className="text-xs"
-            />
-          </span>
-          {safeToSpend.goalReservedMinor > 0 ? (
-            <span>
-              Reserved for goals{" "}
+      </div>
+
+      {/* Breakdown — only when there's something to show */}
+      {hasBreakdown ? (
+        <CardContent className="px-5 py-3">
+          <div className="divide-y divide-border/60">
+            <div className="flex items-center justify-between py-2 text-xs">
+              <span className="text-muted-foreground">Owned money</span>
               <Money
-                value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.goalReservedMinor), safeToSpend.currency as never)}
+                value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.ownedSpendableMinor), safeToSpend.currency as never)}
                 masked={masked}
                 size="numeric"
                 tone="neutral"
-                className="text-xs"
+                className="text-xs tabular-nums"
               />
-            </span>
-          ) : null}
-          {safeToSpend.upcomingBillsMinor > 0 ? (
-            <span>
-              Upcoming bills{" "}
-              <Money
-                value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.upcomingBillsMinor), safeToSpend.currency as never)}
-                masked={masked}
-                size="numeric"
-                tone="neutral"
-                className="text-xs"
-              />
-            </span>
-          ) : null}
-        </div>
-      </CardContent>
+            </div>
+            {safeToSpend.goalReservedMinor > 0 ? (
+              <div className="flex items-center justify-between py-2 text-xs">
+                <span className="text-muted-foreground">Reserved for goals</span>
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.goalReservedMinor), safeToSpend.currency as never)}
+                  masked={masked}
+                  size="numeric"
+                  tone="neutral"
+                  className="text-xs tabular-nums"
+                />
+              </div>
+            ) : null}
+            {safeToSpend.upcomingBillsMinor > 0 ? (
+              <div className="flex items-center justify-between py-2 text-xs">
+                <span className="text-muted-foreground">Upcoming bills</span>
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.upcomingBillsMinor), safeToSpend.currency as never)}
+                  masked={masked}
+                  size="numeric"
+                  tone="neutral"
+                  className="text-xs tabular-nums"
+                />
+              </div>
+            ) : null}
+          </div>
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
@@ -146,48 +161,35 @@ export function FinancialLayersCard({
 }) {
   if (creditAvailableMinor + investmentTotalMinor + netWorth.totalLiabilitiesMinor <= 0) return null;
 
+  const items = [
+    creditAvailableMinor > 0
+      ? { label: "Available Credit", hint: "Not included in Safe to Spend", minor: creditAvailableMinor }
+      : null,
+    investmentTotalMinor > 0
+      ? { label: "Investments", hint: "In Net Worth, not Safe to Spend", minor: investmentTotalMinor }
+      : null,
+    { label: "Net Worth", hint: "Assets minus credit owed", minor: netWorth.netWorthMinor },
+  ].filter(Boolean) as { label: string; hint: string; minor: number }[];
+
   return (
-    <Card>
-      <CardContent className="flex flex-wrap gap-x-6 gap-y-2 py-4">
-        {creditAvailableMinor > 0 ? (
-          <div>
-            <span className="text-xs font-medium text-muted-foreground">Available Credit</span>
-            <div>
-              <Money
-                value={DomainMoney.fromMinorUnits(BigInt(creditAvailableMinor), netWorth.currency as never)}
-                masked={masked}
-                size="body"
-                tone="neutral"
-              />
+    <Card className="shadow-card">
+      <CardContent className="p-0">
+        <div className="grid divide-x divide-border/60" style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
+          {items.map(({ label, hint, minor }) => (
+            <div key={label} className="px-4 py-3 space-y-0.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+              <div>
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(minor), netWorth.currency as never)}
+                  masked={masked}
+                  size="body"
+                  tone="neutral"
+                  className="tabular-nums"
+                />
+              </div>
+              <span className="text-[10px] text-muted-foreground/70">{hint}</span>
             </div>
-            <span className="text-[11px] text-muted-foreground">Not included in Safe to Spend</span>
-          </div>
-        ) : null}
-        {investmentTotalMinor > 0 ? (
-          <div>
-            <span className="text-xs font-medium text-muted-foreground">Investments</span>
-            <div>
-              <Money
-                value={DomainMoney.fromMinorUnits(BigInt(investmentTotalMinor), netWorth.currency as never)}
-                masked={masked}
-                size="body"
-                tone="neutral"
-              />
-            </div>
-            <span className="text-[11px] text-muted-foreground">In Net Worth, not Safe to Spend</span>
-          </div>
-        ) : null}
-        <div>
-          <span className="text-xs font-medium text-muted-foreground">Net Worth</span>
-          <div>
-            <Money
-              value={DomainMoney.fromMinorUnits(BigInt(netWorth.netWorthMinor), netWorth.currency as never)}
-              masked={masked}
-              size="body"
-              tone="neutral"
-            />
-          </div>
-          <span className="text-[11px] text-muted-foreground">Assets minus credit owed</span>
+          ))}
         </div>
       </CardContent>
     </Card>

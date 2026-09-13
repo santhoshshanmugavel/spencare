@@ -54,6 +54,7 @@ const transaction: TransactionRow = {
   currency: "INR",
   category_id: "dining",
   merchant: "Swiggy",
+  item_name: null,
   description: null,
   occurred_at: "2026-08-10",
   status: "posted",

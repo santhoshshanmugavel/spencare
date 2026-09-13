@@ -88,7 +88,7 @@ export function DataBackupManager({ accountEmail, twoFactorEnabled }: { accountE
     <div className="divide-y divide-border">
       <div className="flex items-start justify-between gap-4 py-5">
         <div className="flex gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Download className="size-4" aria-hidden="true" />
           </span>
           <div>
@@ -110,7 +110,7 @@ export function DataBackupManager({ accountEmail, twoFactorEnabled }: { accountE
 
       <div className="flex items-start justify-between gap-4 py-5">
         <div className="flex gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
             <Trash2 className="size-4" aria-hidden="true" />
           </span>
           <div>

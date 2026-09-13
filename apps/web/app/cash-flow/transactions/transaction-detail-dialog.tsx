@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Money as DomainMoney } from "@spencare/domain-core";
+import { Money as DomainMoney, getTransactionDisplay } from "@spencare/domain-core";
 import type { AccountRow, CategoryRow, TransactionRow } from "@spencare/domain-application";
 import {
   Sheet,
@@ -68,7 +68,8 @@ export function TransactionDetailDialog({
   const [deleting, setDeleting] = useState(false);
   const value = DomainMoney.fromMinorUnits(BigInt(transaction.amount_minor), transaction.currency as never);
   const canEdit = transaction.type === "income" || transaction.type === "expense";
-  const title = transaction.merchant || transaction.description || TYPE_LABEL[transaction.type];
+  const { displayTitle, effectiveItemName, displayMerchant } = getTransactionDisplay(transaction);
+  const title = displayTitle;
   const hint = transactionHint(transaction, category);
 
   return (
@@ -76,50 +77,76 @@ export function TransactionDetailDialog({
       <Sheet open={open && !editing && !deleting} onOpenChange={onOpenChange}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>{title}</SheetTitle>
-            <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 text-foreground">
-              <Money value={value} size="body" className="inline" />
-              {accountTag(account) ? <span>· {accountTag(account)}</span> : null}
-              <span>
-                ·{" "}
-                {new Date(transaction.occurred_at + "T00:00:00").toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </span>
+            <SheetTitle className="text-base">{title}</SheetTitle>
+            <SheetDescription asChild>
+              <div>
+                {/* Hero amount */}
+                <Money
+                  value={value}
+                  size="hero"
+                  tone={transaction.type === "income" ? "positive" : transaction.type === "expense" ? "negative" : "neutral"}
+                  className="text-2xl tabular-nums"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {new Date(transaction.occurred_at).toLocaleString("en-IN", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                  {accountTag(account) ? ` · ${accountTag(account)}` : null}
+                </p>
+              </div>
             </SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-6 px-4">
-            <div className="space-y-1">
-              <h3 className="text-sm font-medium text-foreground">Spend Summary</h3>
-              <p className="text-sm text-muted-foreground">{hint ?? `${TYPE_LABEL[transaction.type]} recorded.`}</p>
-            </div>
+          <div className="space-y-5 px-4">
+            {hint ? (
+              <div className="rounded-xl bg-muted/60 px-3 py-2.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Summary</p>
+                <p className="text-sm text-foreground">{hint}</p>
+              </div>
+            ) : null}
 
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-foreground">Configure</h3>
-              <dl className="space-y-2 text-sm">
-                <div className="flex items-baseline justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Details</p>
+              <dl className="divide-y divide-border/60">
+                <div className="flex items-center justify-between gap-4 py-2 text-sm">
                   <dt className="text-muted-foreground">Type</dt>
-                  <dd>{TYPE_LABEL[transaction.type]}</dd>
+                  <dd className="font-medium">{TYPE_LABEL[transaction.type]}</dd>
                 </div>
+                {effectiveItemName ? (
+                  <div className="flex items-baseline justify-between gap-4 py-2 text-sm">
+                    <dt className="shrink-0 text-muted-foreground">Item</dt>
+                    <dd className="text-right font-medium">{effectiveItemName}</dd>
+                  </div>
+                ) : null}
+                {displayMerchant ? (
+                  <div className="flex items-baseline justify-between gap-4 py-2 text-sm">
+                    <dt className="shrink-0 text-muted-foreground">Merchant</dt>
+                    <dd className="text-right">{displayMerchant}</dd>
+                  </div>
+                ) : null}
                 {category ? (
-                  <div className="flex items-baseline justify-between gap-4">
+                  <div className="flex items-center justify-between gap-4 py-2 text-sm">
                     <dt className="text-muted-foreground">Category</dt>
-                    <dd>{category.name}</dd>
+                    <dd>
+                      <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium">{category.name}</span>
+                    </dd>
                   </div>
                 ) : null}
                 {account ? (
-                  <div className="flex items-baseline justify-between gap-4">
+                  <div className="flex items-center justify-between gap-4 py-2 text-sm">
                     <dt className="text-muted-foreground">Account</dt>
                     <dd>{accountTag(account)}</dd>
                   </div>
                 ) : null}
-                {transaction.description ? (
-                  <div className="flex items-baseline justify-between gap-4">
-                    <dt className="text-muted-foreground">Note</dt>
-                    <dd className="text-right">{transaction.description}</dd>
+                {transaction.description && transaction.description !== effectiveItemName ? (
+                  <div className="flex items-baseline justify-between gap-4 py-2 text-sm">
+                    <dt className="shrink-0 text-muted-foreground">Note</dt>
+                    <dd className="text-right text-muted-foreground">{transaction.description}</dd>
                   </div>
                 ) : null}
               </dl>

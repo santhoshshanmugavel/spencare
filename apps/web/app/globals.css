@@ -46,6 +46,18 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-tinted: var(--tinted);
   --color-tinted-foreground: var(--tinted-foreground);
+  /* Financial semantic tokens */
+  --color-income: var(--income);
+  --color-income-foreground: var(--income-foreground);
+  --color-income-subtle: var(--income-subtle);
+  --color-expense: var(--expense);
+  --color-expense-foreground: var(--expense-foreground);
+  --color-expense-subtle: var(--expense-subtle);
+  --color-transfer: var(--transfer);
+  --color-transfer-foreground: var(--transfer-foreground);
+  --color-transfer-subtle: var(--transfer-subtle);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-overlay: var(--surface-overlay);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -53,95 +65,118 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Motion durations */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 350ms;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 :root {
-  /* Spencare token overrides — source: /docs/design/design-tokens.md §1.
-     Approximate values extracted from visual review of the source screens;
-     confirmed here as the baseline per design-system-specification.md.
-     brand.primary = violet, used for primary CTAs, active nav, focus rings,
-     ConsequentialActionPreview's Confirm button. */
-  --background: oklch(1 0 0);
+  /* Spencare design tokens — brand.primary = violet (#7C3AED). */
+  --background: oklch(0.99 0.002 296);
   --foreground: oklch(0.19 0.03 296);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.19 0.03 296);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.19 0.03 296);
-  --primary: oklch(0.55 0.24 296); /* ~#7C3AED */
+  --primary: oklch(0.55 0.24 296);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.97 0.01 296);
   --secondary-foreground: oklch(0.3 0.05 296);
-  --muted: oklch(0.97 0.005 296);
-  --muted-foreground: oklch(0.556 0.02 296);
-  --accent: oklch(0.95 0.03 296); /* pale-lavender "tinted" surfaces family */
+  --muted: oklch(0.965 0.006 296);
+  --muted-foreground: oklch(0.52 0.025 296);
+  --accent: oklch(0.95 0.03 296);
   --accent-foreground: oklch(0.3 0.1 296);
-  --destructive: oklch(0.58 0.22 27); /* ~#DC3545 */
-  --success: oklch(0.6 0.15 155); /* ~#22A06B */
+  --destructive: oklch(0.58 0.22 27);
+  --success: oklch(0.58 0.16 155);
   --success-foreground: oklch(1 0 0);
-  --warning: oklch(0.75 0.16 75); /* amber */
+  --warning: oklch(0.72 0.17 75);
   --warning-foreground: oklch(0.2 0.05 75);
-  --tinted: oklch(0.96 0.03 320); /* pale lavender/pink card fill — AI insight, statement doc cards */
+  --tinted: oklch(0.965 0.025 310);
   --tinted-foreground: oklch(0.3 0.1 296);
-  --border: oklch(0.922 0.005 296);
-  --input: oklch(0.922 0.005 296);
+  --border: oklch(0.915 0.008 296);
+  --input: oklch(0.915 0.008 296);
   --ring: oklch(0.55 0.24 296);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Financial semantic tokens */
+  --income: oklch(0.58 0.16 155);
+  --income-foreground: oklch(1 0 0);
+  --income-subtle: oklch(0.95 0.06 155);
+  --expense: oklch(0.58 0.22 27);
+  --expense-foreground: oklch(1 0 0);
+  --expense-subtle: oklch(0.96 0.06 27);
+  --transfer: oklch(0.52 0.025 296);
+  --transfer-foreground: oklch(1 0 0);
+  --transfer-subtle: oklch(0.95 0.01 296);
+  --surface-elevated: oklch(1 0 0);
+  --surface-overlay: oklch(0.97 0.005 296);
+  /* Vibrant chart palette for Spencare */
+  --chart-1: oklch(0.55 0.24 296);
+  --chart-2: oklch(0.6 0.18 200);
+  --chart-3: oklch(0.68 0.18 155);
+  --chart-4: oklch(0.72 0.17 75);
+  --chart-5: oklch(0.62 0.22 22);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.975 0.004 296);
+  --sidebar-foreground: oklch(0.19 0.03 296);
+  --sidebar-primary: oklch(0.55 0.24 296);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.93 0.025 296);
+  --sidebar-accent-foreground: oklch(0.3 0.08 296);
+  --sidebar-border: oklch(0.915 0.008 296);
+  --sidebar-ring: oklch(0.55 0.24 296);
 }
 
 .dark {
-  /* No dark-mode evidence exists anywhere in the source screens (Phase 3
-     review, responsive-specification.md) -- this palette is INFERRED, a
-     reasonable dark variant of the light tokens above, not extracted. */
-  --background: oklch(0.16 0.02 296);
+  --background: oklch(0.145 0.02 296);
   --foreground: oklch(0.96 0.01 296);
-  --card: oklch(0.21 0.02 296);
+  --card: oklch(0.19 0.02 296);
   --card-foreground: oklch(0.96 0.01 296);
-  --popover: oklch(0.21 0.02 296);
+  --popover: oklch(0.19 0.02 296);
   --popover-foreground: oklch(0.96 0.01 296);
-  --primary: oklch(0.7 0.19 296);
-  --primary-foreground: oklch(0.16 0.02 296);
-  --secondary: oklch(0.27 0.02 296);
+  --primary: oklch(0.72 0.18 296);
+  --primary-foreground: oklch(0.12 0.02 296);
+  --secondary: oklch(0.26 0.025 296);
   --secondary-foreground: oklch(0.96 0.01 296);
-  --muted: oklch(0.27 0.02 296);
-  --muted-foreground: oklch(0.7 0.02 296);
-  --accent: oklch(0.3 0.04 296);
+  --muted: oklch(0.24 0.02 296);
+  --muted-foreground: oklch(0.65 0.02 296);
+  --accent: oklch(0.28 0.035 296);
   --accent-foreground: oklch(0.96 0.01 296);
-  --destructive: oklch(0.7 0.19 22.2);
-  --success: oklch(0.65 0.15 155);
-  --success-foreground: oklch(0.16 0.02 296);
-  --warning: oklch(0.78 0.15 75);
+  --destructive: oklch(0.68 0.2 22.2);
+  --success: oklch(0.65 0.16 155);
+  --success-foreground: oklch(0.12 0.02 296);
+  --warning: oklch(0.78 0.16 75);
   --warning-foreground: oklch(0.2 0.05 75);
-  --tinted: oklch(0.26 0.05 320);
+  --tinted: oklch(0.25 0.045 310);
   --tinted-foreground: oklch(0.96 0.01 296);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.7 0.19 296);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.72 0.18 296);
+  --income: oklch(0.65 0.16 155);
+  --income-foreground: oklch(0.12 0.02 296);
+  --income-subtle: oklch(0.22 0.06 155);
+  --expense: oklch(0.68 0.2 22.2);
+  --expense-foreground: oklch(0.12 0.02 296);
+  --expense-subtle: oklch(0.22 0.06 27);
+  --transfer: oklch(0.65 0.02 296);
+  --transfer-foreground: oklch(0.12 0.02 296);
+  --transfer-subtle: oklch(0.24 0.02 296);
+  --surface-elevated: oklch(0.21 0.02 296);
+  --surface-overlay: oklch(0.22 0.02 296);
+  --chart-1: oklch(0.72 0.18 296);
+  --chart-2: oklch(0.65 0.17 200);
+  --chart-3: oklch(0.65 0.16 155);
+  --chart-4: oklch(0.72 0.16 75);
+  --chart-5: oklch(0.68 0.2 22);
+  --sidebar: oklch(0.17 0.022 296);
+  --sidebar-foreground: oklch(0.96 0.01 296);
+  --sidebar-primary: oklch(0.72 0.18 296);
+  --sidebar-primary-foreground: oklch(0.12 0.02 296);
+  --sidebar-accent: oklch(0.24 0.03 296);
+  --sidebar-accent-foreground: oklch(0.96 0.01 296);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.72 0.18 296);
 }
 
 @layer base {
@@ -149,9 +184,55 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
   html {
     @apply font-sans;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  }
+  /* Tabular numerals for all financial amounts — prevents layout shift
+     as digit values change and ensures decimal alignment in columns. */
+  .tabular-nums {
+    font-feature-settings: "tnum" 1, "kern" 1;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Reduced motion: disable all transitions and animations. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ── Spencare utility layer ─────────────────────────────────────────── */
+@layer utilities {
+  .finance-income { color: var(--income); }
+  .finance-expense { color: var(--expense); }
+  .finance-transfer { color: var(--transfer); }
+  .finance-income-bg { background-color: var(--income-subtle); }
+  .finance-expense-bg { background-color: var(--expense-subtle); }
+  .finance-transfer-bg { background-color: var(--transfer-subtle); }
+
+  /* Elevation shadows — card / popover / modal */
+  .shadow-card {
+    box-shadow: 0 1px 3px oklch(0 0 0 / 6%), 0 1px 2px oklch(0 0 0 / 4%);
+  }
+  .shadow-popover {
+    box-shadow: 0 4px 16px oklch(0 0 0 / 10%), 0 1px 4px oklch(0 0 0 / 6%);
+  }
+  .shadow-modal {
+    box-shadow: 0 8px 32px oklch(0 0 0 / 14%), 0 2px 8px oklch(0 0 0 / 8%);
+  }
+  .dark .shadow-card {
+    box-shadow: 0 1px 3px oklch(0 0 0 / 25%), 0 1px 2px oklch(0 0 0 / 18%);
+  }
+  .dark .shadow-popover {
+    box-shadow: 0 4px 16px oklch(0 0 0 / 40%), 0 1px 4px oklch(0 0 0 / 25%);
+  }
+  .dark .shadow-modal {
+    box-shadow: 0 8px 32px oklch(0 0 0 / 55%), 0 2px 8px oklch(0 0 0 / 35%);
   }
 }

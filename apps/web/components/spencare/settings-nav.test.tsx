@@ -8,12 +8,14 @@ describe("<SettingsNav>", () => {
   it("lists every genuinely implemented section, in the design's original order, with net-new sections appended", () => {
     render(<SettingsNav active="profile" />);
     const links = screen.getAllByRole("link").map((el) => el.textContent);
-    expect(links).toEqual(["Accounts", "Spensa's Brain", "Profile", "Privacy", "Security", "Data & Backup", "MCP", "Gmail", "Categories"]);
+    expect(links).toEqual(["Accounts", "Spensa's Brain", "Profile", "Privacy", "Security", "Data & Backup", "MCP", "Gmail", "Categories", "Notifications"]);
   });
 
-  it("never lists Notifications -- no page exists behind it", () => {
+  it("lists Notifications and links to its settings page", () => {
     render(<SettingsNav active="profile" />);
-    expect(screen.queryByRole("link", { name: /notifications/i })).not.toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /notifications/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "/settings/notifications");
   });
 
   it("marks the active item with aria-current and the soft-highlight treatment, not the outer rail's solid-pill treatment", () => {
@@ -31,6 +33,7 @@ describe("<SettingsNav>", () => {
     expect(screen.getByRole("link", { name: "Data & Backup" })).toHaveAttribute("href", "/settings/data-backup");
     expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute("href", "/settings/mcp");
     expect(screen.getByRole("link", { name: "Gmail" })).toHaveAttribute("href", "/settings/gmail");
+    expect(screen.getByRole("link", { name: "Notifications" })).toHaveAttribute("href", "/settings/notifications");
   });
 
   it("is keyboard-navigable via Tab", async () => {

@@ -71,6 +71,7 @@ function candidate(overrides: Partial<GmailCandidateRow> = {}): GmailCandidateRo
     currency: "INR",
     normalizedDate: "2026-08-30",
     normalizedMerchant: "Starbucks",
+    itemName: null,
     referenceId: null,
     confidenceScore: 0.85,
     duplicateOfTransactionId: null,

@@ -8,6 +8,7 @@ import type { AccountRow, CategoryRow, TransactionRow } from "@spencare/domain-a
 import { ACCOUNT_TYPE_LABELS, filterByCapability } from "@spencare/domain-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -75,6 +76,7 @@ export function EditTransactionSheet({
       accountId: transaction.account_id,
       categoryId: transaction.category_id ?? "",
       amountMinor: transaction.amount_minor,
+      itemName: transaction.item_name ?? "",
       merchant: transaction.merchant ?? "",
       description: transaction.description ?? "",
       occurredAt: toDatetimeLocal(transaction.occurred_at),
@@ -154,8 +156,14 @@ export function EditTransactionSheet({
               )}
             />
           </FormField>
-          <FormField id="edit-txn-merchant" label="Merchant / description">
+          <FormField id="edit-txn-item-name" label="Item name (optional)">
+            <Input id="edit-txn-item-name" {...register("itemName")} />
+          </FormField>
+          <FormField id="edit-txn-merchant" label="Merchant / Store name (optional)">
             <Input id="edit-txn-merchant" {...register("merchant")} />
+          </FormField>
+          <FormField id="edit-txn-note" label="Note (optional)">
+            <Textarea id="edit-txn-note" placeholder="Any extra context about this transaction" {...register("description")} />
           </FormField>
           <FormField id="edit-txn-date" label="Date & time">
             <Input id="edit-txn-date" type="datetime-local" {...register("occurredAt")} />

@@ -26,7 +26,7 @@ import type { Database } from "@spencare/domain-infra";
 // supposed to go through the normal session gate below, so an
 // unauthenticated visitor is sent to `/login?redirect=/oauth/authorize?...`
 // exactly like any other protected page.
-const SELF_AUTHENTICATING_API_PATHS = ["/api/cron", "/api/mcp", "/oauth/token", "/oauth/register", "/.well-known"];
+const SELF_AUTHENTICATING_API_PATHS = ["/api/cron", "/api/mcp", "/api/telegram", "/oauth/token", "/oauth/register", "/.well-known"];
 
 const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth", "/privacy", "/terms"];
 const MFA_EXEMPT_PATHS = ["/verify-2fa", "/auth", "/logout"];

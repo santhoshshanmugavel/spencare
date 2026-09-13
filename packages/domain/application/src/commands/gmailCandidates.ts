@@ -119,6 +119,7 @@ export async function acceptGmailCandidate(ctx: AuthContext, candidateId: string
     amountMinor: candidate.normalizedAmountMinor,
     categoryId: candidate.suggestedCategoryId,
     occurredAt: candidate.normalizedDate,
+    itemName: candidate.itemName ?? undefined,
     merchant: candidate.normalizedMerchant ?? undefined,
   };
   const summary = `Record ${candidate.direction === "income" ? "income" : "an expense"} of ${describeAmountForProvider(candidate.normalizedAmountMinor, candidate.currency ?? "INR", privacyModeEnabled)}${candidate.normalizedMerchant ? ` at ${candidate.normalizedMerchant}` : ""} from Gmail`;

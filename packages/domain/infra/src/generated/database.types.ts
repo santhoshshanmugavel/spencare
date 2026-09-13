@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -411,6 +391,45 @@ export type Database = {
           },
         ]
       }
+      channel_connections: {
+        Row: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          connected_at: string
+          created_at: string
+          disconnected_at: string | null
+          display_name: string | null
+          encrypted_metadata: string | null
+          id: string
+          status: Database["public"]["Enums"]["channel_connection_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          connected_at?: string
+          created_at?: string
+          disconnected_at?: string | null
+          display_name?: string | null
+          encrypted_metadata?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["channel_connection_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          connected_at?: string
+          created_at?: string
+          disconnected_at?: string | null
+          display_name?: string | null
+          encrypted_metadata?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["channel_connection_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       gmail_connections: {
         Row: {
           candidates_found_last_sync: number | null
@@ -479,6 +498,7 @@ export type Database = {
           gmail_message_id: string
           gmail_thread_id: string | null
           id: string
+          item_name: string | null
           normalized_amount_minor: number | null
           normalized_date: string | null
           normalized_merchant: string | null
@@ -509,6 +529,7 @@ export type Database = {
           gmail_message_id: string
           gmail_thread_id?: string | null
           id?: string
+          item_name?: string | null
           normalized_amount_minor?: number | null
           normalized_date?: string | null
           normalized_merchant?: string | null
@@ -539,6 +560,7 @@ export type Database = {
           gmail_message_id?: string
           gmail_thread_id?: string | null
           id?: string
+          item_name?: string | null
           normalized_amount_minor?: number | null
           normalized_date?: string | null
           normalized_merchant?: string | null
@@ -828,28 +850,183 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_alert_state: {
+        Row: {
+          alert_type: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          last_alerted_at: string
+          last_value: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          last_alerted_at?: string
+          last_value?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          last_alerted_at?: string
+          last_value?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_deliveries: {
+        Row: {
+          attempted_at: string | null
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at: string
+          delivered_at: string | null
+          error_code: string | null
+          failed_at: string | null
+          id: string
+          notification_id: string
+          provider_message_id: string | null
+          retry_count: number
+          status: Database["public"]["Enums"]["delivery_status"]
+        }
+        Insert: {
+          attempted_at?: string | null
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          delivered_at?: string | null
+          error_code?: string | null
+          failed_at?: string | null
+          id?: string
+          notification_id: string
+          provider_message_id?: string | null
+          retry_count?: number
+          status?: Database["public"]["Enums"]["delivery_status"]
+        }
+        Update: {
+          attempted_at?: string | null
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          delivered_at?: string | null
+          error_code?: string | null
+          failed_at?: string | null
+          id?: string
+          notification_id?: string
+          provider_message_id?: string | null
+          retry_count?: number
+          status?: Database["public"]["Enums"]["delivery_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_deliveries_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_preferences: {
+        Row: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at: string
+          enabled: boolean
+          event_type: string | null
+          id: string
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          enabled?: boolean
+          event_type?: string | null
+          id?: string
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          enabled?: boolean
+          event_type?: string | null
+          id?: string
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
+          action_url: string | null
+          body: string | null
+          category: Database["public"]["Enums"]["notification_category"] | null
           created_at: string
+          dedupe_key: string | null
+          entity_id: string | null
+          entity_type: string | null
+          event_type: string | null
+          expires_at: string | null
+          financial_context: Json | null
           id: string
           payload: Json | null
           read_at: string | null
+          severity: Database["public"]["Enums"]["notification_severity"]
+          title: string | null
           type: string
           user_id: string
         }
         Insert: {
+          action_url?: string | null
+          body?: string | null
+          category?: Database["public"]["Enums"]["notification_category"] | null
           created_at?: string
+          dedupe_key?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type?: string | null
+          expires_at?: string | null
+          financial_context?: Json | null
           id?: string
           payload?: Json | null
           read_at?: string | null
+          severity?: Database["public"]["Enums"]["notification_severity"]
+          title?: string | null
           type: string
           user_id: string
         }
         Update: {
+          action_url?: string | null
+          body?: string | null
+          category?: Database["public"]["Enums"]["notification_category"] | null
           created_at?: string
+          dedupe_key?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type?: string | null
+          expires_at?: string | null
+          financial_context?: Json | null
           id?: string
           payload?: Json | null
           read_at?: string | null
+          severity?: Database["public"]["Enums"]["notification_severity"]
+          title?: string | null
           type?: string
           user_id?: string
         }
@@ -1073,6 +1250,33 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_link_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          token: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          token: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           account_id: string
@@ -1086,6 +1290,7 @@ export type Database = {
           goal_id: string | null
           id: string
           import_batch_id: string | null
+          item_name: string | null
           merchant: string | null
           occurred_at: string
           status: Database["public"]["Enums"]["transaction_status"]
@@ -1106,6 +1311,7 @@ export type Database = {
           goal_id?: string | null
           id?: string
           import_batch_id?: string | null
+          item_name?: string | null
           merchant?: string | null
           occurred_at: string
           status?: Database["public"]["Enums"]["transaction_status"]
@@ -1126,6 +1332,7 @@ export type Database = {
           goal_id?: string | null
           id?: string
           import_batch_id?: string | null
+          item_name?: string | null
           merchant?: string | null
           occurred_at?: string
           status?: Database["public"]["Enums"]["transaction_status"]
@@ -1204,6 +1411,7 @@ export type Database = {
           goal_id: string | null
           id: string
           import_batch_id: string | null
+          item_name: string | null
           merchant: string | null
           occurred_at: string
           status: Database["public"]["Enums"]["transaction_status"]
@@ -1255,6 +1463,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      cleanup_expired_telegram_tokens: { Args: never; Returns: undefined }
       confirm_command: {
         Args: {
           p_actor?: Database["public"]["Enums"]["audit_actor"]
@@ -1328,6 +1537,7 @@ export type Database = {
           p_amount_minor: number
           p_category_id: string
           p_description?: string
+          p_item_name?: string
           p_merchant?: string
           p_occurred_at: string
           p_type: Database["public"]["Enums"]["transaction_type"]
@@ -1345,6 +1555,7 @@ export type Database = {
           goal_id: string | null
           id: string
           import_batch_id: string | null
+          item_name: string | null
           merchant: string | null
           occurred_at: string
           status: Database["public"]["Enums"]["transaction_status"]
@@ -1393,6 +1604,7 @@ export type Database = {
           goal_id: string | null
           id: string
           import_batch_id: string | null
+          item_name: string | null
           merchant: string | null
           occurred_at: string
           status: Database["public"]["Enums"]["transaction_status"]
@@ -1483,6 +1695,7 @@ export type Database = {
           p_amount_minor: number
           p_category_id: string
           p_description?: string
+          p_item_name?: string
           p_merchant?: string
           p_occurred_at: string
           p_transaction_id: string
@@ -1500,6 +1713,7 @@ export type Database = {
           goal_id: string | null
           id: string
           import_batch_id: string | null
+          item_name: string | null
           merchant: string | null
           occurred_at: string
           status: Database["public"]["Enums"]["transaction_status"]
@@ -1535,6 +1749,7 @@ export type Database = {
           goal_id: string | null
           id: string
           import_batch_id: string | null
+          item_name: string | null
           merchant: string | null
           occurred_at: string
           status: Database["public"]["Enums"]["transaction_status"]
@@ -1556,8 +1771,10 @@ export type Database = {
       ai_provider: "anthropic" | "openai" | "google" | "openrouter" | "other"
       audit_actor: "web" | "spensa" | "mcp" | "system" | "gmail"
       bill_prediction_status: "open" | "matched" | "skipped" | "overdue"
+      channel_connection_status: "connected" | "disconnected"
       confirmation_source: "web" | "spensa" | "mcp" | "gmail"
       confirmation_status: "pending" | "confirmed" | "cancelled" | "expired"
+      delivery_status: "pending" | "delivered" | "failed" | "skipped"
       gmail_candidate_type: "transaction" | "bill" | "statement" | "other"
       gmail_sync_status: "idle" | "syncing" | "success" | "error"
       goal_status: "active" | "completed" | "archived"
@@ -1570,6 +1787,17 @@ export type Database = {
         | "confirmed"
         | "failed"
         | "cancelled"
+      notification_category:
+        | "budget"
+        | "goal"
+        | "account"
+        | "bill"
+        | "transaction"
+        | "security"
+        | "report"
+        | "spensa"
+      notification_channel: "in_app" | "email" | "telegram" | "slack"
+      notification_severity: "info" | "warning" | "critical" | "success"
       recurrence_interval:
         | "weekly"
         | "biweekly"
@@ -1606,12 +1834,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1635,11 +1863,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1660,11 +1888,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1685,11 +1913,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1702,11 +1930,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1716,17 +1944,16 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       account_type: ["bank", "cash", "credit_card", "investment"],
       ai_provider: ["anthropic", "openai", "google", "openrouter", "other"],
       audit_actor: ["web", "spensa", "mcp", "system", "gmail"],
       bill_prediction_status: ["open", "matched", "skipped", "overdue"],
+      channel_connection_status: ["connected", "disconnected"],
       confirmation_source: ["web", "spensa", "mcp", "gmail"],
       confirmation_status: ["pending", "confirmed", "cancelled", "expired"],
+      delivery_status: ["pending", "delivered", "failed", "skipped"],
       gmail_candidate_type: ["transaction", "bill", "statement", "other"],
       gmail_sync_status: ["idle", "syncing", "success", "error"],
       goal_status: ["active", "completed", "archived"],
@@ -1740,6 +1967,18 @@ export const Constants = {
         "failed",
         "cancelled",
       ],
+      notification_category: [
+        "budget",
+        "goal",
+        "account",
+        "bill",
+        "transaction",
+        "security",
+        "report",
+        "spensa",
+      ],
+      notification_channel: ["in_app", "email", "telegram", "slack"],
+      notification_severity: ["info", "warning", "critical", "success"],
       recurrence_interval: [
         "weekly",
         "biweekly",
@@ -1767,4 +2006,3 @@ export const Constants = {
     },
   },
 } as const
-

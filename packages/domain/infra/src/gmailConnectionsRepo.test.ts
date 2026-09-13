@@ -16,7 +16,7 @@ describe("getGmailConnectionStatus — never selects encrypted_refresh_token", (
       from: () => ({
         select: (columns: string) => {
           selectedColumns = columns;
-          return { eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) };
+          return { eq: () => ({ is: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) };
         },
       }),
     } as never;
@@ -32,19 +32,21 @@ describe("getGmailConnectionStatus — never selects encrypted_refresh_token", (
       from: () => ({
         select: () => ({
           eq: () => ({
-            maybeSingle: async () => ({
-              data: {
-                id: "conn-1",
-                google_email: "user@gmail.com",
-                scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
-                sync_status: "idle",
-                last_sync_at: null,
-                last_sync_error: null,
-                candidates_found_last_sync: null,
-                connected_at: "2026-08-30T00:00:00Z",
-                revoked_at: null,
-              },
-              error: null,
+            is: () => ({
+              maybeSingle: async () => ({
+                data: {
+                  id: "conn-1",
+                  google_email: "user@gmail.com",
+                  scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+                  sync_status: "idle",
+                  last_sync_at: null,
+                  last_sync_error: null,
+                  candidates_found_last_sync: null,
+                  connected_at: "2026-08-30T00:00:00Z",
+                  revoked_at: null,
+                },
+                error: null,
+              }),
             }),
           }),
         }),

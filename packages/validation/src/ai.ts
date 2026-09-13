@@ -34,8 +34,10 @@ export type ProposeCreateGoalInput = z.infer<typeof proposeCreateGoalSchema>;
 
 // ── 21 new propose schemas (Phase 6) ──────────────────────────────────────
 
-// updateTransactionSchema is a ZodObject — extend directly.
-export const proposeUpdateTransactionSchema = updateTransactionSchema.extend({
+// PATCH semantics: all update fields are optional; the MCP tool merges with
+// the existing transaction so the AI only needs to supply what changed.
+// The full merged payload is what gets stored in pending_confirmations.
+export const proposeUpdateTransactionSchema = updateTransactionSchema.partial().extend({
   transactionId: z.string().uuid(),
 });
 export type ProposeUpdateTransactionInput = z.infer<typeof proposeUpdateTransactionSchema>;
@@ -52,7 +54,10 @@ export const proposeTransferSchema = z.object({
   fromAccountId: z.string().uuid(),
   toAccountId: z.string().uuid(),
   amountMinor: z.number().int("Amount must be a whole number of minor units.").positive("Amount must be greater than zero.").max(1_000_000_000_000, "That amount is too large."),
-  occurredAt: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date."),
+  occurredAt: z
+    .string()
+    .transform((v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v + "T00:00:00+05:30" : v))
+    .pipe(z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date.")),
   description: z.string().trim().max(500).optional(),
 });
 export type ProposeTransferInput = z.infer<typeof proposeTransferSchema>;

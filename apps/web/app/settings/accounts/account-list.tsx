@@ -7,6 +7,7 @@ import type { AccountRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AccountCard } from "@/components/spencare/account-card";
+import { EmptyState } from "@/components/spencare/empty-state";
 import { AddAccountSheet } from "./add-account-sheet";
 import { EditAccountSheet } from "./edit-account-sheet";
 import { ArchiveAccountDialog } from "./archive-account-dialog";
@@ -77,19 +78,24 @@ export function AccountList({
 
       {grouped.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No accounts yet. Add a bank account, credit card, cash wallet, or investment to get
-            started.
+          <CardContent className="p-0">
+            <EmptyState
+              title="No accounts yet"
+              description="Add a bank, credit card, cash wallet, or investment to get started."
+            />
           </CardContent>
         </Card>
       ) : null}
 
       {grouped.map((section) => (
         <div key={section.type} className="space-y-3">
-          <h2 className="flex items-center gap-2 text-base font-medium text-foreground">
-            {SECTION_ICONS[section.type]}
-            {SECTION_LABELS[section.type]}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground shrink-0">
+              {SECTION_ICONS[section.type]}
+              {SECTION_LABELS[section.type]}
+            </h2>
+            <div className="flex-1 h-px bg-border" />
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {section.accounts.map((account) => (
               <AccountCard

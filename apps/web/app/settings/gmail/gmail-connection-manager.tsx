@@ -92,7 +92,7 @@ export function GmailConnectionManager({
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (connected) toastConfirmed("Gmail connected. Sync now to start finding financial emails.");
+    if (connected) toastConfirmed("Gmail connected. Spencare will automatically check for financial emails.");
     else if (oauthError) toastError(oauthError);
     else if (cancelled) {
       // The user declined Google's consent screen -- a choice, not an
@@ -201,10 +201,12 @@ export function GmailConnectionManager({
     return (
       <div className="space-y-4">
         <div className="space-y-2 text-sm text-muted-foreground">
-          <p>Connecting Gmail lets Spencare read financial emails -- bank alerts, credit-card purchases, receipts, and bills -- and suggest transactions for you to review.</p>
+          <p>Connect Gmail once and Spencare automatically monitors new emails for bank alerts, credit-card purchases, receipts, and bills. Detected transactions are sent to your review queue — nothing is added to your finances without your explicit confirmation.</p>
           <p className="font-medium text-foreground">Spencare can:</p>
           <ul className="list-disc space-y-1 pl-5">
-            <li>Read emails and attachments to find financial information</li>
+            <li>Automatically detect new financial emails once per day</li>
+            <li>Read emails and attachments to extract financial information</li>
+            <li>Suggest transactions in your review queue</li>
           </ul>
           <p className="font-medium text-foreground">Spencare cannot:</p>
           <ul className="list-disc space-y-1 pl-5">
@@ -231,8 +233,13 @@ export function GmailConnectionManager({
             <span className="text-sm font-medium text-foreground">{status.googleEmail}</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Last synced {formatDateTime(status.lastSyncAt)}
-            {status.candidatesFoundLastSync !== null ? ` · ${status.candidatesFoundLastSync} item${status.candidatesFoundLastSync === 1 ? "" : "s"} found` : ""}
+            Spencare automatically checks for new financial emails once per day. Use "Sync now" for an immediate check.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Last checked {formatDateTime(status.lastSyncAt)}
+            {status.candidatesFoundLastSync !== null && status.candidatesFoundLastSync > 0
+              ? ` · ${status.candidatesFoundLastSync} item${status.candidatesFoundLastSync === 1 ? "" : "s"} found`
+              : ""}
           </p>
           {status.syncStatus === "error" && status.lastSyncError ? (
             <div className="flex items-start gap-1.5 text-xs text-destructive">
@@ -253,7 +260,12 @@ export function GmailConnectionManager({
       </Card>
 
       <div className="space-y-3">
-        <p className="text-sm font-medium text-foreground">Needs review {pendingCandidates.length > 0 ? `(${pendingCandidates.length})` : ""}</p>
+        <div className="flex items-center gap-3">
+          <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Needs review{pendingCandidates.length > 0 ? ` (${pendingCandidates.length})` : ""}
+          </h2>
+          <div className="flex-1 h-px bg-border" />
+        </div>
         {pendingCandidates.length === 0 ? (
           <p className="text-sm text-muted-foreground">No financial emails waiting for review.</p>
         ) : (

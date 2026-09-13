@@ -12,9 +12,19 @@ import type { DonutChartSlice } from "@/components/spencare/donut-chart";
  * to Safe-to-Spend/Net-Worth via `financial-overview-cards.tsx`.
  */
 
+/** Extracts the local-timezone calendar date (YYYY-MM-DD) from any ISO timestamp. */
+export function toLocalDate(iso: string): string {
+  const d = new Date(iso);
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 export function formatGroupDate(iso: string): string {
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const today = toLocalDate(new Date().toISOString());
+  const yesterday = toLocalDate(new Date(Date.now() - 86400000).toISOString());
   if (iso === today) return "Today";
   if (iso === yesterday) return "Yesterday";
   return new Date(iso + "T00:00:00").toLocaleDateString("en-IN", {

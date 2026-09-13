@@ -44,6 +44,7 @@ const expenseTxn: TransactionRow = {
   currency: "INR",
   category_id: "cat-1",
   merchant: "Swiggy",
+  item_name: null,
   description: null,
   occurred_at: "2026-08-25",
   status: "posted",

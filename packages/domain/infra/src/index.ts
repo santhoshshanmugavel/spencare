@@ -24,3 +24,6 @@ export * from "./gmailConnectionsRepo.js";
 export * from "./gmailFinancialCandidatesRepo.js";
 export * from "./accountDeletionRepo.js";
 export * from "./rateLimitRepo.js";
+export * from "./notificationsRepo.js";
+export * from "./channelConnectionsRepo.js";
+export * from "./notificationPreferencesRepo.js";

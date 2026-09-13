@@ -4,14 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from "lucide-react";
-import { Money as DomainMoney } from "@spencare/domain-core";
+import { Money as DomainMoney, getTransactionDisplay } from "@spencare/domain-core";
 import type { AccountRow, CategoryRow, TransactionRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
+import { EmptyState } from "@/components/spencare/empty-state";
 import { formatMinorUnits } from "@/lib/currency-format";
-import { accountTag, daySubtotalMinor, formatGroupDate, groupByDate, transactionHint } from "@/lib/transaction-presentation";
+import { accountTag, daySubtotalMinor, formatGroupDate, groupByDate, toLocalDate, transactionHint } from "@/lib/transaction-presentation";
 import { AddTransactionSheet } from "./add-transaction-sheet";
 import { TransactionDetailDialog } from "./transaction-detail-dialog";
 import { DeleteTransactionDialog } from "./delete-transaction-dialog";
@@ -33,9 +34,23 @@ import { DeleteTransactionDialog } from "./delete-transaction-dialog";
  */
 
 function iconFor(type: TransactionRow["type"]) {
-  if (type === "income") return <ArrowDownLeft className="size-4 text-success" aria-hidden="true" />;
-  if (type === "expense") return <ArrowUpRight className="size-4 text-destructive" aria-hidden="true" />;
-  return <ArrowLeftRight className="size-4 text-muted-foreground" aria-hidden="true" />;
+  if (type === "income")
+    return (
+      <div className="flex size-9 items-center justify-center rounded-xl bg-income-subtle" aria-hidden="true">
+        <ArrowDownLeft className="size-4 text-income" />
+      </div>
+    );
+  if (type === "expense")
+    return (
+      <div className="flex size-9 items-center justify-center rounded-xl bg-expense-subtle" aria-hidden="true">
+        <ArrowUpRight className="size-4 text-expense" />
+      </div>
+    );
+  return (
+    <div className="flex size-9 items-center justify-center rounded-xl bg-transfer-subtle" aria-hidden="true">
+      <ArrowLeftRight className="size-4 text-transfer" />
+    </div>
+  );
 }
 
 function rowAriaLabel(
@@ -44,11 +59,11 @@ function rowAriaLabel(
   category: CategoryRow | undefined,
   masked: boolean,
 ): string {
-  const title = t.merchant || t.description || (t.type === "transfer" ? "Transfer" : "Transaction");
+  const { displayTitle } = getTransactionDisplay(t);
   const amount = masked
     ? "amount hidden"
     : formatMinorUnitsPlain(t.amount_minor, t.currency);
-  const parts = [title, category?.name, accountTag(account), amount].filter(Boolean);
+  const parts = [displayTitle, category?.name, accountTag(account), amount].filter(Boolean);
   return parts.join(", ");
 }
 
@@ -86,7 +101,7 @@ export function TransactionList({
 
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const categoryById = new Map(categories.map((c) => [c.id, c]));
-  const grouped = groupByDate(transactions, (t) => t.occurred_at);
+  const grouped = groupByDate(transactions, (t) => toLocalDate(t.occurred_at));
 
   function handleMutated() {
     router.refresh();
@@ -108,8 +123,12 @@ export function TransactionList({
 
       {transactions.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No transactions yet. Add an expense, income, or transfer to get started.
+          <CardContent className="p-0">
+            <EmptyState
+              title="No transactions yet"
+              description="Add an expense, income, or transfer to get started."
+              action={{ label: "+ Add transaction", onClick: () => setAddOpen(true) }}
+            />
           </CardContent>
         </Card>
       ) : null}
@@ -118,9 +137,13 @@ export function TransactionList({
         const subtotal = daySubtotalMinor(group.items);
         const subtotalMoney = DomainMoney.fromMinorUnits(BigInt(subtotal), group.items[0]?.currency ?? "INR");
         return (
-          <div key={group.date} className="space-y-1">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-sm font-medium text-muted-foreground">{formatGroupDate(group.date)}</h2>
+          <div key={group.date} className="space-y-1.5">
+            {/* Date group header */}
+            <div className="flex items-center gap-3 px-1">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground shrink-0">
+                {formatGroupDate(group.date)}
+              </h2>
+              <div className="flex-1 h-px bg-border" />
               <Money
                 value={subtotalMoney}
                 masked={masked}
@@ -129,26 +152,38 @@ export function TransactionList({
                 aria-label={`Net total for ${formatGroupDate(group.date)}`}
               />
             </div>
-            <Card>
-              <CardContent className="space-y-1">
+
+            <Card className="overflow-hidden shadow-card">
+              <CardContent className="px-2 py-1.5 space-y-0.5">
                 {group.items.map((t) => {
                   const account = accountById.get(t.account_id);
                   const category = t.category_id ? categoryById.get(t.category_id) : undefined;
+                  const { displayTitle, effectiveItemName, displayMerchant } = getTransactionDisplay(t);
+                  const subtitle = effectiveItemName && displayMerchant
+                    ? displayMerchant
+                    : transactionHint(t, category);
                   return (
                     <ListRow
                       key={t.id}
                       icon={iconFor(t.type)}
-                      title={t.merchant || t.description || (t.type === "transfer" ? "Transfer" : "Transaction")}
-                      subtitle={transactionHint(t, category)}
+                      title={displayTitle}
+                      subtitle={subtitle}
                       metadata={[
-                        category ? <span key="cat">{category.name}</span> : null,
+                        category ? (
+                          <span key="cat" className="rounded-md bg-muted px-1.5 py-0.5 text-xs">
+                            {category.name}
+                          </span>
+                        ) : null,
                         account ? <span key="acct">{accountTag(account)}</span> : null,
+                        <span key="time" className="tabular-nums">
+                          {new Date(t.occurred_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+                        </span>,
                       ].filter(Boolean)}
                       trailing={trailingFor(t, masked)}
                       onClick={() => setDetail(t)}
                       aria-label={rowAriaLabel(t, account, category, masked)}
                       hoverActions={
-                        <Button variant="ghost" size="sm" onClick={() => setQuickDeleting(t)}>
+                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setQuickDeleting(t)}>
                           Delete
                         </Button>
                       }

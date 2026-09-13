@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
+import { EmptyState } from "@/components/spencare/empty-state";
 import { AddBillSheet } from "./add-bill-sheet";
 import { EditBillSheet } from "./edit-bill-sheet";
 import { DeleteBillDialog } from "./delete-bill-dialog";
@@ -135,7 +136,11 @@ export function BillsDashboard({
       // its space, at any width.
       <div key={p.id} className="space-y-1">
         <ListRow
-          icon={<CalendarClock className="size-4 text-muted-foreground" aria-hidden="true" />}
+          icon={
+            <div className="flex size-9 items-center justify-center rounded-xl bg-muted" aria-hidden="true">
+              <CalendarClock className="size-4 text-muted-foreground" />
+            </div>
+          }
           title={p.bill_definitions.merchant_pattern}
           subtitle={`${RECURRENCE_LABELS[p.bill_definitions.recurrence_interval] ?? p.bill_definitions.recurrence_interval} · Due ${formatDueDate(p.expected_date)}`}
           metadata={[category ? <span key="cat">{category.name}</span> : null].filter(Boolean)}
@@ -186,26 +191,36 @@ export function BillsDashboard({
 
       {predictions.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No bills yet. Add a recurring bill so Spencare can predict when it&rsquo;s due and remind you to pay it.
+          <CardContent className="p-0">
+            <EmptyState
+              title="No bills yet"
+              description="Add a recurring bill so Spencare can predict when it's due."
+              action={{ label: "+ Add bill", onClick: () => setAddOpen(true) }}
+            />
           </CardContent>
         </Card>
       ) : (
         <>
           {upcoming.length > 0 ? (
-            <div className="space-y-1">
-              <h2 className="px-1 text-sm font-medium text-muted-foreground">Upcoming</h2>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3 px-1">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground shrink-0">Upcoming</h2>
+                <div className="flex-1 h-px bg-border" />
+              </div>
               <Card>
-                <CardContent className="space-y-1">{upcoming.map(renderRow)}</CardContent>
+                <CardContent className="px-2 py-1.5 space-y-0.5">{upcoming.map(renderRow)}</CardContent>
               </Card>
             </div>
           ) : null}
 
           {settled.length > 0 ? (
-            <div className="space-y-1">
-              <h2 className="px-1 text-sm font-medium text-muted-foreground">Paid</h2>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3 px-1">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground shrink-0">Paid</h2>
+                <div className="flex-1 h-px bg-border" />
+              </div>
               <Card>
-                <CardContent className="space-y-1">{settled.map(renderRow)}</CardContent>
+                <CardContent className="px-2 py-1.5 space-y-0.5">{settled.map(renderRow)}</CardContent>
               </Card>
             </div>
           ) : null}

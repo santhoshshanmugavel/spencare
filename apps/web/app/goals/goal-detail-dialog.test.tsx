@@ -72,6 +72,7 @@ const contribution: TransactionRow = {
   currency: "INR",
   category_id: null,
   merchant: null,
+  item_name: null,
   description: null,
   occurred_at: "2026-08-25",
   status: "posted",

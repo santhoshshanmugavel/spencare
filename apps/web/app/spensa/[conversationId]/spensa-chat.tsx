@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Loader2, AlertTriangle, Sparkles, MessageSquarePlus, Send, Bot } from "lucide-react";
@@ -36,11 +37,11 @@ function toDisplayMessages(rows: AiMessageRow[]): DisplayMessage[] {
 }
 
 const STARTER_PROMPTS = [
-  "How much can I spend?",
   "Add an expense",
-  "Show my balances",
-  "This month's summary",
-  "What are my goals?",
+  "Add income",
+  "Show account balances",
+  "See this month's summary",
+  "How much can I spend?",
 ];
 
 export function SpensaChat({
@@ -60,6 +61,7 @@ export function SpensaChat({
 }) {
   void accounts; void categories; void goals;
 
+  const router = useRouter();
   const [activeConversationId, setActiveConversationId] = useState<string | null>(conversationId);
   const [messages, setMessages] = useState<DisplayMessage[]>(toDisplayMessages(initialMessages));
   const [input, setInput] = useState("");
@@ -123,7 +125,7 @@ export function SpensaChat({
         try { event = JSON.parse(line.slice(6)); } catch { continue; }
         if (event.type === "conversation_created") {
           setActiveConversationId(event.conversationId as string);
-          window.history.replaceState(null, "", `/spensa/${event.conversationId}`);
+          router.replace(`/spensa/${event.conversationId}`);
         } else if (event.type === "text_delta") {
           finalText += event.text as string;
           setStreamingText(finalText);
@@ -283,7 +285,7 @@ export function SpensaChat({
               size="icon"
               disabled={isStreaming || isPending || !input.trim()}
               className="size-12 shrink-0 rounded-xl"
-              aria-label="Send message"
+              aria-label="Send"
             >
               {isStreaming ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -304,10 +306,10 @@ export function SpensaChat({
 function EmptyState({ onPrompt }: { onPrompt: (p: string) => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-4 py-16">
-      <div className="mb-6 flex size-16 items-center justify-center rounded-2xl bg-primary/10">
-        <Sparkles className="size-8 text-primary" aria-hidden="true" />
+      <div className="mb-6 flex items-center justify-center">
+        <img src="/spensa-ai-logo.svg" alt="Spensa AI" width={144} height={37} className="shrink-0" />
       </div>
-      <h1 className="mb-2 text-2xl font-semibold text-foreground">Ask Spensa</h1>
+      <h1 className="mb-2 text-2xl font-semibold text-foreground sr-only">Ask Spensa</h1>
       <p className="mb-8 max-w-sm text-center text-sm text-muted-foreground">
         Ask about your finances, log an expense, or check your goals. Spensa always confirms before recording anything.
       </p>

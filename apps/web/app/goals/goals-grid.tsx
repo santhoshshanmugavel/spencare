@@ -8,6 +8,7 @@ import type { AccountRow, GoalRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/spencare/empty-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GoalCard } from "@/components/spencare/goal-card";
 import { GoalWizardSheet } from "@/components/spencare/goal-wizard-sheet";
@@ -84,8 +85,11 @@ export function GoalsGrid({
     if (goals.length === 0) {
       return (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No goals yet. Create one to start saving toward something.
+          <CardContent className="p-0">
+            <EmptyState
+              title="No goals yet"
+              description="Create a goal to start saving toward something meaningful."
+            />
           </CardContent>
         </Card>
       );
@@ -93,8 +97,12 @@ export function GoalsGrid({
     if (list.length === 0) {
       return (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            {search ? `No ${termLabel} goals match "${search}".` : `No ${termLabel} goals yet.`}
+          <CardContent className="p-0">
+            <EmptyState
+              title={search ? `No matches for "${search}"` : `No ${termLabel} goals`}
+              description={search ? "Try a different search term." : `Add a ${termLabel} goal to see it here.`}
+              action={!search ? { label: "+ Create goal", onClick: () => setAddOpen(true) } : undefined}
+            />
           </CardContent>
         </Card>
       );
