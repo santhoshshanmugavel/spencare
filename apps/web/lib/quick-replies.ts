@@ -1,126 +1,165 @@
 /**
- * PersonalizedQuickReplyEngine — "What next?" suggestions (NOT AI Response Buttons).
+ * PersonalizedQuickReplyEngine — "What next?" suggestions.
  *
- * Two separate systems, never mixed:
- * 1. AI Response Buttons  = "Finish this step" — attached to a proposal, disappear after action
- * 2. Personalized Quick Replies = "What next?" — contextual, rotating, shown near the input
- *
- * This file implements system #2. It is purely rule-based and runs client-side
- * from the last assistant message text — no extra API call, no financial calculations.
+ * SYSTEM RULES (from master spec, locked):
+ * 1. Returns 0–3 suggestions. Never more than 3.
+ * 2. Returns 0 when Spensa is waiting for required user input
+ *    (e.g. "How much did you spend?"). Do NOT show unrelated suggestions.
+ * 3. These are "What next?" chips near the input — NOT "Finish this step"
+ *    action buttons (those are AI Response Buttons = proposals, rendered
+ *    separately via ConsequentialActionPreview).
+ * 4. Every chip goes through the same Spensa send path as typed text.
+ * 5. Purely client-side — no extra API call.
  */
 
 export type QuickReply = { id: string; label: string };
 
-const UNIVERSAL_FALLBACKS: QuickReply[] = [
-  { id: "ur-add-expense", label: "Add an expense" },
-  { id: "ur-safe-to-spend", label: "What's safe to spend?" },
-  { id: "ur-this-month", label: "How am I doing this month?" },
-  { id: "ur-goals", label: "Review my goals" },
-  { id: "ur-insights", label: "Show insights" },
-  { id: "ur-plan-ahead", label: "Plan ahead" },
+/**
+ * Patterns that indicate Spensa is waiting for required input.
+ * When any matches, return 0 quick replies.
+ */
+const WAITING_PATTERNS = [
+  /how much did you spend\??/i,
+  /how much was (it|that|the)\??/i,
+  /what (amount|was the amount)\??/i,
+  /which account did you use\??/i,
+  /what category (should i|do you want)\??/i,
+  /can you tell me (more|which)\??/i,
+  /could you (clarify|specify|confirm)\??/i,
+  /what (is|was) (it|that) for\??/i,
 ];
 
 type Rule = {
-  keywords: RegExp;
+  /** Pattern matched against the last assistant message */
+  pattern: RegExp;
+  /** Up to 3 suggestions */
   replies: QuickReply[];
 };
 
 const RULES: Rule[] = [
+  // Expense completed
   {
-    keywords: /\b(expense|spent|added.*food|added.*dining|recorded.*expense)\b/i,
+    pattern: /\b(added|recorded|logged).{0,30}(expense|spent|₹|dinner|food|travel|shopping|snack|lunch|coffee)\b/i,
     replies: [
       { id: "exp-today", label: "Show today's spending" },
-      { id: "exp-safe", label: "What's safe to spend now?" },
+      { id: "exp-safe", label: "What's safe to spend?" },
       { id: "exp-another", label: "Add another expense" },
     ],
   },
+  // Income completed
   {
-    keywords: /\b(income|salary|credited|earned|freelance|received)\b/i,
+    pattern: /\b(added|recorded|logged).{0,30}(income|salary|credited|earned|freelance|refund|cashback)\b/i,
     replies: [
-      { id: "inc-month", label: "How much did I earn this month?" },
-      { id: "inc-safe", label: "What can I spend now?" },
+      { id: "inc-month", label: "How much can I spend this month?" },
       { id: "inc-goals", label: "Review my goals" },
       { id: "inc-summary", label: "Show this month's summary" },
     ],
   },
+  // Goal created
   {
-    keywords: /\b(goal|saving|saved|emergency|vacation|target)\b/i,
+    pattern: /\b(goal|fund|target).{0,30}(created|ready|set up|done)\b/i,
     replies: [
-      { id: "goal-track", label: "Am I on track?" },
-      { id: "goal-monthly", label: "How much should I save monthly?" },
-      { id: "goal-adjust", label: "Adjust this goal" },
-      { id: "goal-all", label: "Review all goals" },
+      { id: "goal-doing", label: "How am I doing?" },
+      { id: "goal-plan", label: "Change my plan" },
+      { id: "goal-contribute", label: "Add money now" },
     ],
   },
+  // Goal status / progress query
   {
-    keywords: /\b(budget|overspending|limit|exceeded|category)\b/i,
+    pattern: /\b(saved|on track|behind|progress|you(\'?ve|ve) saved|₹.{0,10}saved)\b/i,
+    replies: [
+      { id: "goal-monthly", label: "How much should I save monthly?" },
+      { id: "goal-adjust", label: "Adjust this goal" },
+    ],
+  },
+  // Budget
+  {
+    pattern: /\b(budget|category|overspending|spending limit|used \d+%)\b/i,
     replies: [
       { id: "bud-left", label: "How much is left?" },
       { id: "bud-attention", label: "Which category needs attention?" },
-      { id: "bud-reduce", label: "How can I reduce it?" },
     ],
   },
+  // Account balance
   {
-    keywords: /\b(balance|account|bank|IDFC|HDFC|card|cash)\b/i,
+    pattern: /\b(balance|₹.{0,10}(in|available)|account|IDFC|HDFC|savings|bank)\b/i,
     replies: [
       { id: "bal-safe", label: "What's safe to spend?" },
-      { id: "bal-breakdown", label: "Show account breakdown" },
-      { id: "bal-recent", label: "Recent transactions" },
+      { id: "bal-recent", label: "Show recent transactions" },
+      { id: "bal-goals", label: "Review my goals" },
     ],
   },
+  // Credit card
   {
-    keywords: /\b(bill|repay|payment|due|credit card)\b/i,
+    pattern: /\b(credit card|card balance|outstanding|repay|payment due|utilization)\b/i,
     replies: [
-      { id: "bill-when", label: "When should I repay?" },
-      { id: "bill-card", label: "Show card spending" },
-      { id: "bill-summary", label: "Show card summary" },
+      { id: "cc-txns", label: "Show card transactions" },
+      { id: "cc-when", label: "When should I repay?" },
     ],
   },
+  // Report / monthly summary
   {
-    keywords: /\b(report|month|summary|comparison|spent more|less)\b/i,
+    pattern: /\b(spent|report|summary|month.{0,15}(spent|income|net)|cash flow)\b/i,
     replies: [
       { id: "rep-why", label: "Why did spending increase?" },
       { id: "rep-improve", label: "What should I improve?" },
       { id: "rep-compare", label: "Compare with last month" },
     ],
   },
+  // Receipt / bank statement upload
   {
-    keywords: /\b(anxious|stressed|worried|losing control|overwhelmed|okay financially)\b/i,
+    pattern: /\b(import(ed)?|found \d+|transactions? (added|imported)|statement upload)\b/i,
+    replies: [
+      { id: "upl-summary", label: "Give me a summary" },
+      { id: "upl-unusual", label: "Show unusual expenses" },
+    ],
+  },
+  // Emotional / supportive
+  {
+    pattern: /\b(anxious|stressed|worried|overwhelmed|you('?re| are) doing (well|better|okay))\b/i,
     replies: [
       { id: "emo-facts", label: "Show me the facts" },
       { id: "emo-focus", label: "What should I focus on?" },
-      { id: "emo-well", label: "What am I doing well?" },
-    ],
-  },
-  {
-    keywords: /\b(refund|cashback|gift|rebate)\b/i,
-    replies: [
-      { id: "ref-recent", label: "Show recent income" },
-      { id: "ref-spent", label: "Where did I spend most?" },
     ],
   },
 ];
 
+const UNIVERSAL_POOL: QuickReply[] = [
+  { id: "ur-expense", label: "Add an expense" },
+  { id: "ur-safe", label: "What's safe to spend?" },
+  { id: "ur-month", label: "How am I doing this month?" },
+  { id: "ur-goals", label: "Review my goals" },
+];
+
 /**
- * Generate contextual quick reply suggestions from the last assistant message.
- * Returns 2-4 suggestions. Falls back to rotating universal suggestions when
- * no rule matches.
+ * Generate 0–3 contextual "What next?" quick reply chips.
+ *
+ * Returns 0 when Spensa is waiting for required user input.
+ * Otherwise returns up to 3 contextually relevant suggestions.
+ * Falls back to rotating universal suggestions when no rule matches.
  */
 export function generateQuickReplies(lastAssistantMessage: string, rotationSeed?: number): QuickReply[] {
   const text = lastAssistantMessage.trim();
-  if (!text) return pickUniversal(rotationSeed);
+  if (!text) return [];
 
+  // If Spensa is waiting for required input → no quick replies
+  for (const pattern of WAITING_PATTERNS) {
+    if (pattern.test(text)) return [];
+  }
+
+  // Try each rule in order — first match wins
   for (const rule of RULES) {
-    if (rule.keywords.test(text)) {
-      return rule.replies.slice(0, 4);
+    if (rule.pattern.test(text)) {
+      return rule.replies.slice(0, 3);
     }
   }
 
+  // Universal fallback (rotate)
   return pickUniversal(rotationSeed);
 }
 
 function pickUniversal(seed?: number): QuickReply[] {
-  const offset = (seed ?? Date.now()) % UNIVERSAL_FALLBACKS.length;
-  const rotated = [...UNIVERSAL_FALLBACKS.slice(offset), ...UNIVERSAL_FALLBACKS.slice(0, offset)];
-  return rotated.slice(0, 4);
+  const offset = (seed ?? Date.now()) % UNIVERSAL_POOL.length;
+  const rotated = [...UNIVERSAL_POOL.slice(offset), ...UNIVERSAL_POOL.slice(0, offset)];
+  return rotated.slice(0, 3);
 }

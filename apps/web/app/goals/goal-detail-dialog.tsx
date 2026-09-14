@@ -186,6 +186,7 @@ export function GoalDetailDialog({
             )}
 
             <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Actual saved</p>
               <Money
                 value={DomainMoney.fromMinorUnits(BigInt(goal.saved_amount_minor), currency as never)}
                 masked={masked}
@@ -201,10 +202,11 @@ export function GoalDetailDialog({
                     masked={masked}
                     size="body"
                     className="inline"
-                  />
+                  />{" "}
+                  target
                 </p>
               ) : (
-                <p className="text-sm font-medium text-success">Saved</p>
+                <p className="text-sm font-medium text-success">Goal reached</p>
               )}
             </div>
 
@@ -303,15 +305,19 @@ export function GoalDetailDialog({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <CalendarClock className="size-4 text-muted-foreground" aria-hidden="true" />
-                        <span className="text-sm font-medium">
-                          <Money
-                            value={DomainMoney.fromNumber(plan.amount_minor, currency as never)}
-                            masked={masked}
-                            size="body"
-                            className="inline"
-                          />{" "}
-                          {FREQUENCY_LABELS[plan.frequency]}
-                        </span>
+                        <div>
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                            Planned {FREQUENCY_LABELS[plan.frequency].toLowerCase()} contribution
+                          </p>
+                          <span className="text-sm font-medium">
+                            <Money
+                              value={DomainMoney.fromNumber(plan.amount_minor, currency as never)}
+                              masked={masked}
+                              size="body"
+                              className="inline"
+                            />
+                          </span>
+                        </div>
                       </div>
                       <Badge variant={plan.status === "paused" ? "secondary" : "default"} className="text-xs">
                         {plan.status === "paused" ? "Paused" : "Active"}
@@ -319,7 +325,7 @@ export function GoalDetailDialog({
                     </div>
                     {plan.next_due_at ? (
                       <p className="text-xs text-muted-foreground">
-                        Next reminder:{" "}
+                        Next contribution:{" "}
                         {new Date(plan.next_due_at).toLocaleDateString("en-IN", {
                           day: "numeric",
                           month: "short",
@@ -328,7 +334,7 @@ export function GoalDetailDialog({
                       </p>
                     ) : null}
                     <p className="text-xs text-muted-foreground">
-                      Reminder only — you record contributions when you're ready.
+                      This is a reminder — not an automatic transfer. Money moves only when you record a contribution.
                     </p>
                     <div className="flex gap-2 pt-1">
                       {plan.status === "active" ? (
