@@ -28,7 +28,7 @@ import type { Database } from "@spencare/domain-infra";
 // exactly like any other protected page.
 const SELF_AUTHENTICATING_API_PATHS = ["/api/cron", "/api/mcp", "/api/telegram", "/oauth/token", "/oauth/register", "/.well-known"];
 
-const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth", "/privacy", "/terms"];
+const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth"];
 const MFA_EXEMPT_PATHS = ["/verify-2fa", "/auth", "/logout"];
 // Reachable regardless of onboarding-completion state -- /onboarding
 // itself, plus everything already exempt from the auth/2FA gates (a user

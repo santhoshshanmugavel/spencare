@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signUpSchema, type SignUpInput } from "@spencare/validation";
@@ -76,18 +75,6 @@ export function SignUpForm({ redirectTarget }: { redirectTarget: string | null }
       <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? "Creating account…" : "Create account"}
       </Button>
-
-      <p className="text-center text-xs text-muted-foreground">
-        Protected by invisible spam/bot checks. By continuing you agree to Spencare&apos;s{" "}
-        <Link href="/terms" className="text-primary hover:underline">
-          Terms
-        </Link>{" "}
-        and{" "}
-        <Link href="/privacy" className="text-primary hover:underline">
-          Privacy Policy
-        </Link>
-        .
-      </p>
     </form>
   );
 }
