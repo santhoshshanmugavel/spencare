@@ -284,6 +284,55 @@ describe("<GmailConnectionManager> — review queue", () => {
   });
 });
 
+describe("<GmailConnectionManager> — error message distinctions (fix: false revoked error)", () => {
+  it("shows 'couldn't be reached' toast (not 'revoked') when Sync now fails with a non-auth error — fixes false 'revoked' toast on fresh connections", async () => {
+    const { toastError } = await import("@/lib/toast");
+    const user = userEvent.setup();
+    vi.mocked(syncGmailNowAction).mockResolvedValue({
+      ok: false,
+      error: { code: "gmail_sync_failed", message: "Gmail couldn't be reached right now. Try syncing again shortly." },
+    });
+
+    render(<GmailConnectionManager initialStatus={status()} initialCandidates={[]} accounts={ACCOUNTS} categories={CATEGORIES} />);
+    await user.click(screen.getByRole("button", { name: "Sync now" }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Gmail couldn't be reached right now. Try syncing again shortly."));
+    expect(toastError).not.toHaveBeenCalledWith(expect.stringContaining("revoked"));
+  });
+
+  it("shows 'revoked or expired' toast only when the sync explicitly reports a token revocation", async () => {
+    const { toastError } = await import("@/lib/toast");
+    const user = userEvent.setup();
+    vi.mocked(syncGmailNowAction).mockResolvedValue({
+      ok: false,
+      error: { code: "gmail_sync_failed", message: "Gmail access was revoked or expired. Reconnect Gmail to keep syncing." },
+    });
+
+    render(<GmailConnectionManager initialStatus={status()} initialCandidates={[]} accounts={ACCOUNTS} categories={CATEGORIES} />);
+    await user.click(screen.getByRole("button", { name: "Sync now" }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Gmail access was revoked or expired. Reconnect Gmail to keep syncing."));
+  });
+
+  it("shows a success toast when connected=true even if the DB still carries a stale error state — the upsert resets the error, but any tiny race leaves the inline error visible while the success toast fires", async () => {
+    const { toastConfirmed, toastError } = await import("@/lib/toast");
+    render(
+      <GmailConnectionManager
+        initialStatus={status({ syncStatus: "error", lastSyncError: "Gmail access was revoked or expired. Reconnect Gmail to keep syncing." })}
+        initialCandidates={[]}
+        accounts={ACCOUNTS}
+        categories={CATEGORIES}
+        connected
+      />,
+    );
+
+    await waitFor(() => expect(toastConfirmed).toHaveBeenCalled());
+    // The inline error is rendered in the card (not via toastError) in this scenario
+    expect(toastError).not.toHaveBeenCalled();
+    expect(screen.getByText("Gmail access was revoked or expired. Reconnect Gmail to keep syncing.")).toBeInTheDocument();
+  });
+});
+
 describe("<GmailConnectionManager> — accessibility", () => {
   it("has no axe violations in the not-connected state", async () => {
     const { container } = render(<GmailConnectionManager initialStatus={null} initialCandidates={[]} accounts={ACCOUNTS} categories={CATEGORIES} />);

@@ -73,17 +73,23 @@ describe("refreshGmailAccessToken", () => {
   });
 });
 
-describe("error handling / retries", () => {
-  it("throws a GmailApiError marked isAuthError for a 401", async () => {
+describe("error handling / retries — Gmail API endpoints", () => {
+  it("throws a GmailApiError marked isAuthError for a 401 (access token invalid)", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
 
     await expect(fetchGoogleAccountEmail("bad-token")).rejects.toMatchObject({ status: 401, isAuthError: true });
   });
 
-  it("throws a GmailApiError NOT marked isAuthError for a 400", async () => {
+  it("throws a GmailApiError NOT marked isAuthError for a 400 from the Gmail API", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 400 }));
 
     await expect(fetchGoogleAccountEmail("token")).rejects.toMatchObject({ status: 400, isAuthError: false });
+  });
+
+  it("throws a GmailApiError NOT marked isAuthError for a 403 from the Gmail API — 403 means 'forbidden' (API not enabled, scope insufficient, org policy), NOT 'token revoked'; reconnecting won't fix it", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 403 }));
+
+    await expect(listGmailMessageIds("token", "query", null)).rejects.toMatchObject({ status: 403, isAuthError: false });
   });
 
   it("never includes the raw response body (or the token) in the thrown error message", async () => {
@@ -106,6 +112,32 @@ describe("error handling / retries", () => {
     const email = await fetchGoogleAccountEmail("token");
     expect(email).toBe("user@gmail.com");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("refreshGmailAccessToken — token endpoint error handling", () => {
+  it("marks isAuthError=true for 400 with error='invalid_grant' (refresh token genuinely revoked or expired)", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "invalid_grant", error_description: "Token has been expired or revoked." }, 400));
+
+    await expect(refreshGmailAccessToken({ clientId: "c", clientSecret: "s" }, "stale-rt")).rejects.toMatchObject({ status: 400, isAuthError: true });
+  });
+
+  it("marks isAuthError=false for a 400 with a non-revocation error code (e.g. wrong client credentials at the token endpoint)", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "invalid_client" }, 400));
+
+    await expect(refreshGmailAccessToken({ clientId: "c", clientSecret: "s" }, "rt-1")).rejects.toMatchObject({ status: 400, isAuthError: false });
+  });
+
+  it("marks isAuthError=false for a 400 when the response body is not parseable JSON (safe fallback)", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("bad gateway", { status: 400, headers: { "content-type": "text/plain" } }));
+
+    await expect(refreshGmailAccessToken({ clientId: "c", clientSecret: "s" }, "rt-1")).rejects.toMatchObject({ status: 400, isAuthError: false });
+  });
+
+  it("marks isAuthError=true for a 401 from the token endpoint (OAuth client not authenticated)", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+
+    await expect(refreshGmailAccessToken({ clientId: "c", clientSecret: "s" }, "rt-1")).rejects.toMatchObject({ status: 401, isAuthError: true });
   });
 });
 

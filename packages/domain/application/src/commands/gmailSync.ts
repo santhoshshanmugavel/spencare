@@ -71,8 +71,15 @@ function accountToMatchCandidate(a: { id: string; name: string; type: string; is
   return { id: a.id, name: a.name, type: a.type as AccountMatchCandidate["type"], isArchived: a.is_archived };
 }
 
-/** Never logs/returns raw provider error detail -- see gmailApiClient.ts's own "never surface raw provider errors" note; this mirrors that discipline one layer up. */
-function safeSyncErrorMessage(e: unknown): string {
+/**
+ * Never logs/returns raw provider error detail -- see gmailApiClient.ts's
+ * own "never surface raw provider errors" note; this mirrors that discipline
+ * one layer up.
+ *
+ * Exported for unit testing; not intended as a public API for callers
+ * outside this package.
+ */
+export function safeSyncErrorMessage(e: unknown): string {
   if (e instanceof GmailApiError && e.isAuthError) return "Gmail access was revoked or expired. Reconnect Gmail to keep syncing.";
   if (e instanceof GmailApiError) return "Gmail couldn't be reached right now. Try syncing again shortly.";
   return "Something went wrong while syncing Gmail. Try again.";
