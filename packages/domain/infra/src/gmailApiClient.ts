@@ -52,12 +52,42 @@ async function requestJson(url: string, init: RequestInit, retriesLeft = 2): Pro
     }
   }
   if (!response.ok) {
-    const isAuthError = response.status === 401 || response.status === 403;
+    // 401 = access token invalid/expired → user must reconnect.
+    // 403 from the Gmail API does NOT mean "token revoked" — it means the
+    // request is forbidden for reasons like the Gmail API not being enabled
+    // in Google Cloud Console, an org policy blocking API access, or
+    // insufficient scope. Reconnecting won't fix those causes, so 403 is NOT
+    // an auth error here. Only 401 warrants the "reconnect" advice.
+    const isAuthError = response.status === 401;
     // Never include response body verbatim in the thrown message -- Google
     // error bodies can echo back query params (which never contain tokens
     // here, but this is the safe-by-default posture, matching this
     // codebase's "never surface raw provider errors" convention).
     throw new GmailApiError(`Gmail API request failed (${response.status})`, response.status, isAuthError);
+  }
+  return response.json();
+}
+
+/**
+ * Token-endpoint variant of requestJson. Distinct from the Gmail API
+ * variant because the Google token endpoint uses different HTTP status
+ * semantics:
+ *   - 400 + {"error":"invalid_grant"} = refresh token revoked or expired
+ *     → isAuthError true (user must reconnect to get a fresh token)
+ *   - 400 + any other error = bad request (wrong params) → isAuthError false
+ *   - 401/403 = client credentials wrong or client suspended → isAuthError true
+ * Reads only the `error` field of the 400 body; never logs or surfaces the
+ * full body (matches the "never surface raw provider errors" convention).
+ */
+async function requestTokenJson(url: string, init: RequestInit): Promise<unknown> {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    if (response.status === 400) {
+      const body = await response.json().catch(() => null);
+      const isRevoked = (body as { error?: string } | null)?.error === "invalid_grant";
+      throw new GmailApiError(`Gmail token request failed (${response.status})`, response.status, isRevoked);
+    }
+    throw new GmailApiError(`Gmail token request failed (${response.status})`, response.status, true);
   }
   return response.json();
 }
@@ -96,7 +126,7 @@ export async function exchangeGmailAuthCode(config: GoogleOAuthConfig, code: str
     code,
     grant_type: "authorization_code",
   });
-  const data = (await requestJson(GOOGLE_TOKEN_ENDPOINT, { method: "POST", body, headers: { "Content-Type": "application/x-www-form-urlencoded" } })) as {
+  const data = (await requestTokenJson(GOOGLE_TOKEN_ENDPOINT, { method: "POST", body, headers: { "Content-Type": "application/x-www-form-urlencoded" } })) as {
     access_token: string;
     refresh_token?: string;
     expires_in: number;
@@ -112,7 +142,7 @@ export async function refreshGmailAccessToken(config: Pick<GoogleOAuthConfig, "c
     refresh_token: refreshToken,
     grant_type: "refresh_token",
   });
-  const data = (await requestJson(GOOGLE_TOKEN_ENDPOINT, { method: "POST", body, headers: { "Content-Type": "application/x-www-form-urlencoded" } })) as {
+  const data = (await requestTokenJson(GOOGLE_TOKEN_ENDPOINT, { method: "POST", body, headers: { "Content-Type": "application/x-www-form-urlencoded" } })) as {
     access_token: string;
     expires_in: number;
   };

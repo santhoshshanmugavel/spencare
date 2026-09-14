@@ -208,6 +208,75 @@ describe("runGmailSync — error handling", () => {
   });
 });
 
+describe("safeSyncErrorMessage — user-facing error message mapping", () => {
+  it("returns the reconnect-oriented message for a GmailApiError with isAuthError=true (token revoked or expired)", async () => {
+    const domainInfra = await import("@spencare/domain-infra");
+    const { safeSyncErrorMessage } = await import("./gmailSync.js");
+
+    const message = safeSyncErrorMessage(new domainInfra.GmailApiError("unauthorized", 401, true));
+    expect(message).toContain("Reconnect Gmail");
+    expect(message).toContain("revoked or expired");
+  });
+
+  it("returns a retry-oriented message for a GmailApiError with isAuthError=false (transient failure, 403, etc.)", async () => {
+    const domainInfra = await import("@spencare/domain-infra");
+    const { safeSyncErrorMessage } = await import("./gmailSync.js");
+
+    const message = safeSyncErrorMessage(new domainInfra.GmailApiError("forbidden", 403, false));
+    expect(message).not.toContain("Reconnect");
+    expect(message).toContain("shortly");
+  });
+
+  it("returns a generic message for a non-GmailApiError (unexpected failure)", async () => {
+    const { safeSyncErrorMessage } = await import("./gmailSync.js");
+
+    const message = safeSyncErrorMessage(new Error("network exploded"));
+    expect(message).toContain("went wrong");
+    expect(message).not.toContain("Reconnect");
+  });
+});
+
+describe("runGmailSync — auth vs. non-auth error distinction", () => {
+  it("shows 'couldn't be reached' NOT 'revoked' when a Gmail API call fails with 403 (isAuthError=false after fix)", async () => {
+    const domainInfra = await import("@spencare/domain-infra");
+    vi.mocked(domainInfra.getDecryptedConnectionForSync).mockResolvedValue(connection({ historyId: null }));
+    // 403 from Gmail API: isAuthError=false — means API not enabled / scope issue, not token revoked
+    vi.mocked(domainInfra.listGmailMessageIds).mockRejectedValue(new domainInfra.GmailApiError("forbidden", 403, false));
+
+    const { runGmailSync } = await import("./gmailSync.js");
+    const result = await runGmailSync(ctx());
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("shortly");
+      expect(result.error.message).not.toContain("revoked");
+      expect(result.error.message).not.toContain("Reconnect");
+    }
+  });
+
+  it("shows 'revoked or expired' when the refresh token itself is revoked (invalid_grant → isAuthError=true from token endpoint)", async () => {
+    const domainInfra = await import("@spencare/domain-infra");
+    vi.mocked(domainInfra.getDecryptedConnectionForSync).mockResolvedValue(connection({ historyId: null }));
+    // Use Once so the rejection doesn't leak into later tests (clearAllMocks resets call history
+    // but not implementation; Once mocks are consumed on use and fall back to the factory default).
+    vi.mocked(domainInfra.refreshGmailAccessToken).mockRejectedValueOnce(new domainInfra.GmailApiError("invalid_grant", 400, true));
+
+    const { runGmailSync } = await import("./gmailSync.js");
+    const result = await runGmailSync(ctx());
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("revoked or expired");
+      expect(result.error.message).toContain("Reconnect");
+    }
+    expect(vi.mocked(domainInfra.updateGmailSyncCursor)).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-1",
+      expect.objectContaining({ syncStatus: "error", lastSyncError: expect.stringContaining("revoked") }),
+    );
+  });
+});
+
 describe("runGmailSync — transfer-pair matching", () => {
   it("runs transfer-pair matching after processing and links any detected pair", async () => {
     const domainInfra = await import("@spencare/domain-infra");
