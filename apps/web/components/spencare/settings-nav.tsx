@@ -47,7 +47,7 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { key: "security", label: "Security", href: "/settings/security", icon: <ShieldCheck className="size-4" aria-hidden="true" /> },
   { key: "data-backup", label: "Data & Backup", href: "/settings/data-backup", icon: <DatabaseBackup className="size-4" aria-hidden="true" /> },
   { key: "mcp", label: "MCP", href: "/settings/mcp", icon: <Plug className="size-4" aria-hidden="true" /> },
-  { key: "gmail", label: "Gmail", href: "/settings/gmail", icon: <Mail className="size-4" aria-hidden="true" /> },
+  // Gmail nav entry hidden (feature temporarily not exposed in UI; backend intact)
   { key: "categories", label: "Categories", href: "/settings/categories", icon: <Tag className="size-4" aria-hidden="true" /> },
   { key: "notifications", label: "Notifications", href: "/settings/notifications", icon: <Bell className="size-4" aria-hidden="true" /> },
 ];

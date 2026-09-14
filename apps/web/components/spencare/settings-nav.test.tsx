@@ -8,7 +8,8 @@ describe("<SettingsNav>", () => {
   it("lists every genuinely implemented section, in the design's original order, with net-new sections appended", () => {
     render(<SettingsNav active="profile" />);
     const links = screen.getAllByRole("link").map((el) => el.textContent);
-    expect(links).toEqual(["Accounts", "Spensa's Brain", "Profile", "Privacy", "Security", "Data & Backup", "MCP", "Gmail", "Categories", "Notifications"]);
+    // Gmail is intentionally hidden from the nav (backend intact; re-add when re-enabled)
+    expect(links).toEqual(["Accounts", "Spensa's Brain", "Profile", "Privacy", "Security", "Data & Backup", "MCP", "Categories", "Notifications"]);
   });
 
   it("lists Notifications and links to its settings page", () => {
@@ -19,8 +20,8 @@ describe("<SettingsNav>", () => {
   });
 
   it("marks the active item with aria-current and the soft-highlight treatment, not the outer rail's solid-pill treatment", () => {
-    render(<SettingsNav active="gmail" />);
-    const active = screen.getByRole("link", { name: "Gmail" });
+    render(<SettingsNav active="mcp" />);
+    const active = screen.getByRole("link", { name: "MCP" });
     expect(active).toHaveAttribute("aria-current", "page");
     expect(active.className).toContain("bg-primary/10");
     expect(active.className).not.toContain("bg-primary ");
@@ -32,7 +33,8 @@ describe("<SettingsNav>", () => {
     expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/settings/privacy");
     expect(screen.getByRole("link", { name: "Data & Backup" })).toHaveAttribute("href", "/settings/data-backup");
     expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute("href", "/settings/mcp");
-    expect(screen.getByRole("link", { name: "Gmail" })).toHaveAttribute("href", "/settings/gmail");
+    // Gmail link intentionally absent from nav (hidden; backend intact)
+    expect(screen.queryByRole("link", { name: "Gmail" })).toBeNull();
     expect(screen.getByRole("link", { name: "Notifications" })).toHaveAttribute("href", "/settings/notifications");
   });
 
