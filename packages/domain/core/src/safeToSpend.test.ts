@@ -266,3 +266,116 @@ describe("calculateSafeToSpend — supplementary coverage beyond the mandatory 1
     expect(a.state).toBe(b.state);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Card payment reserve tests (Phase 22 of the production-hardening spec)
+// ---------------------------------------------------------------------------
+describe("calculateSafeToSpend — card payment reserve (Phase 22)", () => {
+  it("cardPaymentReservedTotal reduces Safe-to-Spend in balance_only state", () => {
+    const result = calculateSafeToSpend(
+      baseCtx({
+        cashBalances: [money(8_000_000)], // ₹80,000 HDFC
+        cardPaymentReservedTotal: money(2_000_000), // ₹20,000 ICICI outstanding
+      }),
+    );
+    expect(result.state).toBe("balance_only");
+    expect(result.amount.amountMinorUnits).toBe(6_000_000n); // ₹60,000
+    expect(result.cardPaymentReservedTotal.amountMinorUnits).toBe(2_000_000n);
+    expect(result.availableBalance.amountMinorUnits).toBe(8_000_000n);
+  });
+
+  it("card reserve and goal reserve both subtracted -- no double-counting", () => {
+    // HDFC ₹80k, ICICI outstanding ₹20k (->HDFC), goal reserved ₹10k
+    // Expected: 80k - 20k - 10k = 50k
+    const result = calculateSafeToSpend(
+      baseCtx({
+        cashBalances: [money(8_000_000)],
+        cardPaymentReservedTotal: money(2_000_000),
+        goalReservedTotal: money(1_000_000),
+        hasActiveGoals: true,
+      }),
+    );
+    expect(result.state).toBe("goals_only");
+    expect(result.amount.amountMinorUnits).toBe(5_000_000n); // ₹50,000
+    expect(result.goalReservedTotal.amountMinorUnits).toBe(1_000_000n);
+    expect(result.cardPaymentReservedTotal.amountMinorUnits).toBe(2_000_000n);
+  });
+
+  it("canonical regression: HDFC ₹80k + IDFC ₹20k, ICICI ₹20k->HDFC, Slice ₹10k->IDFC, goal ₹20k on HDFC", () => {
+    // Available cash: HDFC 80k + IDFC 20k = 100k
+    // Card reserves: HDFC 20k (ICICI) + IDFC 10k (Slice) = 30k total
+    // Goal reserve: 20k (on HDFC, but computed as global total here)
+    // Safe-to-Spend = 100k - 30k - 20k = 50k
+    const result = calculateSafeToSpend(
+      baseCtx({
+        cashBalances: [money(8_000_000), money(2_000_000)], // HDFC + IDFC
+        cardPaymentReservedTotal: money(3_000_000), // 20k + 10k
+        goalReservedTotal: money(2_000_000), // 20k goal
+        hasActiveGoals: true,
+      }),
+    );
+    expect(result.state).toBe("goals_only");
+    expect(result.amount.amountMinorUnits).toBe(5_000_000n); // ₹50,000
+    expect(result.availableBalance.amountMinorUnits).toBe(10_000_000n);
+  });
+
+  it("reserve exceeds cash -> result is negative (not clamped)", () => {
+    // HDFC ₹10k, ICICI outstanding ₹15k
+    // Safe-to-Spend = 10k - 15k = -5k
+    const result = calculateSafeToSpend(
+      baseCtx({
+        cashBalances: [money(1_000_000)],
+        cardPaymentReservedTotal: money(1_500_000),
+      }),
+    );
+    expect(result.state).toBe("balance_only");
+    expect(result.amount.amountMinorUnits).toBe(-500_000n); // -₹5,000
+  });
+
+  it("zero card reserve when cardPaymentReservedTotal is omitted (backward-compatible default)", () => {
+    const result = calculateSafeToSpend(
+      baseCtx({ cashBalances: [money(5_000_000)] }),
+    );
+    expect(result.cardPaymentReservedTotal.amountMinorUnits).toBe(0n);
+    expect(result.amount.amountMinorUnits).toBe(5_000_000n);
+  });
+
+  it("card reserve in budget_only state is deducted from cash before budget cap", () => {
+    // Cash ₹80k, card reserve ₹20k, budget remaining ₹50k
+    // cashAfterReserves = 80k - 20k = 60k
+    // Safe-to-Spend = MIN(50k budget, 60k cash) = 50k
+    const result = calculateSafeToSpend(
+      baseCtx({
+        cashBalances: [money(8_000_000)],
+        cardPaymentReservedTotal: money(2_000_000),
+        hasActiveBudget: true,
+        budget: { totalAmount: money(6_000_000), totalSpent: money(1_000_000) },
+      }),
+    );
+    expect(result.state).toBe("budget_only");
+    expect(result.amount.amountMinorUnits).toBe(5_000_000n); // ₹50,000 (budget constrains)
+  });
+
+  it("card reserve in budget_and_goals state applies correctly", () => {
+    // Cash ₹80k, card ₹20k, goal ₹10k -> cashAfterReserves = 50k
+    // Budget remaining = ₹40k -> MIN(40k, 50k) = 40k
+    const result = calculateSafeToSpend(
+      baseCtx({
+        cashBalances: [money(8_000_000)],
+        cardPaymentReservedTotal: money(2_000_000),
+        goalReservedTotal: money(1_000_000),
+        hasActiveGoals: true,
+        hasActiveBudget: true,
+        budget: { totalAmount: money(5_000_000), totalSpent: money(1_000_000) },
+      }),
+    );
+    expect(result.state).toBe("budget_and_goals");
+    expect(result.amount.amountMinorUnits).toBe(4_000_000n); // budget constrains
+  });
+
+  it("cardPaymentReservedTotal is always present on the result object", () => {
+    const result = calculateSafeToSpend(baseCtx({ cashBalances: [money(1_000_000)] }));
+    expect(result.cardPaymentReservedTotal).toBeDefined();
+    expect(typeof result.cardPaymentReservedTotal.amountMinorUnits).toBe("bigint");
+  });
+});

@@ -1,8 +1,9 @@
 "use client";
 
-import { MoreHorizontal, Landmark, Banknote, CreditCard, TrendingUp } from "lucide-react";
+import { MoreHorizontal, Landmark, Banknote, CreditCard, TrendingUp, AlertTriangle } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import type { AccountRow } from "@spencare/domain-application";
+import type { CardReserveDetail } from "@spencare/domain-infra";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress, type ProgressTone } from "@/components/ui/progress";
@@ -79,6 +80,8 @@ export function AccountCard({
   onDelete,
   cardReserveMinor = 0,
   goalReserveMinor = 0,
+  cardReserveDetails = [],
+  paymentAccountName = null,
 }: {
   account: AccountRow;
   masked: boolean;
@@ -88,6 +91,10 @@ export function AccountCard({
   cardReserveMinor?: number;
   /** Reserved for goals funded from this account. */
   goalReserveMinor?: number;
+  /** Per-card breakdown for bank/cash accounts (which cards contribute to the reserve). */
+  cardReserveDetails?: CardReserveDetail[];
+  /** For credit card accounts: the name of the bank account that pays this card. Null when not configured. */
+  paymentAccountName?: string | null;
 }) {
   const labels = actionLabels(account.type);
 
@@ -127,6 +134,8 @@ export function AccountCard({
           masked={masked}
           cardReserveMinor={cardReserveMinor}
           goalReserveMinor={goalReserveMinor}
+          cardReserveDetails={cardReserveDetails}
+          paymentAccountName={paymentAccountName}
         />
       </div>
     </Card>
@@ -138,11 +147,15 @@ function AccountCardBody({
   masked,
   cardReserveMinor,
   goalReserveMinor,
+  cardReserveDetails,
+  paymentAccountName,
 }: {
   account: AccountRow;
   masked: boolean;
   cardReserveMinor: number;
   goalReserveMinor: number;
+  cardReserveDetails: CardReserveDetail[];
+  paymentAccountName: string | null;
 }) {
   if (account.type === "credit_card") {
     const limit = account.credit_limit_minor ?? 0;
@@ -165,6 +178,15 @@ function AccountCardBody({
           <Money value={usedMoney} masked={masked} size="body" className="inline" /> used ·{" "}
           <Money value={limitMoney} masked={masked} size="body" className="inline" /> total limit
         </p>
+        {paymentAccountName ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Paid from <span className="font-medium text-foreground">{paymentAccountName}</span>
+          </p>
+        ) : used > 0 ? (
+          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+            No payment account set. Configure one to reserve this balance from your bank.
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -181,7 +203,9 @@ function AccountCardBody({
 
   const balance = account.balance_minor;
   const reservedTotal = goalReserveMinor + cardReserveMinor;
-  const available = Math.max(0, balance - reservedTotal);
+  const availableRaw = balance - reservedTotal;
+  const isOverReserved = availableRaw < 0;
+  const available = Math.max(0, availableRaw);
   const value = DomainMoney.fromMinorUnits(BigInt(balance), account.currency as never);
 
   const hasAllocation = balance > 0 && reservedTotal > 0;
@@ -236,6 +260,27 @@ function AccountCardBody({
               </span>
             ) : null}
           </div>
+          {cardReserveDetails.length > 0 ? (
+            <div className="mt-1 space-y-0.5">
+              {cardReserveDetails.map((detail) => (
+                <div key={detail.creditCardAccountId} className="flex items-center justify-between text-[10px] text-muted-foreground pl-2.5">
+                  <span className="truncate">{detail.creditCardName}</span>
+                  <Money
+                    value={DomainMoney.fromMinorUnits(BigInt(detail.reservedMinor), account.currency as never)}
+                    masked={masked}
+                    size="body"
+                    className="inline shrink-0 ml-2"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {isOverReserved ? (
+        <div className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>Your card balance reserve exceeds the cash available in this account.</span>
         </div>
       ) : null}
     </div>

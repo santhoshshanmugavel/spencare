@@ -35,6 +35,14 @@ export default async function AccountsSettingsPage() {
   const cardReserveState = deriveCardPaymentReserveState(accounts, paymentSources);
   const cardReservePerAccount = cardReserveState.perPaymentAccount;
 
+  // For credit card display: which bank account pays for which credit card.
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+  const paymentAccountNameByCardId: Record<string, string> = {};
+  for (const src of paymentSources) {
+    const bank = accountById.get(src.payment_account_id);
+    if (bank) paymentAccountNameByCardId[src.credit_card_account_id] = bank.name;
+  }
+
   // Per bank/cash account: sum of saved_amount_minor for goals funded from that account.
   const goalReservePerAccount: Record<string, number> = {};
   for (const goal of goals) {
@@ -63,6 +71,8 @@ export default async function AccountsSettingsPage() {
           masked={profile?.privacy_mode_enabled ?? false}
           cardReservePerAccount={cardReservePerAccount}
           goalReservePerAccount={goalReservePerAccount}
+          cardReserveDetails={cardReserveState.perCard}
+          paymentAccountNameByCardId={paymentAccountNameByCardId}
           paymentSources={paymentSources}
         />
       </SettingsShell>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Landmark, Wallet, CreditCard, TrendingUp } from "lucide-react";
 import type { AccountRow, CreditCardPaymentSourceRow } from "@spencare/domain-application";
+import type { CardReserveDetail } from "@spencare/domain-infra";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AccountCard } from "@/components/spencare/account-card";
@@ -44,12 +45,18 @@ export function AccountList({
   masked,
   cardReservePerAccount = {},
   goalReservePerAccount = {},
+  cardReserveDetails = [],
+  paymentAccountNameByCardId = {},
   paymentSources = [],
 }: {
   initialAccounts: AccountRow[];
   masked: boolean;
   cardReservePerAccount?: Record<string, number>;
   goalReservePerAccount?: Record<string, number>;
+  /** Per-card breakdown used to show which cards contribute to each bank's reserve. */
+  cardReserveDetails?: CardReserveDetail[];
+  /** Maps credit_card_account_id -> payment bank name, for display on credit card tiles. */
+  paymentAccountNameByCardId?: Record<string, string>;
   paymentSources?: CreditCardPaymentSourceRow[];
 }) {
   const router = useRouter();
@@ -112,6 +119,8 @@ export function AccountList({
                 onDelete={() => setArchiving(account)}
                 cardReserveMinor={cardReservePerAccount[account.id] ?? 0}
                 goalReserveMinor={goalReservePerAccount[account.id] ?? 0}
+                cardReserveDetails={cardReserveDetails.filter((d) => d.paymentAccountId === account.id)}
+                paymentAccountName={paymentAccountNameByCardId[account.id] ?? null}
               />
             ))}
           </div>
