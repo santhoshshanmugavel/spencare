@@ -29,6 +29,7 @@ import { SpensaChat } from "./spensa-chat";
  */
 export default async function SpensaConversationPage(props: PageProps<"/spensa/[conversationId]">) {
   const { conversationId } = await props.params;
+  const searchParams = await props.searchParams;
 
   const supabase = await createServerSupabaseClient();
   const {
@@ -53,6 +54,13 @@ export default async function SpensaConversationPage(props: PageProps<"/spensa/[
     getProfile(ctx),
   ]);
 
+  // When navigating from Goals → "Create with Spensa AI", pass a starter
+  // message so Spensa opens with goal-creation context immediately.
+  const intentParam = (searchParams as Record<string, string | undefined>)?.intent;
+  const starterMessage =
+    isNew && intentParam === "create_goal"
+      ? "I want to create a new savings goal."
+      : null;
 
   const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null = _displayProfile?.avatarSignedUrl ?? (user.user_metadata?.avatar_url as string | null ?? null);
@@ -74,6 +82,7 @@ export default async function SpensaConversationPage(props: PageProps<"/spensa/[
         accounts={accounts}
         categories={categories}
         goals={goals}
+        starterMessage={starterMessage}
       />
     </AppShell>
   );

@@ -52,6 +52,7 @@ export function SpensaChat({
   accounts,
   categories,
   goals,
+  starterMessage,
 }: {
   conversationId: string | null;
   initialMessages: AiMessageRow[];
@@ -59,6 +60,8 @@ export function SpensaChat({
   accounts: AccountRow[];
   categories: CategoryRow[];
   goals: GoalRow[];
+  /** When set on a new conversation, auto-sent on mount to seed Spensa with context (e.g. navigating from Goals → Create with Spensa AI). */
+  starterMessage?: string | null;
 }) {
   void accounts; void categories; void goals;
 
@@ -74,11 +77,22 @@ export function SpensaChat({
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const starterSentRef = useRef(false);
 
   // Auto-scroll to bottom whenever messages or streaming text change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, pendingToolName]);
+
+  // Auto-send the starter message once on mount (used when navigating from
+  // Goals → Create with Spensa AI so the conversation opens with context).
+  useEffect(() => {
+    if (starterMessage && !starterSentRef.current && messages.length === 0) {
+      starterSentRef.current = true;
+      void handleSend(starterMessage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-resize textarea
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
