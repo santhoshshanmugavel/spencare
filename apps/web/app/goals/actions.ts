@@ -16,9 +16,22 @@ import {
   updateGoal,
   updateGoalImage,
   withdrawContribution,
+  createGoalContributionPlan,
+  updateGoalContributionPlan,
+  pauseGoalContributionPlan,
+  resumeGoalContributionPlan,
+  deleteGoalContributionPlan,
+  getGoalContributionPlan,
   type AuthContext,
 } from "@spencare/domain-application";
-import type { AddContributionInput, CreateGoalInput, UpdateGoalInput, WithdrawContributionInput } from "@spencare/validation";
+import type {
+  AddContributionInput,
+  CreateGoalInput,
+  UpdateGoalInput,
+  WithdrawContributionInput,
+  CreateGoalContributionPlanInput,
+  UpdateGoalContributionPlanInput,
+} from "@spencare/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 
@@ -133,6 +146,48 @@ export async function updateGoalImageAction(goalId: string, formData: FormData) 
 export async function removeGoalImageAction(goalId: string) {
   const ctx = await requireAuthContext();
   const result = await removeGoalImage.execute(ctx, { goalId });
+  if (result.ok) revalidatePath("/goals");
+  return result;
+}
+
+// ---- Goal Contribution Plan actions ----
+
+export async function getGoalContributionPlanAction(goalId: string) {
+  const ctx = await requireAuthContext();
+  return getGoalContributionPlan(ctx, goalId);
+}
+
+export async function createGoalContributionPlanAction(input: CreateGoalContributionPlanInput) {
+  const ctx = await requireAuthContext();
+  const result = await createGoalContributionPlan.execute(ctx, input);
+  if (result.ok) revalidatePath("/goals");
+  return result;
+}
+
+export async function updateGoalContributionPlanAction(planId: string, input: UpdateGoalContributionPlanInput) {
+  const ctx = await requireAuthContext();
+  const result = await updateGoalContributionPlan.execute(ctx, { planId, ...input });
+  if (result.ok) revalidatePath("/goals");
+  return result;
+}
+
+export async function pauseGoalContributionPlanAction(planId: string) {
+  const ctx = await requireAuthContext();
+  const result = await pauseGoalContributionPlan.execute(ctx, { planId });
+  if (result.ok) revalidatePath("/goals");
+  return result;
+}
+
+export async function resumeGoalContributionPlanAction(planId: string) {
+  const ctx = await requireAuthContext();
+  const result = await resumeGoalContributionPlan.execute(ctx, { planId });
+  if (result.ok) revalidatePath("/goals");
+  return result;
+}
+
+export async function deleteGoalContributionPlanAction(planId: string) {
+  const ctx = await requireAuthContext();
+  const result = await deleteGoalContributionPlan.execute(ctx, { planId });
   if (result.ok) revalidatePath("/goals");
   return result;
 }

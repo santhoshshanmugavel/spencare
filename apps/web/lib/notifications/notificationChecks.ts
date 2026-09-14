@@ -5,7 +5,7 @@
  */
 
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
-import { checkBudgetThreshold, checkBalanceThreshold, checkBillReminder } from "./eventRules";
+import { checkBudgetThreshold, checkBalanceThreshold, checkBillReminder, checkGoalPlanReminder } from "./eventRules";
 
 interface CheckOutcome {
   userId: string;
@@ -177,6 +177,48 @@ async function runChecksForUser(
       currency: "INR",
     });
     checksRun++;
+  }
+
+  // ---- Goal contribution plan reminders ----
+  const threeDaysAhead = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
+  const sevenDaysAgoIso = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: plans } = await serviceRoleSupabase
+    .from("goal_contribution_plans")
+    .select("id, goal_id, amount_minor, frequency, next_due_at")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .gte("next_due_at", sevenDaysAgoIso)
+    .lte("next_due_at", threeDaysAhead);
+
+  if ((plans ?? []).length > 0) {
+    const goalIds = [...new Set((plans ?? []).map((p) => p.goal_id))];
+    const { data: goals } = await serviceRoleSupabase
+      .from("goals")
+      .select("id, name")
+      .in("id", goalIds)
+      .is("deleted_at", null);
+    const goalNameMap: Record<string, string> = {};
+    for (const g of goals ?? []) {
+      goalNameMap[g.id] = g.name;
+    }
+
+    for (const plan of plans ?? []) {
+      if (!plan.next_due_at) continue;
+      const goalName = goalNameMap[plan.goal_id] ?? "Goal";
+      await checkGoalPlanReminder({
+        serviceRoleSupabase,
+        userId,
+        userEmail,
+        planId: plan.id,
+        goalId: plan.goal_id,
+        goalName,
+        amountMinor: plan.amount_minor,
+        frequency: plan.frequency,
+        nextDueAtIso: plan.next_due_at,
+      });
+      checksRun++;
+    }
   }
 
   return checksRun;

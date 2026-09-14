@@ -23,6 +23,7 @@ import {
   getAccount,
   getAccountBalance,
   getGoal,
+  getGoalContributionPlan,
   getCashFlowByCategory,
   compareCashFlowPeriods,
   getCashFlowTrend,
@@ -295,7 +296,7 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
     { description: "Get full details and progress for a single savings goal.", inputSchema: { goalId: z.string().uuid() } },
     async (rawInput: { goalId: string }) =>
       runScopedTool(ctx, "getGoalDetail", "read", async () => {
-        const [goal, progress, privacyModeEnabled] = await Promise.all([getGoal(ctx, rawInput.goalId), calculateProgress(ctx, rawInput.goalId), isPrivacyModeEnabled(ctx)]);
+        const [goal, progress, plan, privacyModeEnabled] = await Promise.all([getGoal(ctx, rawInput.goalId), calculateProgress(ctx, rawInput.goalId), getGoalContributionPlan(ctx, rawInput.goalId), isPrivacyModeEnabled(ctx)]);
         if (!goal) return null;
         const redacted = redactGoalSummaries([{ id: goal.id, name: goal.name, targetAmountMinor: goal.target_amount_minor, savedAmountMinor: goal.saved_amount_minor, currency: CURRENCY }], privacyModeEnabled);
         return {
@@ -305,6 +306,16 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
           fundingAccountId: goal.funding_account_id,
           percentSaved: progress?.percentSaved ?? null,
           monthsLeft: progress?.monthsLeft ?? null,
+          contributionPlan: plan
+            ? {
+                id: plan.id,
+                frequency: plan.frequency,
+                amountMinor: plan.amount_minor,
+                planStatus: plan.status,
+                nextDueAt: plan.next_due_at,
+                anchorDay: plan.anchor_day,
+              }
+            : null,
         };
       }),
   );

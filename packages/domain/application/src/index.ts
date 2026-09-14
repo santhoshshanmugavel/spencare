@@ -80,6 +80,16 @@ export {
 } from "./commands/goalImage.js";
 
 export {
+  createGoalContributionPlan,
+  updateGoalContributionPlan,
+  pauseGoalContributionPlan,
+  resumeGoalContributionPlan,
+  deleteGoalContributionPlan,
+  type UpdateGoalContributionPlanCommandInput,
+  type PlanIdInput,
+} from "./commands/goalContributionPlans.js";
+
+export {
   registerOAuthClient,
   createAuthorizationCode,
   exchangeAuthorizationCode,
@@ -158,6 +168,7 @@ export {
   resolveGoalImageUrl,
   resolveGoalImageUrls,
 } from "./queries/goals.js";
+export { getGoalContributionPlan } from "./queries/goalContributionPlans.js";
 export { getBill, listBillPredictions } from "./queries/bills.js";
 export {
   getCashFlowOverview,
@@ -178,6 +189,7 @@ export type {
   TransferResult,
   BudgetRow,
   GoalRow,
+  GoalContributionPlanRow,
   ListGoalsOptions,
   BillDefinitionRow,
   BillPredictionRow,

@@ -8,6 +8,7 @@ export * from "./accountsRepo.js";
 export * from "./transactionsRepo.js";
 export * from "./budgetsRepo.js";
 export * from "./goalsRepo.js";
+export * from "./goalContributionPlansRepo.js";
 export * from "./goalImageStorageRepo.js";
 export * from "./billsRepo.js";
 export * from "./importsRepo.js";

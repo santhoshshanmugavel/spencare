@@ -10,6 +10,7 @@ import {
   getUpcomingBills,
   getCashFlowOverview,
   toAiAccountSummaryInput,
+  getGoalContributionPlan,
   type AuthContext,
 } from "@spencare/domain-application";
 import { lastDayOfMonth, redactFinancialSnapshot, redactBudgetSummaries, redactGoalSummaries, redactBillSummaries, redactCashFlowSummary } from "@spencare/domain-core";
@@ -158,23 +159,38 @@ const getBudgetStatusTool: ReadToolHandler = {
 };
 
 const getGoalProgressTool: ReadToolHandler = {
-  definition: { name: "getGoalProgress", description: "Get progress toward each of the user's active savings goals.", inputSchema: { type: "object", properties: {} } },
+  definition: { name: "getGoalProgress", description: "Get progress toward each of the user's active savings goals, including any contribution plan (reminder schedule) set up for each goal.", inputSchema: { type: "object", properties: {} } },
   execute: async ({ ctx, privacyModeEnabled }) => {
     const goals = await listGoals(ctx);
     const withProgress = await Promise.all(
-      goals.map(async (g) => ({
-        id: g.id,
-        name: g.name,
-        status: g.status,
-        progress: await calculateProgress(ctx, g.id),
-        targetAmountMinor: g.target_amount_minor,
-        savedAmountMinor: g.saved_amount_minor,
-      })),
+      goals.map(async (g) => {
+        const [progress, plan] = await Promise.all([
+          calculateProgress(ctx, g.id),
+          getGoalContributionPlan(ctx, g.id),
+        ]);
+        return {
+          id: g.id,
+          name: g.name,
+          status: g.status,
+          progress,
+          targetAmountMinor: g.target_amount_minor,
+          savedAmountMinor: g.saved_amount_minor,
+          contributionPlan: plan
+            ? {
+                frequency: plan.frequency,
+                amountMinor: plan.amount_minor,
+                planStatus: plan.status,
+                nextDueAt: plan.next_due_at,
+              }
+            : null,
+        };
+      }),
     );
     return redactGoalSummaries(withProgress.map((g) => ({ id: g.id, name: g.name, targetAmountMinor: g.targetAmountMinor, savedAmountMinor: g.savedAmountMinor, currency: CURRENCY })), privacyModeEnabled).map((redacted, i) => ({
       ...redacted,
       status: withProgress[i]!.status,
       percentSaved: withProgress[i]!.progress?.percentSaved ?? null,
+      contributionPlan: withProgress[i]!.contributionPlan,
     }));
   },
 };

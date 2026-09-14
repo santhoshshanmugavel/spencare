@@ -23,6 +23,7 @@ export type NotificationEventType =
   | "BALANCE_LOW" | "BALANCE_ZERO" | "BALANCE_NEGATIVE"
   | "CREDIT_50" | "CREDIT_80" | "CREDIT_90" | "CREDIT_100"
   | "GOAL_CONTRIBUTION" | "GOAL_25" | "GOAL_50" | "GOAL_75" | "GOAL_90" | "GOAL_COMPLETED"
+  | "GOAL_PLAN_UPCOMING" | "GOAL_PLAN_DUE" | "GOAL_PLAN_MISSED"
   | "BILL_7_DAYS" | "BILL_3_DAYS" | "BILL_1_DAY" | "BILL_DUE_TODAY" | "BILL_OVERDUE" | "BILL_AMOUNT_CHANGED"
   | "TRANSACTION_LARGE" | "TRANSACTION_UNUSUAL"
   | "SECURITY_PASSWORD_CHANGED" | "SECURITY_NEW_LOGIN" | "SECURITY_2FA_CHANGED"
@@ -209,6 +210,33 @@ export function composeNotificationMessage(
       return {
         title: `${goalName} complete`,
         body: `You made it. ${goalName} has reached its ${fmt(targetMinor, currency)} target.`,
+      };
+    }
+
+    // ---- Goal contribution plan reminders ----
+    case "GOAL_PLAN_UPCOMING": {
+      const { goalName, amountMinor, frequencyLabel } = c as {
+        goalName: string; amountMinor: number; frequencyLabel: string;
+      };
+      return {
+        title: `${goalName} contribution coming up`,
+        body: `Your ${frequencyLabel.toLowerCase()} ${fmt(amountMinor, currency)} contribution for ${goalName} is due in 3 days. Head to Goals to record it.`,
+      };
+    }
+    case "GOAL_PLAN_DUE": {
+      const { goalName, amountMinor } = c as { goalName: string; amountMinor: number };
+      return {
+        title: `Time to save for ${goalName}`,
+        body: `Today's the day for your ${fmt(amountMinor, currency)} contribution to ${goalName}. Record it in Goals when you're ready.`,
+      };
+    }
+    case "GOAL_PLAN_MISSED": {
+      const { goalName, amountMinor, daysOverdue } = c as {
+        goalName: string; amountMinor: number; daysOverdue: number;
+      };
+      return {
+        title: `${goalName} contribution is overdue`,
+        body: `Your planned ${fmt(amountMinor, currency)} contribution for ${goalName} is ${daysOverdue} day${daysOverdue === 1 ? "" : "s"} overdue. You can still record it whenever you're ready.`,
       };
     }
 

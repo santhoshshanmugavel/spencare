@@ -63,6 +63,15 @@ export {
 } from "./budgets.js";
 
 export {
+  GOAL_CONTRIBUTION_FREQUENCIES,
+  createGoalContributionPlanSchema,
+  updateGoalContributionPlanSchema,
+  type GoalContributionFrequencyInput,
+  type CreateGoalContributionPlanInput,
+  type UpdateGoalContributionPlanInput,
+} from "./goalContributionPlans.js";
+
+export {
   createGoalSchema,
   updateGoalSchema,
   addContributionSchema,

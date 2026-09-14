@@ -45,6 +45,16 @@ export {
 export { calculateGoalProgress, type GoalProgress, calculateGoalPaceStatus, type GoalPaceStatus } from "./goals.js";
 
 export {
+  calculateNextOccurrence,
+  suggestContributionAmount,
+  projectCompletionDate,
+  FREQUENCY_LABELS,
+  type GoalContributionFrequency,
+  type GoalPlanStatus,
+  type GoalContributionPlanRow,
+} from "./goalContributionPlan.js";
+
+export {
   ACCOUNT_CAPABILITIES,
   ACCOUNT_TYPE_LABELS,
   hasCapability,

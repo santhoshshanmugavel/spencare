@@ -28,6 +28,8 @@ import {
   proposeAcceptGmailCandidateSchema,
   proposeRejectGmailCandidateSchema,
   proposeRevokeMcpSessionSchema,
+  createGoalContributionPlanSchema,
+  updateGoalContributionPlanSchema,
   confirmCommandSchema,
   cancelCommandSchema,
 } from "@spencare/validation";
@@ -46,6 +48,11 @@ import {
   confirmCommand,
   cancelPendingCommand,
   describeAmountForProvider,
+  createGoalContributionPlan,
+  updateGoalContributionPlan,
+  pauseGoalContributionPlan,
+  resumeGoalContributionPlan,
+  deleteGoalContributionPlan,
   type McpAuthContext,
   type ProposalPreviewField,
 } from "@spencare/domain-application";
@@ -657,6 +664,98 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
             { label: "Created", value: session.createdAt },
           ],
         });
+      }),
+  );
+
+  // ── Goal Contribution Plan tools (planning only, no money movement) ──
+
+  server.registerTool(
+    "proposeCreateGoalContributionPlan",
+    {
+      description:
+        "Create a contribution plan (reminder schedule) for a savings goal. This is a PLANNING tool only — it does NOT move money or make automatic transfers. It sets up a reminder schedule so the user is notified when it is time to make a contribution. The user must still record the actual contribution manually via proposeGoalContribution.",
+      inputSchema: {
+        goalId: z.string().uuid(),
+        frequency: z.enum(["daily", "weekly", "monthly", "quarterly", "half_yearly", "yearly"]),
+        amountMinor: z.number().int().positive(),
+        anchorDay: z.number().int().min(1).max(31).optional(),
+        timezone: z.string().optional(),
+        startDate: z.string().optional(),
+      },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeCreateGoalContributionPlan", "write", async () => {
+        const input = createGoalContributionPlanSchema.parse(rawInput);
+        const result = await createGoalContributionPlan.execute(ctx, input);
+        if (!result.ok) throw new Error(result.error.message);
+        return { plan: result.value, note: "Contribution plan created. This is a reminder schedule only — no money has moved." };
+      }),
+  );
+
+  server.registerTool(
+    "proposeUpdateGoalContributionPlan",
+    {
+      description: "Update an existing contribution plan (reminder schedule). This only changes the reminder schedule — no money moves automatically.",
+      inputSchema: {
+        planId: z.string().uuid(),
+        frequency: z.enum(["daily", "weekly", "monthly", "quarterly", "half_yearly", "yearly"]).optional(),
+        amountMinor: z.number().int().positive().optional(),
+        anchorDay: z.number().int().min(1).max(31).optional(),
+        timezone: z.string().optional(),
+      },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeUpdateGoalContributionPlan", "write", async () => {
+        const { planId, ...rest } = rawInput as { planId: string; [key: string]: unknown };
+        const input = updateGoalContributionPlanSchema.parse(rest);
+        const result = await updateGoalContributionPlan.execute(ctx, { planId, ...input });
+        if (!result.ok) throw new Error(result.error.message);
+        return { plan: result.value, note: "Contribution plan updated. This is a reminder schedule only — no money has moved." };
+      }),
+  );
+
+  server.registerTool(
+    "proposePauseGoalContributionPlan",
+    {
+      description: "Pause a contribution plan so reminders stop temporarily. The plan can be resumed later. No money is affected.",
+      inputSchema: { planId: z.string().uuid() },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposePauseGoalContributionPlan", "write", async () => {
+        const { planId } = rawInput as { planId: string };
+        const result = await pauseGoalContributionPlan.execute(ctx, { planId });
+        if (!result.ok) throw new Error(result.error.message);
+        return { plan: result.value, note: "Plan paused. Reminders are off until the plan is resumed." };
+      }),
+  );
+
+  server.registerTool(
+    "proposeResumeGoalContributionPlan",
+    {
+      description: "Resume a paused contribution plan so reminders start again. No money is affected.",
+      inputSchema: { planId: z.string().uuid() },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeResumeGoalContributionPlan", "write", async () => {
+        const { planId } = rawInput as { planId: string };
+        const result = await resumeGoalContributionPlan.execute(ctx, { planId });
+        if (!result.ok) throw new Error(result.error.message);
+        return { plan: result.value, note: "Plan resumed. Reminders are active again." };
+      }),
+  );
+
+  server.registerTool(
+    "proposeDeleteGoalContributionPlan",
+    {
+      description: "Delete a contribution plan entirely. This removes the reminder schedule but does NOT affect the goal's saved balance or any past contributions.",
+      inputSchema: { planId: z.string().uuid() },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeDeleteGoalContributionPlan", "write", async () => {
+        const { planId } = rawInput as { planId: string };
+        const result = await deleteGoalContributionPlan.execute(ctx, { planId });
+        if (!result.ok) throw new Error(result.error.message);
+        return { deleted: true, note: "Contribution plan removed. The goal's saved balance is unchanged." };
       }),
   );
 

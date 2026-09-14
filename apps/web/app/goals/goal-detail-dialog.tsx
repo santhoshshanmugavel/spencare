@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, MoreHorizontal, Sparkles } from "lucide-react";
-import { Money as DomainMoney, calculateGoalPaceStatus, calculateGoalProgress } from "@spencare/domain-core";
-import type { AccountRow, GoalRow, TransactionRow } from "@spencare/domain-application";
+import { ArrowDownLeft, ArrowUpRight, CalendarClock, MoreHorizontal, Pause, Play, Sparkles } from "lucide-react";
+import { Money as DomainMoney, calculateGoalPaceStatus, calculateGoalProgress, FREQUENCY_LABELS } from "@spencare/domain-core";
+import type { AccountRow, GoalContributionPlanRow, GoalRow, TransactionRow } from "@spencare/domain-application";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
   DropdownMenu,
@@ -18,7 +19,14 @@ import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { GoalImageUploader } from "@/components/spencare/goal-image-uploader";
 import { getGoalInsight } from "@/lib/goal-insight";
-import { listContributionsAction } from "./actions";
+import { toastConfirmed, toastError } from "@/lib/toast";
+import {
+  listContributionsAction,
+  getGoalContributionPlanAction,
+  pauseGoalContributionPlanAction,
+  resumeGoalContributionPlanAction,
+} from "./actions";
+import { ContributionPlanSheet } from "./contribution-plan-sheet";
 
 /** Whole calendar months between two ISO timestamps, floored at 0 -- same convention as `GoalCard`'s own `monthsBetween`. */
 function monthsBetween(startIso: string, endIso: string): number {
@@ -84,6 +92,8 @@ export function GoalDetailDialog({
   onDelete: () => void;
 }) {
   const [contributions, setContributions] = useState<TransactionRow[] | null>(null);
+  const [plan, setPlan] = useState<GoalContributionPlanRow | null | undefined>(undefined);
+  const [planSheetOpen, setPlanSheetOpen] = useState(false);
   const currency = fundingAccount?.currency ?? "INR";
   const progress = calculateGoalProgress(goal.target_amount_minor, goal.saved_amount_minor, goal.target_date);
   const isReached = progress.isReached;
@@ -99,10 +109,33 @@ export function GoalDetailDialog({
     listContributionsAction(goal.id).then((rows) => {
       if (!cancelled) setContributions(rows);
     });
+    getGoalContributionPlanAction(goal.id).then((p) => {
+      if (!cancelled) setPlan(p);
+    });
     return () => {
       cancelled = true;
     };
   }, [open, goal.id]);
+
+  async function handlePausePlan() {
+    if (!plan) return;
+    const result = await pauseGoalContributionPlanAction(plan.id);
+    if (!result.ok) { toastError(result.error.message); return; }
+    setPlan(result.value);
+    toastConfirmed("Plan paused. Reminders are off until you resume.");
+  }
+
+  async function handleResumePlan() {
+    if (!plan) return;
+    const result = await resumeGoalContributionPlanAction(plan.id);
+    if (!result.ok) { toastError(result.error.message); return; }
+    setPlan(result.value);
+    toastConfirmed("Plan resumed. Reminders are back on.");
+  }
+
+  function refreshPlan() {
+    getGoalContributionPlanAction(goal.id).then(setPlan);
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -233,6 +266,88 @@ export function GoalDetailDialog({
               </Card>
             )}
 
+            {/* Contribution Plan section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-muted-foreground">Contribution plan</h3>
+                {!isReached ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto py-0 text-xs text-primary"
+                    onClick={() => setPlanSheetOpen(true)}
+                  >
+                    {plan ? "Edit" : "Set up"}
+                  </Button>
+                ) : null}
+              </div>
+              {plan === undefined ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : plan === null ? (
+                <p className="text-sm text-muted-foreground">
+                  No plan yet.{" "}
+                  {!isReached ? (
+                    <button
+                      type="button"
+                      className="text-primary underline"
+                      onClick={() => setPlanSheetOpen(true)}
+                    >
+                      Set up a reminder schedule.
+                    </button>
+                  ) : null}
+                </p>
+              ) : (
+                <Card className="border-border/60">
+                  <CardContent className="space-y-2 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CalendarClock className="size-4 text-muted-foreground" aria-hidden="true" />
+                        <span className="text-sm font-medium">
+                          <Money
+                            value={DomainMoney.fromNumber(plan.amount_minor, currency as never)}
+                            masked={masked}
+                            size="body"
+                            className="inline"
+                          />{" "}
+                          {FREQUENCY_LABELS[plan.frequency]}
+                        </span>
+                      </div>
+                      <Badge variant={plan.status === "paused" ? "secondary" : "default"} className="text-xs">
+                        {plan.status === "paused" ? "Paused" : "Active"}
+                      </Badge>
+                    </div>
+                    {plan.next_due_at ? (
+                      <p className="text-xs text-muted-foreground">
+                        Next reminder:{" "}
+                        {new Date(plan.next_due_at).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      Reminder only — you record contributions when you're ready.
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      {plan.status === "active" ? (
+                        <Button type="button" size="sm" variant="outline" onClick={handlePausePlan} className="gap-1.5 text-xs">
+                          <Pause className="size-3" aria-hidden="true" />
+                          Pause
+                        </Button>
+                      ) : (
+                        <Button type="button" size="sm" variant="outline" onClick={handleResumePlan} className="gap-1.5 text-xs">
+                          <Play className="size-3" aria-hidden="true" />
+                          Resume
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
             <div className="space-y-1">
             <h3 className="text-sm font-medium text-muted-foreground">Contributions</h3>
             {contributions === null ? (
@@ -273,6 +388,18 @@ export function GoalDetailDialog({
 
         <DialogFooter />
       </DialogContent>
+
+      <ContributionPlanSheet
+        goalId={goal.id}
+        goalName={goal.name}
+        targetAmountMinor={goal.target_amount_minor}
+        savedAmountMinor={goal.saved_amount_minor}
+        targetDateIso={goal.target_date}
+        existingPlan={plan ?? null}
+        open={planSheetOpen}
+        onOpenChange={setPlanSheetOpen}
+        onSaved={refreshPlan}
+      />
     </Dialog>
   );
 }

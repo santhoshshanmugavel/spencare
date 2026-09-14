@@ -17,6 +17,7 @@ import {
   upsertNotificationAlertState,
 } from "@spencare/domain-infra";
 import { deliverNotification, type DeliverNotificationInput } from "./engine";
+import { FREQUENCY_LABELS } from "@spencare/domain-core";
 
 interface UserTarget {
   userId: string;
@@ -161,6 +162,58 @@ interface BillRuleInput extends UserTarget {
   dueDateIso: string;
   expectedAmountMinor: number | null;
   currency?: string;
+}
+
+interface GoalPlanRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  planId: string;
+  goalId: string;
+  goalName: string;
+  amountMinor: number;
+  frequency: string;
+  nextDueAtIso: string;
+}
+
+export async function checkGoalPlanReminder(input: GoalPlanRuleInput): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, planId, goalId, goalName, amountMinor, frequency, nextDueAtIso } = input;
+  const now = new Date();
+  const dueDate = new Date(nextDueAtIso);
+  const diffMs = dueDate.getTime() - now.getTime();
+  const daysUntilDue = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  const frequencyLabel = FREQUENCY_LABELS[frequency as keyof typeof FREQUENCY_LABELS] ?? frequency;
+  const dueDateIso = dueDate.toISOString().slice(0, 10);
+
+  let eventType: DeliverNotificationInput["eventType"] | null = null;
+  let dedupeKey = "";
+  let extraCtx: Record<string, unknown> = {};
+
+  if (daysUntilDue === 3) {
+    eventType = "GOAL_PLAN_UPCOMING";
+    dedupeKey = `goal_plan_upcoming_${planId}_${dueDateIso}`;
+    extraCtx = { frequencyLabel };
+  } else if (daysUntilDue === 0 || daysUntilDue === 1) {
+    eventType = "GOAL_PLAN_DUE";
+    dedupeKey = `goal_plan_due_${planId}_${dueDateIso}`;
+  } else if (daysUntilDue < 0 && daysUntilDue >= -7) {
+    eventType = "GOAL_PLAN_MISSED";
+    dedupeKey = `goal_plan_missed_${planId}_${dueDateIso}`;
+    extraCtx = { daysOverdue: Math.abs(daysUntilDue) };
+  }
+
+  if (!eventType) return;
+
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType,
+    financialContext: { goalName, amountMinor, ...extraCtx },
+    category: "goal",
+    severity: daysUntilDue < 0 ? "warning" : "info",
+    entityType: "goal",
+    entityId: goalId,
+    actionUrl: "/goals",
+    dedupeKey,
+  });
 }
 
 export async function checkBillReminder(input: BillRuleInput): Promise<void> {
