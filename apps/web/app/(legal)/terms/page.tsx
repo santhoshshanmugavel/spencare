@@ -89,8 +89,8 @@ export default function TermsPage() {
           </p>
           <p>
             Please notify us promptly at{" "}
-            <a href="mailto:hello@santhoshdesign.com" className="text-primary hover:underline">
-              hello@santhoshdesign.com
+            <a href="mailto:hey.me.santhosh@gmail.com" className="text-primary hover:underline">
+              hey.me.santhosh@gmail.com
             </a>{" "}
             if you believe your account has been compromised.
           </p>
@@ -366,8 +366,8 @@ export default function TermsPage() {
           </p>
           <p>
             In the meantime, we encourage you to contact us directly at{" "}
-            <a href="mailto:hello@santhoshdesign.com" className="text-primary hover:underline">
-              hello@santhoshdesign.com
+            <a href="mailto:hey.me.santhosh@gmail.com" className="text-primary hover:underline">
+              hey.me.santhosh@gmail.com
             </a>{" "}
             to resolve any concern before pursuing formal channels.
           </p>
@@ -377,8 +377,8 @@ export default function TermsPage() {
         <Section title="22. Contact">
           <p>
             If you have questions about these Terms or Spencare&apos;s policies, contact us at{" "}
-            <a href="mailto:hello@santhoshdesign.com" className="text-primary hover:underline">
-              hello@santhoshdesign.com
+            <a href="mailto:hey.me.santhosh@gmail.com" className="text-primary hover:underline">
+              hey.me.santhosh@gmail.com
             </a>
             .
           </p>

@@ -397,8 +397,8 @@ export default function PrivacyPage() {
           <p>
             If you have questions about this policy, your data, or how we handle your information,
             contact us at{" "}
-            <a href="mailto:hello@santhoshdesign.com" className="text-primary hover:underline">
-              hello@santhoshdesign.com
+            <a href="mailto:hey.me.santhosh@gmail.com" className="text-primary hover:underline">
+              hey.me.santhosh@gmail.com
             </a>
             .
           </p>
