@@ -129,12 +129,14 @@ export interface AiFinancialSnapshotInput {
      */
     ownedSpendableMinor?: number;
     creditAvailableMinor?: number;
+    /** Reserved from bank/cash accounts for credit-card outstanding balances (card payment sources). Zero when none configured. */
+    cardPaymentReservedMinor?: number;
   };
   accounts: AiAccountSummaryInput[];
 }
 
 export interface AiFinancialSnapshotRedacted {
-  safeToSpend: { state: string; amount: MaybePrivateAmount; ownedSpendable?: MaybePrivateAmount; creditAvailable?: MaybePrivateAmount };
+  safeToSpend: { state: string; amount: MaybePrivateAmount; ownedSpendable?: MaybePrivateAmount; creditAvailable?: MaybePrivateAmount; cardPaymentReserved?: MaybePrivateAmount };
   accounts: AiAccountSummaryRedacted[];
 }
 
@@ -152,6 +154,9 @@ export function redactFinancialSnapshot(
         : {}),
       ...(input.safeToSpend.creditAvailableMinor !== undefined
         ? { creditAvailable: redactAmount({ amountMinor: input.safeToSpend.creditAvailableMinor, currency }, privacyModeEnabled) }
+        : {}),
+      ...(input.safeToSpend.cardPaymentReservedMinor !== undefined
+        ? { cardPaymentReserved: redactAmount({ amountMinor: input.safeToSpend.cardPaymentReservedMinor, currency }, privacyModeEnabled) }
         : {}),
     },
     accounts: input.accounts.map((a) => redactAccountSummary(a, privacyModeEnabled)),

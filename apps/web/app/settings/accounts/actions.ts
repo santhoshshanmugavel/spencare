@@ -6,6 +6,9 @@ import {
   createAccount,
   listAccounts,
   updateAccount,
+  setCardPaymentSource,
+  removeCardPaymentSource,
+  listCardPaymentSources,
   type AuthContext,
 } from "@spencare/domain-application";
 import type { CreateAccountInput, UpdateAccountInput } from "@spencare/validation";
@@ -49,6 +52,25 @@ export async function updateAccountAction(accountId: string, input: UpdateAccoun
 export async function archiveAccountAction(accountId: string) {
   const ctx = await requireAuthContext();
   const result = await archiveAccount.execute(ctx, { accountId });
+  if (result.ok) revalidatePath("/settings/accounts");
+  return result;
+}
+
+export async function listCardPaymentSourcesAction() {
+  const ctx = await requireAuthContext();
+  return listCardPaymentSources(ctx);
+}
+
+export async function setCardPaymentAccountAction(creditCardAccountId: string, paymentAccountId: string) {
+  const ctx = await requireAuthContext();
+  const result = await setCardPaymentSource.execute(ctx, { creditCardAccountId, paymentAccountId });
+  if (result.ok) revalidatePath("/settings/accounts");
+  return result;
+}
+
+export async function removeCardPaymentAccountAction(creditCardAccountId: string) {
+  const ctx = await requireAuthContext();
+  const result = await removeCardPaymentSource.execute(ctx, { creditCardAccountId });
   if (result.ok) revalidatePath("/settings/accounts");
   return result;
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Landmark, Wallet, CreditCard, TrendingUp } from "lucide-react";
-import type { AccountRow } from "@spencare/domain-application";
+import type { AccountRow, CreditCardPaymentSourceRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AccountCard } from "@/components/spencare/account-card";
@@ -42,9 +42,15 @@ const SECTION_ICONS: Record<(typeof SECTION_ORDER)[number], React.ReactNode> = {
 export function AccountList({
   initialAccounts,
   masked,
+  cardReservePerAccount = {},
+  goalReservePerAccount = {},
+  paymentSources = [],
 }: {
   initialAccounts: AccountRow[];
   masked: boolean;
+  cardReservePerAccount?: Record<string, number>;
+  goalReservePerAccount?: Record<string, number>;
+  paymentSources?: CreditCardPaymentSourceRow[];
 }) {
   const router = useRouter();
   // Deliberately no local copy of initialAccounts in state: this list
@@ -104,6 +110,8 @@ export function AccountList({
                 masked={masked}
                 onEdit={() => setEditing(account)}
                 onDelete={() => setArchiving(account)}
+                cardReserveMinor={cardReservePerAccount[account.id] ?? 0}
+                goalReserveMinor={goalReservePerAccount[account.id] ?? 0}
               />
             ))}
           </div>
@@ -130,6 +138,12 @@ export function AccountList({
             setEditing(null);
             handleMutated();
           }}
+          bankAccounts={accounts.filter((a) => a.type === "bank" || a.type === "cash")}
+          currentPaymentAccountId={
+            editing.type === "credit_card"
+              ? (paymentSources.find((ps) => ps.credit_card_account_id === editing.id)?.payment_account_id ?? null)
+              : null
+          }
         />
       ) : null}
 

@@ -27,6 +27,8 @@ export interface SafeToSpendPlain {
   creditAvailableMinor: number;
   /** Amount reserved out of ownedSpendableMinor for active goals. */
   goalReservedMinor: number;
+  /** Amount reserved for credit-card payments (outstanding balances of cards with a configured payment source). Zero when none configured. */
+  cardPaymentReservedMinor: number;
   /** Amount reserved out of ownedSpendableMinor for upcoming bills. */
   upcomingBillsMinor: number;
 }
@@ -72,6 +74,7 @@ export function SafeToSpendHeroCard({
   // mistakes Safe-to-Spend as including credit capacity).
   const hasBreakdown =
     safeToSpend.goalReservedMinor > 0 ||
+    safeToSpend.cardPaymentReservedMinor > 0 ||
     safeToSpend.upcomingBillsMinor > 0 ||
     safeToSpend.creditAvailableMinor > 0;
 
@@ -115,6 +118,18 @@ export function SafeToSpendHeroCard({
                 <span className="text-muted-foreground">Reserved for goals</span>
                 <Money
                   value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.goalReservedMinor), safeToSpend.currency as never)}
+                  masked={masked}
+                  size="numeric"
+                  tone="neutral"
+                  className="text-xs tabular-nums"
+                />
+              </div>
+            ) : null}
+            {safeToSpend.cardPaymentReservedMinor > 0 ? (
+              <div className="flex items-center justify-between py-2 text-xs">
+                <span className="text-muted-foreground">Reserved for card payments</span>
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.cardPaymentReservedMinor), safeToSpend.currency as never)}
                   masked={masked}
                   size="numeric"
                   tone="neutral"

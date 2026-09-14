@@ -430,6 +430,48 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_card_payment_sources: {
+        Row: {
+          created_at: string
+          credit_card_account_id: string
+          id: string
+          payment_account_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credit_card_account_id: string
+          id?: string
+          payment_account_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credit_card_account_id?: string
+          id?: string
+          payment_account_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_card_payment_sources_credit_card_account_id_fkey"
+            columns: ["credit_card_account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_payment_sources_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gmail_connections: {
         Row: {
           candidates_found_last_sync: number | null
@@ -924,7 +966,7 @@ export type Database = {
           entity_id: string
           entity_type: string
           id?: string
-          last_alerted_at: string
+          last_alerted_at?: string
           last_value?: number | null
           updated_at?: string
           user_id: string
@@ -1476,6 +1518,12 @@ export type Database = {
           updated_at: string
           user_id: string
         }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       archive_account: {
         Args: {
@@ -1497,6 +1545,12 @@ export type Database = {
           type: Database["public"]["Enums"]["account_type"]
           updated_at: string
           user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "accounts"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       check_and_increment_rate_limit: {
@@ -1537,6 +1591,12 @@ export type Database = {
           updated_at: string
           user_id: string
         }
+        SetofOptions: {
+          from: "*"
+          to: "import_batches"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       create_bill: {
         Args: {
@@ -1560,6 +1620,12 @@ export type Database = {
           recurrence_interval: Database["public"]["Enums"]["recurrence_interval"]
           updated_at: string
           user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bill_definitions"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       create_transaction: {
@@ -1595,6 +1661,12 @@ export type Database = {
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
           user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       delete_own_account: { Args: { p_user_id: string }; Returns: undefined }
@@ -1639,6 +1711,12 @@ export type Database = {
           updated_at: string
           user_id: string
         }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       match_bill_transaction: {
         Args: {
@@ -1658,6 +1736,12 @@ export type Database = {
           status: Database["public"]["Enums"]["bill_prediction_status"]
           updated_at: string
           user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bill_predictions"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       replace_active_ai_provider_credential: {
@@ -1679,6 +1763,12 @@ export type Database = {
           provider: Database["public"]["Enums"]["ai_provider"]
           updated_at: string
           user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "ai_provider_credentials"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       transfer: {
@@ -1730,6 +1820,12 @@ export type Database = {
           updated_at: string
           user_id: string
         }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       withdraw_goal_contribution: {
         Args: {
@@ -1759,6 +1855,12 @@ export type Database = {
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
           user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
     }

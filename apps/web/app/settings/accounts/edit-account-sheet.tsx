@@ -8,6 +8,13 @@ import type { AccountRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -18,7 +25,7 @@ import {
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
-import { updateAccountAction } from "./actions";
+import { updateAccountAction, setCardPaymentAccountAction, removeCardPaymentAccountAction } from "./actions";
 
 /**
  * Only `name` and the type-appropriate value field are editable
@@ -40,14 +47,23 @@ export function EditAccountSheet({
   open,
   onOpenChange,
   onSaved,
+  bankAccounts = [],
+  currentPaymentAccountId = null,
 }: {
   account: AccountRow;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
+  /** Bank + cash accounts available as payment sources (only relevant for credit cards). */
+  bankAccounts?: AccountRow[];
+  /** Currently configured payment source account id for this credit card, if any. */
+  currentPaymentAccountId?: string | null;
 }) {
   const valueField = valueFieldFor(account);
   const [display, setDisplay] = useState(minorUnitsToDisplay(valueField.initial, account.currency));
+  const [selectedPaymentAccountId, setSelectedPaymentAccountId] = useState<string>(
+    currentPaymentAccountId ?? "__none__",
+  );
   const {
     register,
     control,
@@ -64,6 +80,26 @@ export function EditAccountSheet({
       toastError(result.error.message);
       return;
     }
+
+    // For credit cards: save/remove payment source alongside the account update.
+    if (account.type === "credit_card") {
+      if (selectedPaymentAccountId && selectedPaymentAccountId !== "__none__") {
+        if (selectedPaymentAccountId !== currentPaymentAccountId) {
+          const psResult = await setCardPaymentAccountAction(account.id, selectedPaymentAccountId);
+          if (!psResult.ok) {
+            toastError(psResult.error.message);
+            return;
+          }
+        }
+      } else if (currentPaymentAccountId && selectedPaymentAccountId === "__none__") {
+        const rmResult = await removeCardPaymentAccountAction(account.id);
+        if (!rmResult.ok) {
+          toastError(rmResult.error.message);
+          return;
+        }
+      }
+    }
+
     toastConfirmed("Account updated.");
     onSaved();
   }
@@ -107,6 +143,27 @@ export function EditAccountSheet({
               )}
             />
           </FormField>
+          {account.type === "credit_card" && bankAccounts.length > 0 ? (
+            <FormField
+              id="edit-payment-source"
+              label="Pay from account"
+              hint="Spencare reserves this card's balance from your bank account so you don't accidentally spend money you owe. No money is moved."
+            >
+              <Select value={selectedPaymentAccountId} onValueChange={setSelectedPaymentAccountId}>
+                <SelectTrigger id="edit-payment-source">
+                  <SelectValue placeholder="Not configured" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Not configured</SelectItem>
+                  {bankAccounts.map((ba) => (
+                    <SelectItem key={ba.id} value={ba.id}>
+                      {ba.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+          ) : null}
           <SheetFooter className="px-0">
             <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? "Saving…" : "Save changes"}

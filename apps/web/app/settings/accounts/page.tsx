@@ -1,5 +1,6 @@
-import { getProfile, listAccounts, type AuthContext, getProfileForDisplay,
+import { getProfile, listAccounts, listGoals, listCardPaymentSources, type AuthContext, getProfileForDisplay,
 } from "@spencare/domain-application";
+import { deriveCardPaymentReserveState } from "@spencare/domain-infra";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { PRIMARY_NAV_ITEMS } from "@/lib/nav-items";
@@ -23,8 +24,25 @@ export default async function AccountsSettingsPage() {
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
-  const [accounts, profile] = await Promise.all([listAccounts(ctx), getProfile(ctx)]);
+  const [accounts, profile, paymentSources, goals] = await Promise.all([
+    listAccounts(ctx),
+    getProfile(ctx),
+    listCardPaymentSources(ctx),
+    listGoals(ctx),
+  ]);
 
+  // Per bank/cash account: how much is reserved for card payments and goals.
+  const cardReserveState = deriveCardPaymentReserveState(accounts, paymentSources);
+  const cardReservePerAccount = cardReserveState.perPaymentAccount;
+
+  // Per bank/cash account: sum of saved_amount_minor for goals funded from that account.
+  const goalReservePerAccount: Record<string, number> = {};
+  for (const goal of goals) {
+    if (goal.status === "active") {
+      goalReservePerAccount[goal.funding_account_id] =
+        (goalReservePerAccount[goal.funding_account_id] ?? 0) + goal.saved_amount_minor;
+    }
+  }
 
   const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null = _displayProfile?.avatarSignedUrl ?? (user.user_metadata?.avatar_url as string | null ?? null);
@@ -40,7 +58,13 @@ export default async function AccountsSettingsPage() {
       }
     >
       <SettingsShell active="accounts">
-        <AccountList initialAccounts={accounts} masked={profile?.privacy_mode_enabled ?? false} />
+        <AccountList
+          initialAccounts={accounts}
+          masked={profile?.privacy_mode_enabled ?? false}
+          cardReservePerAccount={cardReservePerAccount}
+          goalReservePerAccount={goalReservePerAccount}
+          paymentSources={paymentSources}
+        />
       </SettingsShell>
     </AppShell>
   );

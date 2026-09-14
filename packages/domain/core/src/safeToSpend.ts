@@ -63,6 +63,17 @@ export interface SafeToSpendContext {
   creditAvailableTotal?: Money;
   /** Sum of `saved_amount_minor` across active goals. Zero (not omitted) when `hasActiveGoals` is false. */
   goalReservedTotal: Money;
+  /**
+   * Sum of `credit_used_minor` across credit cards that have a configured
+   * payment account (payment source relationship). Zero when no payment
+   * sources are configured (opt-in, backward-compatible). When omitted,
+   * defaults to zero.
+   *
+   * This is a LOGICAL RESERVE -- it does not physically move money. It
+   * reduces Safe-to-Spend to prevent the user from accidentally spending
+   * cash they intend to use for credit-card payments.
+   */
+  cardPaymentReservedTotal?: Money;
   /** Sum of `expected_amount_minor` across open/overdue bill predictions. Zero when there are none. */
   upcomingBillsTotal: Money;
   /** Undefined (not zero-valued) when `hasActiveBudget` is false -- there is no meaningful "empty budget" figure to report, only its absence. */
@@ -78,6 +89,14 @@ export interface SafeToSpendResult {
   availableBalance: Money;
   budgetRemaining?: Money;
   goalReservedTotal: Money;
+  /**
+   * Total reserved for credit-card payments across all configured payment
+   * sources. Zero when no payment sources are set up (opt-in). NEVER
+   * included in `creditAvailableTotal` -- these are fundamentally different:
+   * card reserve reduces owned bank cash; available credit is borrowed
+   * capacity on a credit card.
+   */
+  cardPaymentReservedTotal: Money;
   upcomingBillsTotal: Money;
   /** Bank+Cash owned money -- as of Phase 29, this always equals `availableBalance` (Credit Card no longer contributes to either). */
   ownedSpendableTotal: Money;
@@ -102,22 +121,31 @@ export function calculateSafeToSpend(ctx: SafeToSpendContext): SafeToSpendResult
   const currency: CurrencyCode = ctx.goalReservedTotal.currencyCode;
   const availableBalance = Money.sum(currency, ctx.cashBalances);
 
+  const cardPaymentReservedTotal = ctx.cardPaymentReservedTotal ?? Money.zero(currency);
+
+  // Cash available after all logical reserves (goals + card payments).
+  // This is the maximum spendable cash regardless of any budget constraint.
+  const cashAfterReserves = availableBalance
+    .subtract(ctx.goalReservedTotal)
+    .subtract(cardPaymentReservedTotal);
+
   let base: { state: SafeToSpendState; amount: Money; budgetRemaining?: Money };
 
   if (!ctx.hasActiveBudget && !ctx.hasActiveGoals) {
-    base = { state: "balance_only", amount: availableBalance };
+    // State 1/2 -- no budget, no goals.
+    // Card reserves still apply (the user may have configured payment sources).
+    base = { state: "balance_only", amount: cashAfterReserves };
   } else if (ctx.hasActiveBudget && !ctx.hasActiveGoals) {
-    // State 3 (system-model.md §8.2)
+    // State 3: budget constrains spending; card reserves also constrain available cash.
     const budgetRemaining = ctx.budget!.totalAmount.subtract(ctx.budget!.totalSpent);
-    base = { state: "budget_only", amount: budgetRemaining, budgetRemaining };
+    base = { state: "budget_only", amount: Money.min(budgetRemaining, cashAfterReserves), budgetRemaining };
   } else if (!ctx.hasActiveBudget && ctx.hasActiveGoals) {
-    // State 4
-    base = { state: "goals_only", amount: availableBalance.subtract(ctx.goalReservedTotal) };
+    // State 4: goals + card reserves both reduce available cash.
+    base = { state: "goals_only", amount: cashAfterReserves };
   } else {
-    // State 5
+    // State 5: budget cap + (goals + card reserves) on cash.
     const budgetRemaining = ctx.budget!.totalAmount.subtract(ctx.budget!.totalSpent);
-    const balanceLessGoals = availableBalance.subtract(ctx.goalReservedTotal);
-    base = { state: "budget_and_goals", amount: Money.min(budgetRemaining, balanceLessGoals), budgetRemaining };
+    base = { state: "budget_and_goals", amount: Money.min(budgetRemaining, cashAfterReserves), budgetRemaining };
   }
 
   // Upcoming bills are subtracted unconditionally, on top of every state above.
@@ -129,6 +157,7 @@ export function calculateSafeToSpend(ctx: SafeToSpendContext): SafeToSpendResult
     availableBalance,
     budgetRemaining: base.budgetRemaining,
     goalReservedTotal: ctx.goalReservedTotal,
+    cardPaymentReservedTotal,
     upcomingBillsTotal: ctx.upcomingBillsTotal,
     ownedSpendableTotal: ctx.ownedSpendableTotal ?? availableBalance,
     creditAvailableTotal: ctx.creditAvailableTotal ?? Money.zero(currency),

@@ -84,6 +84,7 @@ export default async function HomePage({
     ownedSpendableMinor: Number(safeToSpendResult.ownedSpendableTotal.amountMinorUnits),
     creditAvailableMinor: Number(safeToSpendResult.creditAvailableTotal.amountMinorUnits),
     goalReservedMinor: Number(safeToSpendResult.goalReservedTotal.amountMinorUnits),
+    cardPaymentReservedMinor: Number(safeToSpendResult.cardPaymentReservedTotal.amountMinorUnits),
     upcomingBillsMinor: Number(safeToSpendResult.upcomingBillsTotal.amountMinorUnits),
   };
   const netWorth: NetWorthPlain = {

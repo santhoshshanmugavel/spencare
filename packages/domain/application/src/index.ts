@@ -356,6 +356,13 @@ export {
   type ListNotificationsOptions,
 } from "./queries/notifications.js";
 export {
+  setCardPaymentSource,
+  removeCardPaymentSource,
+  listCardPaymentSources,
+  type SetCardPaymentSourceInput,
+  type RemoveCardPaymentSourceInput,
+} from "./commands/creditCardPaymentSources.js";
+export {
   composeNotificationMessage,
   type NotificationMessage,
   type NotificationEventType,
@@ -373,4 +380,9 @@ export type {
   SlackMetadata,
   NotificationPreferenceRow,
   UpsertPreferenceInput,
+} from "@spencare/domain-infra";
+export type {
+  CreditCardPaymentSourceRow,
+  CardPaymentReserveState,
+  CardReserveDetail,
 } from "@spencare/domain-infra";

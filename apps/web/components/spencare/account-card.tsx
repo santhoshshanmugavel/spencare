@@ -77,11 +77,17 @@ export function AccountCard({
   masked,
   onEdit,
   onDelete,
+  cardReserveMinor = 0,
+  goalReserveMinor = 0,
 }: {
   account: AccountRow;
   masked: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  /** Reserved for credit-card payments from this account (0 when no payment source configured). */
+  cardReserveMinor?: number;
+  /** Reserved for goals funded from this account. */
+  goalReserveMinor?: number;
 }) {
   const labels = actionLabels(account.type);
 
@@ -116,13 +122,28 @@ export function AccountCard({
       </div>
 
       <div className="border-t border-border/60 px-4 pb-4 pt-3">
-        <AccountCardBody account={account} masked={masked} />
+        <AccountCardBody
+          account={account}
+          masked={masked}
+          cardReserveMinor={cardReserveMinor}
+          goalReserveMinor={goalReserveMinor}
+        />
       </div>
     </Card>
   );
 }
 
-function AccountCardBody({ account, masked }: { account: AccountRow; masked: boolean }) {
+function AccountCardBody({
+  account,
+  masked,
+  cardReserveMinor,
+  goalReserveMinor,
+}: {
+  account: AccountRow;
+  masked: boolean;
+  cardReserveMinor: number;
+  goalReserveMinor: number;
+}) {
   if (account.type === "credit_card") {
     const limit = account.credit_limit_minor ?? 0;
     const used = account.credit_used_minor ?? 0;
@@ -158,11 +179,65 @@ function AccountCardBody({ account, masked }: { account: AccountRow; masked: boo
     );
   }
 
-  const value = DomainMoney.fromMinorUnits(BigInt(account.balance_minor), account.currency as never);
+  const balance = account.balance_minor;
+  const reservedTotal = goalReserveMinor + cardReserveMinor;
+  const available = Math.max(0, balance - reservedTotal);
+  const value = DomainMoney.fromMinorUnits(BigInt(balance), account.currency as never);
+
+  const hasAllocation = balance > 0 && reservedTotal > 0;
+  const goalPct = hasAllocation ? Math.min(100, Math.round((goalReserveMinor / balance) * 100)) : 0;
+  const cardPct = hasAllocation ? Math.min(100 - goalPct, Math.round((cardReserveMinor / balance) * 100)) : 0;
+  const availPct = 100 - goalPct - cardPct;
+
   return (
     <div>
       <Money value={value} masked={masked} size="numeric" tone="auto" aria-label={`Balance for ${account.name}`} />
       <p className="text-xs text-muted-foreground">Total balance</p>
+      {hasAllocation ? (
+        <div className="mt-3 space-y-1.5">
+          <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div className="bg-primary/70 transition-all" style={{ width: `${availPct}%` }} title="Available" />
+            <div className="bg-amber-400 transition-all" style={{ width: `${goalPct}%` }} title="Goals" />
+            <div className="bg-rose-400 transition-all" style={{ width: `${cardPct}%` }} title="Card payments" />
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="inline-block size-1.5 rounded-full bg-primary/70" />
+              <Money
+                value={DomainMoney.fromMinorUnits(BigInt(available), account.currency as never)}
+                masked={masked}
+                size="body"
+                className="inline"
+              />
+              {" available"}
+            </span>
+            {goalReserveMinor > 0 ? (
+              <span className="flex items-center gap-1">
+                <span className="inline-block size-1.5 rounded-full bg-amber-400" />
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(goalReserveMinor), account.currency as never)}
+                  masked={masked}
+                  size="body"
+                  className="inline"
+                />
+                {" goals"}
+              </span>
+            ) : null}
+            {cardReserveMinor > 0 ? (
+              <span className="flex items-center gap-1">
+                <span className="inline-block size-1.5 rounded-full bg-rose-400" />
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(cardReserveMinor), account.currency as never)}
+                  masked={masked}
+                  size="body"
+                  className="inline"
+                />
+                {" card payments"}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

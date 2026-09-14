@@ -45,11 +45,14 @@ const listAccountsMock = vi.fn(async (_client: unknown, _userId: string) => acco
 const getActiveGoalsReservedTotalMock = vi.fn(async (_client: unknown, _userId: string) => goalsAggregateFixture);
 const getUpcomingBillsTotalMock = vi.fn(async (_client: unknown, _userId: string) => upcomingBillsFixture);
 const listBudgetsWithUsageMock = vi.fn(async (_ctx: unknown, _periodStart: string) => budgetUsagesFixture);
+const listCreditCardPaymentSourcesMock = vi.fn(async (_client: unknown, _userId: string) => []);
 
 vi.mock("@spencare/domain-infra", () => ({
   listAccounts: (...args: unknown[]) => listAccountsMock(...(args as [unknown, string])),
   getActiveGoalsReservedTotal: (...args: unknown[]) => getActiveGoalsReservedTotalMock(...(args as [unknown, string])),
   getUpcomingBillsTotal: (...args: unknown[]) => getUpcomingBillsTotalMock(...(args as [unknown, string])),
+  listCreditCardPaymentSources: (...args: unknown[]) => listCreditCardPaymentSourcesMock(...(args as [unknown, string])),
+  deriveCardPaymentReserveState: () => ({ totalMinor: 0, perPaymentAccount: {}, perCard: {} }),
 }));
 
 vi.mock("./budgets.js", () => ({

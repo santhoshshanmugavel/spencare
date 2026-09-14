@@ -12,6 +12,7 @@ function safeToSpend(overrides: Partial<SafeToSpendPlain> = {}): SafeToSpendPlai
     ownedSpendableMinor: 500000,
     creditAvailableMinor: 0,
     goalReservedMinor: 0,
+    cardPaymentReservedMinor: 0,
     upcomingBillsMinor: 0,
     ...overrides,
   };

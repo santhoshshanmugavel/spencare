@@ -3,6 +3,8 @@ import {
   getActiveGoalsReservedTotal,
   getUpcomingBillsTotal,
   listAccounts as listAccountsRow,
+  listCreditCardPaymentSources,
+  deriveCardPaymentReserveState,
 } from "@spencare/domain-infra";
 import type { AuthContext } from "../types.js";
 import { listBudgetsWithUsage } from "./budgets.js";
@@ -90,6 +92,7 @@ export async function getSafeToSpend(ctx: AuthContext): Promise<SafeToSpendResul
       amount: Money.zero(currency),
       availableBalance: Money.zero(currency),
       goalReservedTotal: Money.zero(currency),
+      cardPaymentReservedTotal: Money.zero(currency),
       upcomingBillsTotal: Money.zero(currency),
       ownedSpendableTotal: Money.zero(currency),
       creditAvailableTotal: Money.sum(currency, creditAccounts.map((a) => toSpendable(a, currency))),
@@ -101,11 +104,15 @@ export async function getSafeToSpend(ctx: AuthContext): Promise<SafeToSpendResul
   const ownedSpendableTotal = Money.sum(currency, cashBalances);
   const creditAvailableTotal = Money.sum(currency, creditAccounts.map((a) => toSpendable(a, currency)));
 
-  const [usages, goalsAggregate, upcomingBillsMinor] = await Promise.all([
+  const [usages, goalsAggregate, upcomingBillsMinor, paymentSources] = await Promise.all([
     listBudgetsWithUsage(ctx, currentPeriodStart()),
     getActiveGoalsReservedTotal(ctx.supabase, ctx.userId),
     getUpcomingBillsTotal(ctx.supabase, ctx.userId),
+    listCreditCardPaymentSources(ctx.supabase, ctx.userId),
   ]);
+
+  const cardReserveState = deriveCardPaymentReserveState(accounts, paymentSources);
+  const cardPaymentReservedTotal = Money.fromMinorUnits(BigInt(cardReserveState.totalMinor), currency);
 
   const hasActiveBudget = usages.length > 0;
   const budget = hasActiveBudget
@@ -120,6 +127,7 @@ export async function getSafeToSpend(ctx: AuthContext): Promise<SafeToSpendResul
     ownedSpendableTotal,
     creditAvailableTotal,
     goalReservedTotal: Money.fromMinorUnits(BigInt(goalsAggregate.totalMinor), currency),
+    cardPaymentReservedTotal,
     upcomingBillsTotal: Money.fromMinorUnits(BigInt(upcomingBillsMinor), currency),
     budget,
     hasActiveGoals: goalsAggregate.count > 0,
