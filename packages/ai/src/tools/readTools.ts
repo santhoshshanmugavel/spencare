@@ -6,7 +6,9 @@ import {
   listBudgetsWithUsage,
   listCategories,
   listGoals,
+  getGoal,
   calculateProgress,
+  listContributions,
   getUpcomingBills,
   getCashFlowOverview,
   toAiAccountSummaryInput,
@@ -217,6 +219,52 @@ const getCashFlowSummaryTool: ReadToolHandler = {
   },
 };
 
+const getGoalDetailTool: ReadToolHandler = {
+  definition: {
+    name: "getGoalDetail",
+    description: "Get full detail for a single savings goal: progress, pace, contribution history, and the active reminder plan. Use when the user asks about a specific goal by name or id.",
+    inputSchema: { type: "object", properties: { goalId: { type: "string", description: "UUID of the goal" } }, required: ["goalId"] },
+  },
+  execute: async ({ ctx, privacyModeEnabled }, rawInput) => {
+    const { goalId } = rawInput as { goalId: string };
+    const [goal, progress, contributions, plan] = await Promise.all([
+      getGoal(ctx, goalId),
+      calculateProgress(ctx, goalId),
+      listContributions(ctx, goalId),
+      getGoalContributionPlan(ctx, goalId),
+    ]);
+    if (!goal) return { error: "Goal not found" };
+    const redacted = privacyModeEnabled;
+    return {
+      id: goal.id,
+      name: goal.name,
+      status: goal.status,
+      targetAmount: redacted ? { private: true } : { amountMinor: goal.target_amount_minor, currency: "INR" },
+      savedAmount: redacted ? { private: true } : { amountMinor: goal.saved_amount_minor, currency: "INR" },
+      percentSaved: progress?.percentSaved ?? null,
+      monthsLeft: progress?.monthsLeft ?? null,
+      suggestedMonthlyMinor: redacted ? null : (progress?.suggestedMonthlyContributionMinor ?? null),
+      isReached: progress?.isReached ?? false,
+      targetDate: goal.target_date ?? null,
+      recentContributions: contributions.slice(0, 5).map((c) => ({
+        id: c.id,
+        occurredAt: c.occurred_at,
+        amount: redacted ? { private: true } : { amountMinor: c.amount_minor, currency: "INR" },
+        description: c.description ?? null,
+      })),
+      contributionPlan: plan
+        ? {
+            id: plan.id,
+            frequency: plan.frequency,
+            amountMinor: redacted ? { private: true } : plan.amount_minor,
+            planStatus: plan.status,
+            nextDueAt: plan.next_due_at,
+          }
+        : null,
+    };
+  },
+};
+
 export const READ_TOOLS: ReadToolHandler[] = [
   getSafeToSpendTool,
   getDashboardSummaryTool,
@@ -226,4 +274,5 @@ export const READ_TOOLS: ReadToolHandler[] = [
   getGoalProgressTool,
   getUpcomingBillsTool,
   getCashFlowSummaryTool,
+  getGoalDetailTool,
 ];

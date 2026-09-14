@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ConsequentialActionPreview, type ActionPreview, type ConsequentialActionState } from "@/components/spencare/consequential-action-preview";
 import { confirmCommandAction, cancelCommandAction } from "../actions";
 import { cn } from "@/lib/utils";
+import { generateQuickReplies, type QuickReply } from "@/lib/quick-replies";
 
 interface DisplayMessage {
   id: string;
@@ -69,6 +70,7 @@ export function SpensaChat({
   const [streamingText, setStreamingText] = useState("");
   const [pendingToolName, setPendingToolName] = useState<string | null>(null);
   const [confirmStates, setConfirmStates] = useState<Record<string, { state: ConsequentialActionState; errorMessage?: string }>>({});
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -92,6 +94,7 @@ export function SpensaChat({
     setInput("");
     if (inputRef.current) { inputRef.current.style.height = "auto"; }
     setMessages((m) => [...m, { id: `local-${Date.now()}`, role: "user", kind: "text", text: content }]);
+    setQuickReplies([]);
     setIsStreaming(true);
     setStreamingText("");
     setPendingToolName(null);
@@ -142,6 +145,7 @@ export function SpensaChat({
           const completedText = finalText;
           if (completedText.trim()) {
             setMessages((m) => [...m, { id: event.messageId as string, role: "assistant", kind: "text", text: completedText }]);
+            setQuickReplies(generateQuickReplies(completedText));
           }
           finalText = "";
           setStreamingText("");
@@ -247,6 +251,27 @@ export function SpensaChat({
             </div>
           )}
         </div>
+
+        {/* Personalized Quick Replies — "What next?" (NOT AI Response Buttons) */}
+        {quickReplies.length > 0 && !isStreaming && (
+          <div className="border-t border-border/40 bg-background/50 px-4 pt-2 pb-1">
+            <div className="mx-auto flex max-w-2xl flex-wrap gap-1.5">
+              {quickReplies.map((qr) => (
+                <button
+                  key={qr.id}
+                  type="button"
+                  onClick={() => void handleSend(qr.label)}
+                  className={cn(
+                    "rounded-full border border-border/70 bg-background px-3 py-1 text-xs text-foreground/70",
+                    "transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
+                  )}
+                >
+                  {qr.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Input bar */}
         <div className="border-t border-border/60 bg-background/80 px-4 py-3 backdrop-blur">

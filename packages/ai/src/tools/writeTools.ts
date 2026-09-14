@@ -6,8 +6,10 @@ import {
   proposeMarkBillPaidSchema,
   proposeCreateBudgetSchema,
   proposeCreateGoalSchema,
+  proposeUpdateGoalSchema,
+  createGoalContributionPlanSchema,
 } from "@spencare/validation";
-import { listAccounts, listCategories, listGoals, listBillPredictions } from "@spencare/domain-application";
+import { listAccounts, listCategories, listGoals, listBillPredictions, getGoalContributionPlanById, calculateNextOccurrence, FREQUENCY_LABELS } from "@spencare/domain-application";
 import type { ToolDefinition } from "../provider.js";
 import { proposeCommand, describeAmountForProvider, type ProposalResult, type ProposalPreviewField } from "../confirmation.js";
 import type { ToolHandlerContext } from "./readTools.js";
@@ -172,6 +174,173 @@ const proposeCreateGoalTool: WriteToolHandler = {
   },
 };
 
+const proposeUpdateGoalTool: WriteToolHandler = {
+  definition: {
+    name: "proposeUpdateGoal",
+    description: "Propose updating an existing savings goal's name, target amount, target date, or funding account. Does NOT create the update -- only creates a proposal the user must confirm.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        goalId: { type: "string" },
+        name: { type: "string" },
+        targetAmountMinor: { type: "number" },
+        targetDate: { type: "string" },
+        fundingAccountId: { type: "string" },
+      },
+      required: ["goalId"],
+    },
+  },
+  execute: async ({ ctx, privacyModeEnabled }, rawInput) => {
+    const input = proposeUpdateGoalSchema.parse(rawInput);
+    const gName = await goalName(ctx, input.goalId);
+    const amountText = input.targetAmountMinor ? describeAmountForProvider(input.targetAmountMinor, "INR", privacyModeEnabled) : null;
+    const fields: ProposalPreviewField[] = [{ label: "Goal", value: gName }];
+    if (input.name) fields.push({ label: "New name", value: input.name });
+    if (amountText) fields.push({ label: "New target", value: amountText });
+    if (input.targetDate) fields.push({ label: "Target date", value: input.targetDate });
+    return proposeCommand(ctx, "spensa", "updateGoal", input, {
+      summary: `Update "${gName}"${amountText ? ` — new target: ${amountText}` : ""}.`,
+      fields,
+    });
+  },
+};
+
+const proposeCreateGoalContributionPlanTool: WriteToolHandler = {
+  definition: {
+    name: "proposeCreateGoalContributionPlan",
+    description: "Propose setting up a contribution reminder plan for a savings goal. This is a PLANNING + REMINDER system only — no money moves automatically. The user must manually record each contribution. Only creates a proposal the user must confirm.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        goalId: { type: "string" },
+        frequency: { type: "string", enum: ["daily", "weekly", "monthly", "quarterly", "half_yearly", "yearly"] },
+        amountMinor: { type: "number" },
+        anchorDay: { type: "number" },
+        timezone: { type: "string" },
+        startDate: { type: "string" },
+      },
+      required: ["goalId", "frequency", "amountMinor"],
+    },
+  },
+  execute: async ({ ctx, privacyModeEnabled }, rawInput) => {
+    const input = createGoalContributionPlanSchema.parse(rawInput);
+    const gName = await goalName(ctx, input.goalId);
+    const amountText = describeAmountForProvider(input.amountMinor, "INR", privacyModeEnabled);
+    const nextDueAt = calculateNextOccurrence(input.frequency, input.anchorDay ?? null, null);
+    const freqLabel = FREQUENCY_LABELS[input.frequency];
+    return proposeCommand(ctx, "spensa", "createGoalContributionPlan", {
+      goalId: input.goalId,
+      frequency: input.frequency,
+      amountMinor: input.amountMinor,
+      anchorDay: input.anchorDay ?? null,
+      timezone: input.timezone ?? "Asia/Kolkata",
+      startDate: input.startDate ?? new Date().toISOString().slice(0, 10),
+      nextDueAt: nextDueAt.toISOString(),
+    }, {
+      summary: `Set up a ${freqLabel} reminder of ${amountText} for "${gName}". Reminder only — no automatic transfers.`,
+      fields: [
+        { label: "Goal", value: gName },
+        { label: "Frequency", value: freqLabel },
+        { label: "Amount per period", value: amountText },
+        { label: "First reminder", value: nextDueAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+      ],
+    });
+  },
+};
+
+const proposeUpdateGoalContributionPlanTool: WriteToolHandler = {
+  definition: {
+    name: "proposeUpdateGoalContributionPlan",
+    description: "Propose updating a contribution reminder plan. Only changes the reminder schedule — no money moves. Only creates a proposal the user must confirm.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        planId: { type: "string" },
+        frequency: { type: "string", enum: ["daily", "weekly", "monthly", "quarterly", "half_yearly", "yearly"] },
+        amountMinor: { type: "number" },
+        anchorDay: { type: "number" },
+        timezone: { type: "string" },
+      },
+      required: ["planId"],
+    },
+  },
+  execute: async ({ ctx, privacyModeEnabled }, rawInput) => {
+    const { planId, frequency, amountMinor, anchorDay, timezone } = rawInput as { planId: string; frequency?: string; amountMinor?: number; anchorDay?: number; timezone?: string };
+    const existingPlan = await getGoalContributionPlanById(ctx, planId);
+    const effectiveFrequency = (frequency ?? existingPlan?.frequency ?? "monthly") as Parameters<typeof calculateNextOccurrence>[0];
+    const effectiveAnchorDay = anchorDay ?? existingPlan?.anchor_day ?? null;
+    const nextDueAt = calculateNextOccurrence(effectiveFrequency, effectiveAnchorDay, null);
+    const effectiveAmount = amountMinor ?? existingPlan?.amount_minor;
+    const amountText = effectiveAmount ? describeAmountForProvider(effectiveAmount, "INR", privacyModeEnabled) : "unchanged";
+    const freqLabel = FREQUENCY_LABELS[effectiveFrequency];
+    const payload: Record<string, unknown> = { planId, nextDueAt: nextDueAt.toISOString() };
+    if (frequency) payload.frequency = frequency;
+    if (amountMinor) payload.amountMinor = amountMinor;
+    if (anchorDay !== undefined) payload.anchorDay = anchorDay;
+    if (timezone) payload.timezone = timezone;
+    return proposeCommand(ctx, "spensa", "updateGoalContributionPlan", payload, {
+      summary: `Update contribution plan to ${freqLabel} ${amountText}. Reminder only — no automatic transfers.`,
+      fields: [
+        { label: "Frequency", value: freqLabel },
+        { label: "Amount per period", value: amountText },
+        { label: "Next reminder", value: nextDueAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+      ],
+    });
+  },
+};
+
+const proposePauseGoalContributionPlanTool: WriteToolHandler = {
+  definition: {
+    name: "proposePauseGoalContributionPlan",
+    description: "Propose pausing a contribution reminder plan so reminders stop temporarily. No money is affected. Only creates a proposal the user must confirm.",
+    inputSchema: { type: "object", properties: { planId: { type: "string" } }, required: ["planId"] },
+  },
+  execute: async ({ ctx }, rawInput) => {
+    const { planId } = rawInput as { planId: string };
+    return proposeCommand(ctx, "spensa", "pauseGoalContributionPlan", { planId }, {
+      summary: "Pause the contribution plan. Reminders will stop until you resume.",
+      fields: [{ label: "Action", value: "Pause plan (reminders off)" }],
+    });
+  },
+};
+
+const proposeResumeGoalContributionPlanTool: WriteToolHandler = {
+  definition: {
+    name: "proposeResumeGoalContributionPlan",
+    description: "Propose resuming a paused contribution reminder plan. No money is affected. Only creates a proposal the user must confirm.",
+    inputSchema: { type: "object", properties: { planId: { type: "string" } }, required: ["planId"] },
+  },
+  execute: async ({ ctx }, rawInput) => {
+    const { planId } = rawInput as { planId: string };
+    const existingPlan = await getGoalContributionPlanById(ctx, planId);
+    const frequency = (existingPlan?.frequency ?? "monthly") as Parameters<typeof calculateNextOccurrence>[0];
+    const anchorDay = existingPlan?.anchor_day ?? null;
+    const nextDueAt = calculateNextOccurrence(frequency, anchorDay, null);
+    return proposeCommand(ctx, "spensa", "resumeGoalContributionPlan", { planId, nextDueAt: nextDueAt.toISOString() }, {
+      summary: "Resume the contribution plan. Reminders will start again.",
+      fields: [
+        { label: "Action", value: "Resume plan (reminders on)" },
+        { label: "Next reminder", value: nextDueAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+      ],
+    });
+  },
+};
+
+const proposeDeleteGoalContributionPlanTool: WriteToolHandler = {
+  definition: {
+    name: "proposeDeleteGoalContributionPlan",
+    description: "Propose deleting a contribution reminder plan entirely. Removes the reminder schedule but does NOT affect the goal's saved balance or past contributions. Only creates a proposal the user must confirm.",
+    inputSchema: { type: "object", properties: { planId: { type: "string" } }, required: ["planId"] },
+  },
+  execute: async ({ ctx }, rawInput) => {
+    const { planId } = rawInput as { planId: string };
+    return proposeCommand(ctx, "spensa", "deleteGoalContributionPlan", { planId }, {
+      summary: "Delete the contribution plan. The goal's saved balance is unchanged.",
+      fields: [{ label: "Action", value: "Remove reminder schedule (no money affected)" }],
+    });
+  },
+};
+
 export const WRITE_TOOLS: WriteToolHandler[] = [
   proposeAddExpenseTool,
   proposeAddIncomeTool,
@@ -179,4 +348,10 @@ export const WRITE_TOOLS: WriteToolHandler[] = [
   proposeMarkBillPaidTool,
   proposeCreateBudgetTool,
   proposeCreateGoalTool,
+  proposeUpdateGoalTool,
+  proposeCreateGoalContributionPlanTool,
+  proposeUpdateGoalContributionPlanTool,
+  proposePauseGoalContributionPlanTool,
+  proposeResumeGoalContributionPlanTool,
+  proposeDeleteGoalContributionPlanTool,
 ];
