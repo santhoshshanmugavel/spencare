@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, CalendarClock, MoreHorizontal, Pause, Play, Sparkles } from "lucide-react";
+import { CalendarClock, MoreHorizontal, Pause, Play, Sparkles } from "lucide-react";
 import { Money as DomainMoney, calculateGoalPaceStatus, calculateGoalProgress, FREQUENCY_LABELS } from "@spencare/domain-core";
 import type { AccountRow, GoalContributionPlanRow, GoalRow, TransactionRow } from "@spencare/domain-application";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -15,7 +15,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { GoalImageUploader } from "@/components/spencare/goal-image-uploader";
 import { getGoalInsight } from "@/lib/goal-insight";
@@ -143,21 +142,31 @@ export function GoalDetailDialog({
         <DialogHeader>
           <div className="flex items-center justify-between gap-2 pr-6">
             <DialogTitle>{goal.name}</DialogTitle>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" variant="ghost" size="touch" aria-label={`More actions for ${goal.name}`}>
-                  <MoreHorizontal className="size-4" aria-hidden="true" />
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm" aria-label={`More actions for ${goal.name}`}>
+                    <MoreHorizontal className="size-4" aria-hidden="true" />
+                    <span className="sr-only">More</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={onWithdraw}>Withdraw</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={onArchive}>Archive Goal</DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                    Delete Goal
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+                Edit Goal
+              </Button>
+              {!isReached ? (
+                <Button type="button" size="sm" onClick={onContribute}>
+                  Add Cash
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={onEdit}>Edit Goal</DropdownMenuItem>
-                <DropdownMenuItem onSelect={onWithdraw}>Withdraw</DropdownMenuItem>
-                <DropdownMenuItem onSelect={onArchive}>Archive Goal</DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-                  Delete Goal
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              ) : null}
+            </div>
           </div>
         </DialogHeader>
 
@@ -238,10 +247,6 @@ export function GoalDetailDialog({
             {fundingAccount ? (
               <p className="text-xs text-muted-foreground">Saved in {fundingAccount.name}</p>
             ) : null}
-
-            <Button type="button" size="touch" className="w-full" onClick={onContribute}>
-              Save more
-            </Button>
           </div>
 
           <div className="space-y-4">
@@ -355,39 +360,54 @@ export function GoalDetailDialog({
             </div>
 
             <div className="space-y-1">
-            <h3 className="text-sm font-medium text-muted-foreground">Contributions</h3>
-            {contributions === null ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : contributions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No contributions yet.</p>
-            ) : (
-              contributions.map((txn) => (
-                <ListRow
-                  key={txn.id}
-                  icon={
-                    txn.type === "goal_withdrawal" ? (
-                      <ArrowUpRight className="size-4 text-destructive" aria-hidden="true" />
-                    ) : (
-                      <ArrowDownLeft className="size-4 text-success" aria-hidden="true" />
-                    )
-                  }
-                  title={txn.type === "goal_withdrawal" ? "Withdraw" : "Contribution"}
-                  subtitle={new Date(txn.occurred_at + "T00:00:00").toLocaleDateString("en-IN", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                  trailing={
-                    <Money
-                      value={DomainMoney.fromMinorUnits(BigInt(txn.amount_minor), txn.currency as never)}
-                      masked={masked}
-                      size="numeric"
-                      tone={txn.type === "goal_withdrawal" ? "negative" : "positive"}
-                    />
-                  }
-                />
-              ))
-            )}
+              <h3 className="text-sm font-medium text-muted-foreground">Contributions</h3>
+              {contributions === null ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : contributions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No contributions yet.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-md border border-border/50">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/50 bg-muted/30">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Source</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {contributions.map((txn, i) => {
+                        const isWithdrawal = txn.type === "goal_withdrawal";
+                        return (
+                          <tr
+                            key={txn.id}
+                            className={i < contributions.length - 1 ? "border-b border-border/30" : ""}
+                          >
+                            <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                              {new Date(txn.occurred_at + "T00:00:00").toLocaleDateString("en-IN", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              {isWithdrawal ? "Withdraw" : (txn.description ?? "Manual")}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <Money
+                                value={DomainMoney.fromMinorUnits(BigInt(txn.amount_minor), txn.currency as never)}
+                                masked={masked}
+                                size="numeric"
+                                tone={isWithdrawal ? "negative" : "positive"}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>
