@@ -180,16 +180,17 @@ async function runChecksForUser(
   }
 
   // ---- Goal contribution plan reminders ----
-  const threeDaysAhead = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
-  const sevenDaysAgoIso = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // Window: 7 days ahead (for 7-day and 1-day advance notices) and 7 days ago (for missed).
+  const planWindowAhead = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const planWindowAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data: plans } = await serviceRoleSupabase
     .from("goal_contribution_plans")
     .select("id, goal_id, amount_minor, frequency, next_due_at")
     .eq("user_id", userId)
     .eq("status", "active")
-    .gte("next_due_at", sevenDaysAgoIso)
-    .lte("next_due_at", threeDaysAhead);
+    .gte("next_due_at", planWindowAgo)
+    .lte("next_due_at", planWindowAhead);
 
   if ((plans ?? []).length > 0) {
     const goalIds = [...new Set((plans ?? []).map((p) => p.goal_id))];

@@ -240,9 +240,9 @@ export function ContributionPlanSheet({
                               {day}
                             </SelectItem>
                           ))
-                        : Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                        : Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                             <SelectItem key={d} value={String(d)}>
-                              {d}
+                              {d}{d >= 29 ? " (last day if month is shorter)" : ""}
                             </SelectItem>
                           ))}
                     </SelectContent>

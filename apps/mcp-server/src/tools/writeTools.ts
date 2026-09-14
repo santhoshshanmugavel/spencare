@@ -48,11 +48,9 @@ import {
   confirmCommand,
   cancelPendingCommand,
   describeAmountForProvider,
-  createGoalContributionPlan,
-  updateGoalContributionPlan,
-  pauseGoalContributionPlan,
-  resumeGoalContributionPlan,
-  deleteGoalContributionPlan,
+  getGoalContributionPlanById,
+  calculateNextOccurrence,
+  FREQUENCY_LABELS,
   type McpAuthContext,
   type ProposalPreviewField,
 } from "@spencare/domain-application";
@@ -668,12 +666,15 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
   );
 
   // ── Goal Contribution Plan tools (planning only, no money movement) ──
+  // These use the same propose → confirm architecture as all other write
+  // tools. Plans are not financial operations but still impact the user's
+  // planning state, so user approval is required before execution.
 
   server.registerTool(
     "proposeCreateGoalContributionPlan",
     {
       description:
-        "Create a contribution plan (reminder schedule) for a savings goal. This is a PLANNING tool only — it does NOT move money or make automatic transfers. It sets up a reminder schedule so the user is notified when it is time to make a contribution. The user must still record the actual contribution manually via proposeGoalContribution.",
+        "Create a contribution plan (reminder schedule) for a savings goal. PLANNING ONLY — does NOT move money or make automatic transfers. Sets up a reminder schedule so the user is notified when it is time to make a contribution. Returns a proposal the user must confirm via confirmPendingAction.",
       inputSchema: {
         goalId: z.string().uuid(),
         frequency: z.enum(["daily", "weekly", "monthly", "quarterly", "half_yearly", "yearly"]),
@@ -686,16 +687,35 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
     async (rawInput: unknown) =>
       runScopedTool(ctx, "proposeCreateGoalContributionPlan", "write", async () => {
         const input = createGoalContributionPlanSchema.parse(rawInput);
-        const result = await createGoalContributionPlan.execute(ctx, input);
-        if (!result.ok) throw new Error(result.error.message);
-        return { plan: result.value, note: "Contribution plan created. This is a reminder schedule only — no money has moved." };
+        const privacyMode = await isPrivacyModeEnabled(ctx);
+        const amountText = describeAmountForProvider(input.amountMinor, "INR", privacyMode);
+        const gName = await goalName(ctx, input.goalId);
+        const nextDueAt = calculateNextOccurrence(input.frequency, input.anchorDay ?? null, null);
+        const freqLabel = FREQUENCY_LABELS[input.frequency];
+        return proposeCommand(ctx, "mcp", "createGoalContributionPlan", {
+          goalId: input.goalId,
+          frequency: input.frequency,
+          amountMinor: input.amountMinor,
+          anchorDay: input.anchorDay ?? null,
+          timezone: input.timezone ?? "Asia/Kolkata",
+          startDate: input.startDate ?? new Date().toISOString().slice(0, 10),
+          nextDueAt: nextDueAt.toISOString(),
+        }, {
+          summary: `Set up a ${freqLabel} contribution plan of ${amountText} for goal "${gName}". Reminder only — no automatic transfers.`,
+          fields: [
+            { label: "Goal", value: gName },
+            { label: "Frequency", value: freqLabel },
+            { label: "Amount per period", value: amountText },
+            { label: "First reminder", value: nextDueAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+          ],
+        });
       }),
   );
 
   server.registerTool(
     "proposeUpdateGoalContributionPlan",
     {
-      description: "Update an existing contribution plan (reminder schedule). This only changes the reminder schedule — no money moves automatically.",
+      description: "Update an existing contribution plan (reminder schedule). Only changes the reminder schedule — no money moves. Returns a proposal the user must confirm via confirmPendingAction.",
       inputSchema: {
         planId: z.string().uuid(),
         frequency: z.enum(["daily", "weekly", "monthly", "quarterly", "half_yearly", "yearly"]).optional(),
@@ -706,56 +726,83 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
     },
     async (rawInput: unknown) =>
       runScopedTool(ctx, "proposeUpdateGoalContributionPlan", "write", async () => {
-        const { planId, ...rest } = rawInput as { planId: string; [key: string]: unknown };
-        const input = updateGoalContributionPlanSchema.parse(rest);
-        const result = await updateGoalContributionPlan.execute(ctx, { planId, ...input });
-        if (!result.ok) throw new Error(result.error.message);
-        return { plan: result.value, note: "Contribution plan updated. This is a reminder schedule only — no money has moved." };
+        const { planId, frequency, amountMinor, anchorDay, timezone } = rawInput as { planId: string; frequency?: string; amountMinor?: number; anchorDay?: number; timezone?: string };
+        const privacyMode = await isPrivacyModeEnabled(ctx);
+        const existingPlan = await getGoalContributionPlanById(ctx, planId);
+        const effectiveFrequency = (frequency ?? existingPlan?.frequency ?? "monthly") as Parameters<typeof calculateNextOccurrence>[0];
+        const effectiveAnchorDay = anchorDay ?? existingPlan?.anchor_day ?? null;
+        const nextDueAt = calculateNextOccurrence(effectiveFrequency, effectiveAnchorDay, null);
+        const effectiveAmount = amountMinor ?? existingPlan?.amount_minor;
+        const amountText = effectiveAmount ? describeAmountForProvider(effectiveAmount, "INR", privacyMode) : "unchanged";
+        const freqLabel = FREQUENCY_LABELS[effectiveFrequency];
+        const payload: Record<string, unknown> = { planId, nextDueAt: nextDueAt.toISOString() };
+        if (frequency) payload.frequency = frequency;
+        if (amountMinor) payload.amountMinor = amountMinor;
+        if (anchorDay !== undefined) payload.anchorDay = anchorDay;
+        if (timezone) payload.timezone = timezone;
+        return proposeCommand(ctx, "mcp", "updateGoalContributionPlan", payload, {
+          summary: `Update contribution plan to ${freqLabel} ${amountText}. Reminder only — no automatic transfers.`,
+          fields: [
+            { label: "Frequency", value: freqLabel },
+            { label: "Amount per period", value: amountText },
+            { label: "Next reminder", value: nextDueAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+          ],
+        });
       }),
   );
 
   server.registerTool(
     "proposePauseGoalContributionPlan",
     {
-      description: "Pause a contribution plan so reminders stop temporarily. The plan can be resumed later. No money is affected.",
+      description: "Pause a contribution plan so reminders stop temporarily. The plan can be resumed later. No money is affected. Returns a proposal the user must confirm via confirmPendingAction.",
       inputSchema: { planId: z.string().uuid() },
     },
     async (rawInput: unknown) =>
       runScopedTool(ctx, "proposePauseGoalContributionPlan", "write", async () => {
         const { planId } = rawInput as { planId: string };
-        const result = await pauseGoalContributionPlan.execute(ctx, { planId });
-        if (!result.ok) throw new Error(result.error.message);
-        return { plan: result.value, note: "Plan paused. Reminders are off until the plan is resumed." };
+        return proposeCommand(ctx, "mcp", "pauseGoalContributionPlan", { planId }, {
+          summary: "Pause the contribution plan. Reminders will stop until you resume.",
+          fields: [{ label: "Action", value: "Pause plan (reminders off)" }],
+        });
       }),
   );
 
   server.registerTool(
     "proposeResumeGoalContributionPlan",
     {
-      description: "Resume a paused contribution plan so reminders start again. No money is affected.",
+      description: "Resume a paused contribution plan so reminders start again. No money is affected. Returns a proposal the user must confirm via confirmPendingAction.",
       inputSchema: { planId: z.string().uuid() },
     },
     async (rawInput: unknown) =>
       runScopedTool(ctx, "proposeResumeGoalContributionPlan", "write", async () => {
         const { planId } = rawInput as { planId: string };
-        const result = await resumeGoalContributionPlan.execute(ctx, { planId });
-        if (!result.ok) throw new Error(result.error.message);
-        return { plan: result.value, note: "Plan resumed. Reminders are active again." };
+        const existingPlan = await getGoalContributionPlanById(ctx, planId);
+        const frequency = (existingPlan?.frequency ?? "monthly") as Parameters<typeof calculateNextOccurrence>[0];
+        const anchorDay = existingPlan?.anchor_day ?? null;
+        const nextDueAt = calculateNextOccurrence(frequency, anchorDay, null);
+        return proposeCommand(ctx, "mcp", "resumeGoalContributionPlan", { planId, nextDueAt: nextDueAt.toISOString() }, {
+          summary: "Resume the contribution plan. Reminders will start again.",
+          fields: [
+            { label: "Action", value: "Resume plan (reminders on)" },
+            { label: "Next reminder", value: nextDueAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+          ],
+        });
       }),
   );
 
   server.registerTool(
     "proposeDeleteGoalContributionPlan",
     {
-      description: "Delete a contribution plan entirely. This removes the reminder schedule but does NOT affect the goal's saved balance or any past contributions.",
+      description: "Delete a contribution plan entirely. Removes the reminder schedule but does NOT affect the goal's saved balance or past contributions. Returns a proposal the user must confirm via confirmPendingAction.",
       inputSchema: { planId: z.string().uuid() },
     },
     async (rawInput: unknown) =>
       runScopedTool(ctx, "proposeDeleteGoalContributionPlan", "write", async () => {
         const { planId } = rawInput as { planId: string };
-        const result = await deleteGoalContributionPlan.execute(ctx, { planId });
-        if (!result.ok) throw new Error(result.error.message);
-        return { deleted: true, note: "Contribution plan removed. The goal's saved balance is unchanged." };
+        return proposeCommand(ctx, "mcp", "deleteGoalContributionPlan", { planId }, {
+          summary: "Delete the contribution plan. The goal's saved balance is unchanged.",
+          fields: [{ label: "Action", value: "Remove reminder schedule (no money affected)" }],
+        });
       }),
   );
 

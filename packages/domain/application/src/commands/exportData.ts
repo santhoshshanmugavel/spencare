@@ -6,6 +6,7 @@ import { listTransactions } from "../queries/transactions.js";
 import { listBudgets } from "../queries/budgets.js";
 import { listGoals } from "../queries/goals.js";
 import { listBillPredictions } from "../queries/bills.js";
+import { listGoalContributionPlans } from "../queries/goalContributionPlans.js";
 
 /**
  * Personal-data export (Phase 20, "Data & Backup" -- SP-320's checklist:
@@ -42,17 +43,19 @@ export interface ExportBundle {
   transactions: unknown[];
   budgets: unknown[];
   goals: unknown[];
+  goalContributionPlans: unknown[];
   bills: unknown[];
   aiConversations: { conversation: AiConversationRow; messages: unknown[] }[];
 }
 
 export async function exportUserData(ctx: AuthContext): Promise<ExportBundle> {
-  const [profile, accounts, transactions, budgets, goals, bills, conversations] = await Promise.all([
+  const [profile, accounts, transactions, budgets, goals, goalContributionPlans, bills, conversations] = await Promise.all([
     getProfile(ctx),
     listAccounts(ctx, {}),
     listTransactions(ctx, {}),
     listBudgets(ctx, {}),
     listGoals(ctx, {}),
+    listGoalContributionPlans(ctx),
     listBillPredictions(ctx, {}),
     listConversations(ctx.supabase, ctx.userId),
   ]);
@@ -71,6 +74,7 @@ export async function exportUserData(ctx: AuthContext): Promise<ExportBundle> {
     transactions,
     budgets,
     goals,
+    goalContributionPlans,
     bills,
     aiConversations,
   };

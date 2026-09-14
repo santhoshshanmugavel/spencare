@@ -188,11 +188,15 @@ export async function checkGoalPlanReminder(input: GoalPlanRuleInput): Promise<v
   let dedupeKey = "";
   let extraCtx: Record<string, unknown> = {};
 
-  if (daysUntilDue === 3) {
+  if (daysUntilDue === 7) {
     eventType = "GOAL_PLAN_UPCOMING";
-    dedupeKey = `goal_plan_upcoming_${planId}_${dueDateIso}`;
-    extraCtx = { frequencyLabel };
-  } else if (daysUntilDue === 0 || daysUntilDue === 1) {
+    dedupeKey = `goal_plan_upcoming7_${planId}_${dueDateIso}`;
+    extraCtx = { frequencyLabel, daysAway: 7 };
+  } else if (daysUntilDue === 1) {
+    eventType = "GOAL_PLAN_UPCOMING";
+    dedupeKey = `goal_plan_upcoming1_${planId}_${dueDateIso}`;
+    extraCtx = { frequencyLabel, daysAway: 1 };
+  } else if (daysUntilDue === 0) {
     eventType = "GOAL_PLAN_DUE";
     dedupeKey = `goal_plan_due_${planId}_${dueDateIso}`;
   } else if (daysUntilDue < 0 && daysUntilDue >= -7) {

@@ -168,7 +168,7 @@ export {
   resolveGoalImageUrl,
   resolveGoalImageUrls,
 } from "./queries/goals.js";
-export { getGoalContributionPlan } from "./queries/goalContributionPlans.js";
+export { getGoalContributionPlan, getGoalContributionPlanById, listGoalContributionPlans } from "./queries/goalContributionPlans.js";
 export { getBill, listBillPredictions } from "./queries/bills.js";
 export {
   getCashFlowOverview,
@@ -335,6 +335,7 @@ export {
 } from "@spencare/domain-infra";
 
 export { exportUserData, type ExportBundle } from "./commands/exportData.js";
+export { calculateNextOccurrence, FREQUENCY_LABELS, type GoalContributionFrequency } from "@spencare/domain-core";
 export { deleteAccount, type DeleteAccountInput } from "./commands/deleteAccount.js";
 export { checkRateLimit, RATE_LIMITS } from "./commands/rateLimit.js";
 

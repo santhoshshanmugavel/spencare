@@ -187,6 +187,12 @@ export const CONFIRMATION_COMMAND_TYPES = [
   "acceptGmailCandidate",
   "rejectGmailCandidate",
   "revokeMcpSession",
+  // Goal Contribution Plan (planning + reminder, no money movement)
+  "createGoalContributionPlan",
+  "updateGoalContributionPlan",
+  "pauseGoalContributionPlan",
+  "resumeGoalContributionPlan",
+  "deleteGoalContributionPlan",
 ] as const;
 export type ConfirmationCommandType = (typeof CONFIRMATION_COMMAND_TYPES)[number];
 

@@ -37,7 +37,7 @@ describe("<DataBackupManager> — export", () => {
 
   it("Export calls exportUserDataAction and shows a downloaded confirmation, never a fabricated 'check your email' promise", async () => {
     const user = userEvent.setup();
-    vi.mocked(exportUserDataAction).mockResolvedValue({ exportedAt: "t", profile: null, accounts: [], transactions: [], budgets: [], goals: [], bills: [], aiConversations: [] });
+    vi.mocked(exportUserDataAction).mockResolvedValue({ exportedAt: "t", profile: null, accounts: [], transactions: [], budgets: [], goals: [], goalContributionPlans: [], bills: [], aiConversations: [] });
 
     render(<DataBackupManager accountEmail="user@example.com" twoFactorEnabled={false} />);
     await user.click(screen.getByRole("button", { name: "Export" }));
