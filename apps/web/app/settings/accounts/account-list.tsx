@@ -45,6 +45,7 @@ export function AccountList({
   masked,
   cardReservePerAccount = {},
   goalReservePerAccount = {},
+  commitmentReservePerAccount = {},
   cardReserveDetails = [],
   paymentAccountNameByCardId = {},
   paymentSources = [],
@@ -53,6 +54,8 @@ export function AccountList({
   masked: boolean;
   cardReservePerAccount?: Record<string, number>;
   goalReservePerAccount?: Record<string, number>;
+  /** Per bank/cash account: sum of reserved_minor from upcoming planned_commitment_occurrences. */
+  commitmentReservePerAccount?: Record<string, number>;
   /** Per-card breakdown used to show which cards contribute to each bank's reserve. */
   cardReserveDetails?: CardReserveDetail[];
   /** Maps credit_card_account_id -> payment bank name, for display on credit card tiles. */
@@ -119,6 +122,7 @@ export function AccountList({
                 onDelete={() => setArchiving(account)}
                 cardReserveMinor={cardReservePerAccount[account.id] ?? 0}
                 goalReserveMinor={goalReservePerAccount[account.id] ?? 0}
+                commitmentReserveMinor={commitmentReservePerAccount[account.id] ?? 0}
                 cardReserveDetails={cardReserveDetails.filter((d) => d.paymentAccountId === account.id)}
                 paymentAccountName={paymentAccountNameByCardId[account.id] ?? null}
               />

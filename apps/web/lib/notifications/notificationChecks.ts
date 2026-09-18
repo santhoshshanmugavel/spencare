@@ -5,7 +5,7 @@
  */
 
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
-import { checkBudgetThreshold, checkBalanceThreshold, checkBillReminder, checkGoalPlanReminder } from "./eventRules";
+import { checkBudgetThreshold, checkBalanceThreshold, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkLoanReminder } from "./eventRules";
 
 interface CheckOutcome {
   userId: string;
@@ -220,6 +220,79 @@ async function runChecksForUser(
       });
       checksRun++;
     }
+  }
+
+  // ---- Planned commitment reminders ----
+  // Window: 14 days ahead and 7 days past (for overdue).
+  const commitmentWindowAhead = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const commitmentWindowAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const { data: occurrences } = await serviceRoleSupabase
+    .from("planned_commitment_occurrences")
+    .select("id, commitment_id, due_date, amount_minor, reserved_minor")
+    .eq("user_id", userId)
+    .eq("status", "upcoming")
+    .gte("due_date", commitmentWindowAgo)
+    .lte("due_date", commitmentWindowAhead);
+
+  if ((occurrences ?? []).length > 0) {
+    const commitmentIds = [...new Set((occurrences ?? []).map((o) => o.commitment_id))];
+    const { data: commitments } = await serviceRoleSupabase
+      .from("planned_commitments")
+      .select("id, name, currency")
+      .in("id", commitmentIds)
+      .is("deleted_at", null);
+    const commitmentMap: Record<string, { name: string; currency: string }> = {};
+    for (const c of commitments ?? []) {
+      commitmentMap[c.id] = { name: c.name, currency: c.currency };
+    }
+
+    for (const occ of occurrences ?? []) {
+      const commitment = commitmentMap[occ.commitment_id];
+      if (!commitment) continue;
+      await checkCommitmentReminder({
+        serviceRoleSupabase,
+        userId,
+        userEmail,
+        occurrenceId: occ.id,
+        commitmentId: occ.commitment_id,
+        commitmentName: commitment.name,
+        dueDateIso: occ.due_date,
+        amountMinor: occ.amount_minor,
+        reservedMinor: occ.reserved_minor,
+        currency: commitment.currency,
+      });
+      checksRun++;
+    }
+  }
+
+  // ---- Loan payment reminders ----
+  const loanWindowAhead = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const loanWindowAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const { data: loans } = await serviceRoleSupabase
+    .from("loans")
+    .select("id, name, installment_amount_minor, next_payment_date, currency")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .eq("status", "active")
+    .not("next_payment_date", "is", null)
+    .gte("next_payment_date", loanWindowAgo)
+    .lte("next_payment_date", loanWindowAhead);
+
+  for (const loan of loans ?? []) {
+    if (!loan.next_payment_date) continue;
+    await checkLoanReminder({
+      serviceRoleSupabase,
+      userId,
+      userEmail,
+      loanId: loan.id,
+      loanName: loan.name,
+      dueDateIso: loan.next_payment_date,
+      installmentMinor: loan.installment_amount_minor,
+      currency: loan.currency,
+    });
+    checksRun++;
   }
 
   return checksRun;

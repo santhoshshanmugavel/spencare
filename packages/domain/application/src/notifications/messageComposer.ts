@@ -25,6 +25,8 @@ export type NotificationEventType =
   | "GOAL_CONTRIBUTION" | "GOAL_25" | "GOAL_50" | "GOAL_75" | "GOAL_90" | "GOAL_COMPLETED"
   | "GOAL_PLAN_UPCOMING" | "GOAL_PLAN_DUE" | "GOAL_PLAN_MISSED"
   | "BILL_7_DAYS" | "BILL_3_DAYS" | "BILL_1_DAY" | "BILL_DUE_TODAY" | "BILL_OVERDUE" | "BILL_AMOUNT_CHANGED"
+  | "COMMITMENT_7_DAYS" | "COMMITMENT_3_DAYS" | "COMMITMENT_DUE_TODAY" | "COMMITMENT_OVERDUE" | "COMMITMENT_SHORTFALL"
+  | "LOAN_7_DAYS" | "LOAN_DUE_TODAY" | "LOAN_OVERDUE"
   | "TRANSACTION_LARGE" | "TRANSACTION_UNUSUAL"
   | "SECURITY_PASSWORD_CHANGED" | "SECURITY_NEW_LOGIN" | "SECURITY_2FA_CHANGED"
   | "GMAIL_CONNECTED" | "GMAIL_CONNECTION_ERROR" | "MCP_CONNECTED" | "MCP_REVOKED"
@@ -287,6 +289,79 @@ export function composeNotificationMessage(
       return {
         title: `${billName} amount updated`,
         body: `${billName} was updated from ${fmt(oldAmountMinor, currency)} to ${fmt(newAmountMinor, currency)}.`,
+      };
+    }
+
+    // ---- Planned commitment reminders ----
+    case "COMMITMENT_7_DAYS": {
+      const { commitmentName, amountMinor, reservedMinor } = c as {
+        commitmentName: string; amountMinor: number; reservedMinor: number;
+      };
+      const shortfall = amountMinor - reservedMinor;
+      const shortfallPart = shortfall > 0 ? ` ${fmt(shortfall, currency)} still needs to be set aside.` : " You're fully reserved.";
+      return {
+        title: `${commitmentName} due in 7 days`,
+        body: `${fmt(amountMinor, currency)} due next week.${shortfallPart}`,
+      };
+    }
+    case "COMMITMENT_3_DAYS": {
+      const { commitmentName, amountMinor, reservedMinor } = c as {
+        commitmentName: string; amountMinor: number; reservedMinor: number;
+      };
+      const shortfall = amountMinor - reservedMinor;
+      const shortfallPart = shortfall > 0 ? ` ${fmt(shortfall, currency)} still needed.` : " You're covered.";
+      return {
+        title: `${commitmentName} due in 3 days`,
+        body: `${fmt(amountMinor, currency)} due in 3 days.${shortfallPart}`,
+      };
+    }
+    case "COMMITMENT_DUE_TODAY": {
+      const { commitmentName, amountMinor } = c as { commitmentName: string; amountMinor: number };
+      return {
+        title: `${commitmentName} due today`,
+        body: `Your ${commitmentName} payment of ${fmt(amountMinor, currency)} is due today.`,
+      };
+    }
+    case "COMMITMENT_OVERDUE": {
+      const { commitmentName, daysPast } = c as { commitmentName: string; daysPast: number };
+      return {
+        title: `${commitmentName} is overdue`,
+        body: `${commitmentName} was due ${daysPast} day${daysPast === 1 ? "" : "s"} ago and hasn't been recorded as paid yet.`,
+      };
+    }
+    case "COMMITMENT_SHORTFALL": {
+      const { commitmentName, amountMinor, reservedMinor, dueDateIso } = c as {
+        commitmentName: string; amountMinor: number; reservedMinor: number; dueDateIso: string;
+      };
+      const shortfall = amountMinor - reservedMinor;
+      const due = new Date(dueDateIso + "T00:00:00Z");
+      const daysLeft = Math.ceil((due.getTime() - Date.now()) / 86400000);
+      return {
+        title: `${commitmentName} needs more saved`,
+        body: `${fmt(shortfall, currency)} still needed for ${commitmentName}, due in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`,
+      };
+    }
+
+    // ---- Loan payment reminders ----
+    case "LOAN_7_DAYS": {
+      const { loanName, installmentMinor } = c as { loanName: string; installmentMinor: number };
+      return {
+        title: `${loanName} payment due in 7 days`,
+        body: `${fmt(installmentMinor, currency)} installment is due next week.`,
+      };
+    }
+    case "LOAN_DUE_TODAY": {
+      const { loanName, installmentMinor } = c as { loanName: string; installmentMinor: number };
+      return {
+        title: `${loanName} payment due today`,
+        body: `Your ${loanName} installment of ${fmt(installmentMinor, currency)} is due today.`,
+      };
+    }
+    case "LOAN_OVERDUE": {
+      const { loanName, daysPast } = c as { loanName: string; daysPast: number };
+      return {
+        title: `${loanName} payment overdue`,
+        body: `${loanName} installment was due ${daysPast} day${daysPast === 1 ? "" : "s"} ago. Record the payment when done.`,
       };
     }
 

@@ -1380,6 +1380,7 @@ export type Database = {
           created_at: string
           currency: string
           deleted_at: string | null
+          first_saving_date: string | null
           funding_account_id: string | null
           id: string
           migrated_from_bill_id: string | null
@@ -1403,6 +1404,7 @@ export type Database = {
           created_at?: string
           currency?: string
           deleted_at?: string | null
+          first_saving_date?: string | null
           funding_account_id?: string | null
           id?: string
           migrated_from_bill_id?: string | null
@@ -1426,6 +1428,7 @@ export type Database = {
           created_at?: string
           currency?: string
           deleted_at?: string | null
+          first_saving_date?: string | null
           funding_account_id?: string | null
           id?: string
           migrated_from_bill_id?: string | null

@@ -2,7 +2,7 @@ import type { TypedSupabaseClient } from "./supabaseClients.js";
 import type { Json } from "./generated/database.types.js";
 
 export type NotificationSeverity = "info" | "warning" | "critical" | "success";
-export type NotificationCategory = "budget" | "goal" | "account" | "bill" | "transaction" | "security" | "report" | "spensa";
+export type NotificationCategory = "budget" | "goal" | "account" | "bill" | "transaction" | "security" | "report" | "spensa" | "commitment" | "loan";
 export type NotificationChannel = "in_app" | "email" | "telegram" | "slack";
 export type DeliveryStatus = "pending" | "delivered" | "failed" | "skipped";
 
@@ -69,7 +69,8 @@ export async function createNotification(
         type: input.eventType,
         event_type: input.eventType,
         severity: input.severity,
-        category: input.category,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        category: input.category as any,
         title: input.title,
         body: input.body,
         entity_type: input.entityType ?? null,
@@ -110,7 +111,8 @@ export async function listNotifications(
     .limit(options.limit ?? 50);
 
   if (options.category) {
-    query = query.eq("category", options.category);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query = query.eq("category", options.category as any);
   }
   if (options.unreadOnly) {
     query = query.is("read_at", null);

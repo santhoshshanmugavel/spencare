@@ -80,6 +80,7 @@ export function AccountCard({
   onDelete,
   cardReserveMinor = 0,
   goalReserveMinor = 0,
+  commitmentReserveMinor = 0,
   cardReserveDetails = [],
   paymentAccountName = null,
 }: {
@@ -91,6 +92,8 @@ export function AccountCard({
   cardReserveMinor?: number;
   /** Reserved for goals funded from this account. */
   goalReserveMinor?: number;
+  /** Reserved for planned commitments funded from this account. */
+  commitmentReserveMinor?: number;
   /** Per-card breakdown for bank/cash accounts (which cards contribute to the reserve). */
   cardReserveDetails?: CardReserveDetail[];
   /** For credit card accounts: the name of the bank account that pays this card. Null when not configured. */
@@ -134,6 +137,7 @@ export function AccountCard({
           masked={masked}
           cardReserveMinor={cardReserveMinor}
           goalReserveMinor={goalReserveMinor}
+          commitmentReserveMinor={commitmentReserveMinor}
           cardReserveDetails={cardReserveDetails}
           paymentAccountName={paymentAccountName}
         />
@@ -147,6 +151,7 @@ function AccountCardBody({
   masked,
   cardReserveMinor,
   goalReserveMinor,
+  commitmentReserveMinor,
   cardReserveDetails,
   paymentAccountName,
 }: {
@@ -154,6 +159,7 @@ function AccountCardBody({
   masked: boolean;
   cardReserveMinor: number;
   goalReserveMinor: number;
+  commitmentReserveMinor: number;
   cardReserveDetails: CardReserveDetail[];
   paymentAccountName: string | null;
 }) {
@@ -202,7 +208,7 @@ function AccountCardBody({
   }
 
   const balance = account.balance_minor;
-  const reservedTotal = goalReserveMinor + cardReserveMinor;
+  const reservedTotal = goalReserveMinor + cardReserveMinor + commitmentReserveMinor;
   const availableRaw = balance - reservedTotal;
   const isOverReserved = availableRaw < 0;
   const available = Math.max(0, availableRaw);
@@ -210,8 +216,9 @@ function AccountCardBody({
 
   const hasAllocation = balance > 0 && reservedTotal > 0;
   const goalPct = hasAllocation ? Math.min(100, Math.round((goalReserveMinor / balance) * 100)) : 0;
-  const cardPct = hasAllocation ? Math.min(100 - goalPct, Math.round((cardReserveMinor / balance) * 100)) : 0;
-  const availPct = 100 - goalPct - cardPct;
+  const commitmentPct = hasAllocation ? Math.min(100 - goalPct, Math.round((commitmentReserveMinor / balance) * 100)) : 0;
+  const cardPct = hasAllocation ? Math.min(100 - goalPct - commitmentPct, Math.round((cardReserveMinor / balance) * 100)) : 0;
+  const availPct = 100 - goalPct - commitmentPct - cardPct;
 
   return (
     <div>
@@ -222,6 +229,7 @@ function AccountCardBody({
           <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
             <div className="bg-primary/70 transition-all" style={{ width: `${availPct}%` }} title="Available" />
             <div className="bg-amber-400 transition-all" style={{ width: `${goalPct}%` }} title="Goals" />
+            <div className="bg-violet-400 transition-all" style={{ width: `${commitmentPct}%` }} title="Commitments" />
             <div className="bg-rose-400 transition-all" style={{ width: `${cardPct}%` }} title="Card payments" />
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
@@ -245,6 +253,18 @@ function AccountCardBody({
                   className="inline"
                 />
                 {" goals"}
+              </span>
+            ) : null}
+            {commitmentReserveMinor > 0 ? (
+              <span className="flex items-center gap-1">
+                <span className="inline-block size-1.5 rounded-full bg-violet-400" />
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(commitmentReserveMinor), account.currency as never)}
+                  masked={masked}
+                  size="body"
+                  className="inline"
+                />
+                {" commitments"}
               </span>
             ) : null}
             {cardReserveMinor > 0 ? (

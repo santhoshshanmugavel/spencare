@@ -18,6 +18,7 @@ export interface PlannedCommitmentRow {
   next_payment_date: string;
   saving_cadence: RecurrenceInterval | null;
   saving_amount_minor: number | null;
+  first_saving_date: string | null;
   funding_account_id: string | null;
   tenure_type: CommitmentTenureType;
   tenure_payments: number | null;
@@ -61,6 +62,7 @@ export interface CreatePlannedCommitmentPatch {
   nextPaymentDate: string;
   savingCadence: RecurrenceInterval | null;
   savingAmountMinor: number | null;
+  firstSavingDate: string | null;
   fundingAccountId: string | null;
   tenureType: CommitmentTenureType;
   tenurePayments: number | null;
@@ -79,6 +81,7 @@ export interface UpdatePlannedCommitmentPatch {
   nextPaymentDate?: string;
   savingCadence?: RecurrenceInterval | null;
   savingAmountMinor?: number | null;
+  firstSavingDate?: string | null;
   fundingAccountId?: string | null;
   tenureType?: CommitmentTenureType;
   tenurePayments?: number | null;
@@ -88,7 +91,7 @@ export interface UpdatePlannedCommitmentPatch {
 }
 
 const COMMITMENT_COLUMNS =
-  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, funding_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, created_at, updated_at, deleted_at";
+  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, first_saving_date, funding_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, created_at, updated_at, deleted_at";
 
 const OCCURRENCE_COLUMNS =
   "id, commitment_id, user_id, due_date, amount_minor, reserved_minor, status, matched_transaction_id, paid_at, created_at, updated_at";
@@ -114,6 +117,7 @@ export async function createPlannedCommitment(
       next_payment_date: patch.nextPaymentDate,
       saving_cadence: patch.savingCadence,
       saving_amount_minor: patch.savingAmountMinor,
+      first_saving_date: patch.firstSavingDate,
       funding_account_id: patch.fundingAccountId,
       tenure_type: patch.tenureType,
       tenure_payments: patch.tenurePayments,
@@ -157,6 +161,7 @@ export async function updatePlannedCommitment(
       ...(patch.nextPaymentDate !== undefined ? { next_payment_date: patch.nextPaymentDate } : {}),
       ...(patch.savingCadence !== undefined ? { saving_cadence: patch.savingCadence } : {}),
       ...(patch.savingAmountMinor !== undefined ? { saving_amount_minor: patch.savingAmountMinor } : {}),
+      ...(patch.firstSavingDate !== undefined ? { first_saving_date: patch.firstSavingDate } : {}),
       ...(patch.fundingAccountId !== undefined ? { funding_account_id: patch.fundingAccountId } : {}),
       ...(patch.tenureType !== undefined ? { tenure_type: patch.tenureType } : {}),
       ...(patch.tenurePayments !== undefined ? { tenure_payments: patch.tenurePayments } : {}),

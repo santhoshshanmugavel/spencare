@@ -267,3 +267,122 @@ export async function checkBillReminder(input: BillRuleInput): Promise<void> {
     dedupeKey,
   });
 }
+
+interface CommitmentRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  occurrenceId: string;
+  commitmentId: string;
+  commitmentName: string;
+  dueDateIso: string;
+  amountMinor: number;
+  reservedMinor: number;
+  currency?: string;
+}
+
+export async function checkCommitmentReminder(input: CommitmentRuleInput): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, occurrenceId, commitmentId, commitmentName, dueDateIso, amountMinor, reservedMinor } = input;
+  const currency = input.currency ?? "INR";
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const dueDate = new Date(dueDateIso + "T00:00:00Z");
+  const daysUntilDue = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000);
+  const shortfall = amountMinor - reservedMinor;
+
+  // Shortfall alert: fire when there is a shortfall and due date is within 14 days.
+  if (shortfall > 0 && daysUntilDue <= 14 && daysUntilDue >= 0) {
+    const shortfallDedupeKey = `commitment_shortfall_${occurrenceId}_${Math.floor(shortfall / 10000)}`;
+    const prevState = await getNotificationAlertState(serviceRoleSupabase, userId, "commitment_occ", occurrenceId, "shortfall");
+    if (prevState?.lastValue !== shortfall) {
+      await upsertNotificationAlertState(serviceRoleSupabase, userId, "commitment_occ", occurrenceId, "shortfall", shortfall);
+      await deliverNotification(serviceRoleSupabase, {
+        userId, userEmail,
+        eventType: "COMMITMENT_SHORTFALL",
+        financialContext: { commitmentName, amountMinor, reservedMinor, dueDateIso, currency },
+        category: "commitment",
+        severity: "warning",
+        entityType: "commitment",
+        entityId: commitmentId,
+        actionUrl: "/cash-flow/upcoming",
+        dedupeKey: shortfallDedupeKey,
+      });
+    }
+  }
+
+  // Due-date reminders.
+  let eventType: DeliverNotificationInput["eventType"] | null = null;
+  let dedupeKey = "";
+
+  if (daysUntilDue === 7) {
+    eventType = "COMMITMENT_7_DAYS";
+    dedupeKey = `commitment_7d_${occurrenceId}_${dueDateIso}`;
+  } else if (daysUntilDue === 3) {
+    eventType = "COMMITMENT_3_DAYS";
+    dedupeKey = `commitment_3d_${occurrenceId}_${dueDateIso}`;
+  } else if (daysUntilDue === 0) {
+    eventType = "COMMITMENT_DUE_TODAY";
+    dedupeKey = `commitment_due_${occurrenceId}_${dueDateIso}`;
+  } else if (daysUntilDue < 0 && daysUntilDue >= -7) {
+    eventType = "COMMITMENT_OVERDUE";
+    dedupeKey = `commitment_overdue_${occurrenceId}_${dueDateIso}`;
+  }
+
+  if (!eventType) return;
+
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType,
+    financialContext: { commitmentName, amountMinor, reservedMinor, currency, daysPast: Math.abs(daysUntilDue) },
+    category: "commitment",
+    severity: daysUntilDue <= 0 ? "warning" : "info",
+    entityType: "commitment",
+    entityId: commitmentId,
+    actionUrl: "/cash-flow/upcoming",
+    dedupeKey,
+  });
+}
+
+interface LoanRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  loanId: string;
+  loanName: string;
+  dueDateIso: string;
+  installmentMinor: number;
+  currency?: string;
+}
+
+export async function checkLoanReminder(input: LoanRuleInput): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, loanId, loanName, dueDateIso, installmentMinor } = input;
+  const currency = input.currency ?? "INR";
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const dueDate = new Date(dueDateIso + "T00:00:00Z");
+  const daysUntilDue = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000);
+
+  let eventType: DeliverNotificationInput["eventType"] | null = null;
+  let dedupeKey = "";
+
+  if (daysUntilDue === 7) {
+    eventType = "LOAN_7_DAYS";
+    dedupeKey = `loan_7d_${loanId}_${dueDateIso}`;
+  } else if (daysUntilDue === 0) {
+    eventType = "LOAN_DUE_TODAY";
+    dedupeKey = `loan_due_${loanId}_${dueDateIso}`;
+  } else if (daysUntilDue < 0 && daysUntilDue >= -7) {
+    eventType = "LOAN_OVERDUE";
+    dedupeKey = `loan_overdue_${loanId}_${dueDateIso}`;
+  }
+
+  if (!eventType) return;
+
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType,
+    financialContext: { loanName, installmentMinor, currency, daysPast: Math.abs(daysUntilDue) },
+    category: "loan",
+    severity: daysUntilDue <= 0 ? "warning" : "info",
+    entityType: "loan",
+    entityId: loanId,
+    actionUrl: "/cash-flow/upcoming",
+    dedupeKey,
+  });
+}

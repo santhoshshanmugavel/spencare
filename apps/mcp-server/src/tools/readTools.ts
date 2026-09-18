@@ -33,6 +33,10 @@ import {
   listMcpSessions,
   getSecurityStatus,
   getOnboardingStatusQuery,
+  // Planned commitments and loans
+  listCommitments,
+  listUpcoming,
+  listAllLoans,
   type McpAuthContext,
 } from "@spencare/domain-application";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -486,6 +490,87 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
       runScopedTool(ctx, "getOnboardingStatus", "read", async () => {
         const status = await getOnboardingStatusQuery(ctx);
         return status ?? { completed: false };
+      }),
+  );
+
+  server.registerTool(
+    "listCommitments",
+    { description: "List the user's planned commitments: named recurring obligations with payment and saving schedules.", inputSchema: {} },
+    async () =>
+      runScopedTool(ctx, "listCommitments", "read", async () => {
+        const [commitments, privacyModeEnabled] = await Promise.all([listCommitments(ctx), isPrivacyModeEnabled(ctx)]);
+        return commitments.map((c) => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          paymentFrequency: c.payment_frequency,
+          nextPaymentDate: c.next_payment_date,
+          amount: privacyModeEnabled ? { private: true } : { amountMinor: c.amount_minor, currency: c.currency },
+          amountIsEstimate: c.amount_is_estimate,
+          savingCadence: c.saving_cadence,
+          savingAmount: c.saving_cadence && !privacyModeEnabled ? { amountMinor: c.saving_amount_minor, currency: c.currency } : null,
+          firstSavingDate: c.first_saving_date,
+          tenureType: c.tenure_type,
+          tenurePayments: c.tenure_payments,
+          tenureEndDate: c.tenure_end_date,
+        }));
+      }),
+  );
+
+  server.registerTool(
+    "getUpcomingCommitments",
+    { description: "List upcoming planned commitment occurrences, loans, and predictions. Use this to answer 'what's coming up?' or to understand the user's near-term financial obligations.", inputSchema: { limitDays: z.number().optional() } },
+    async (rawInput: { limitDays?: number }) =>
+      runScopedTool(ctx, "getUpcomingCommitments", "read", async () => {
+        const limitDays = rawInput.limitDays ?? 90;
+        const dueBefore = new Date(Date.now() + limitDays * 86400000).toISOString().slice(0, 10);
+        const [occurrences, loans, privacyModeEnabled] = await Promise.all([
+          listUpcoming(ctx, { limit: 50, dueBefore }),
+          listAllLoans(ctx),
+          isPrivacyModeEnabled(ctx),
+        ]);
+        const activeLoans = loans.filter((l) => l.status === "active" && l.next_payment_date != null);
+        return {
+          commitmentOccurrences: occurrences.map((occ) => ({
+            id: occ.id,
+            commitmentId: occ.commitment_id,
+            commitmentName: occ.planned_commitments.name,
+            dueDate: occ.due_date,
+            amount: privacyModeEnabled ? { private: true } : { amountMinor: occ.amount_minor, currency: "INR" },
+            reserved: privacyModeEnabled ? { private: true } : { amountMinor: occ.reserved_minor, currency: "INR" },
+            shortfall: privacyModeEnabled ? { private: true } : { amountMinor: Math.max(0, occ.amount_minor - occ.reserved_minor), currency: "INR" },
+            status: occ.status,
+          })),
+          loanInstallments: activeLoans.map((l) => ({
+            loanId: l.id,
+            name: l.name,
+            lenderName: l.lender_name,
+            nextPaymentDate: l.next_payment_date,
+            installmentAmount: privacyModeEnabled ? { private: true } : { amountMinor: l.installment_amount_minor, currency: l.currency },
+          })),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "listLoans",
+    { description: "List the user's active loans: personal, home, car, education, business, or other.", inputSchema: {} },
+    async () =>
+      runScopedTool(ctx, "listLoans", "read", async () => {
+        const [loans, privacyModeEnabled] = await Promise.all([listAllLoans(ctx), isPrivacyModeEnabled(ctx)]);
+        return loans.map((l) => ({
+          id: l.id,
+          name: l.name,
+          loanType: l.loan_type,
+          lenderName: l.lender_name,
+          status: l.status,
+          nextPaymentDate: l.next_payment_date,
+          installmentAmount: privacyModeEnabled ? { private: true } : { amountMinor: l.installment_amount_minor, currency: l.currency },
+          outstandingAmount: l.outstanding_minor != null && !privacyModeEnabled ? { amountMinor: l.outstanding_minor, currency: l.currency } : null,
+          interestRatePct: l.interest_rate_pct,
+          repaymentFrequency: l.repayment_frequency,
+          endDate: l.end_date,
+        }));
       }),
   );
 }

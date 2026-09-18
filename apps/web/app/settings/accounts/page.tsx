@@ -1,4 +1,4 @@
-import { getProfile, listAccounts, listGoals, listCardPaymentSources, type AuthContext, getProfileForDisplay,
+import { getProfile, listAccounts, listGoals, listCardPaymentSources, listUpcoming, type AuthContext, getProfileForDisplay,
 } from "@spencare/domain-application";
 import { deriveCardPaymentReserveState } from "@spencare/domain-infra";
 import { AppShell } from "@/components/spencare/app-shell";
@@ -24,11 +24,12 @@ export default async function AccountsSettingsPage() {
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
-  const [accounts, profile, paymentSources, goals] = await Promise.all([
+  const [accounts, profile, paymentSources, goals, commitmentOccurrences] = await Promise.all([
     listAccounts(ctx),
     getProfile(ctx),
     listCardPaymentSources(ctx),
     listGoals(ctx),
+    listUpcoming(ctx, { limit: 200 }),
   ]);
 
   // Per bank/cash account: how much is reserved for card payments and goals.
@@ -52,6 +53,16 @@ export default async function AccountsSettingsPage() {
     }
   }
 
+  // Per bank/cash account: sum of reserved_minor from upcoming commitment occurrences.
+  const commitmentReservePerAccount: Record<string, number> = {};
+  for (const occ of commitmentOccurrences) {
+    const fundingId = occ.planned_commitments?.funding_account_id;
+    if (fundingId && occ.reserved_minor > 0) {
+      commitmentReservePerAccount[fundingId] =
+        (commitmentReservePerAccount[fundingId] ?? 0) + occ.reserved_minor;
+    }
+  }
+
   const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null = _displayProfile?.avatarSignedUrl ?? (user.user_metadata?.avatar_url as string | null ?? null);
   return (
@@ -71,6 +82,7 @@ export default async function AccountsSettingsPage() {
           masked={profile?.privacy_mode_enabled ?? false}
           cardReservePerAccount={cardReservePerAccount}
           goalReservePerAccount={goalReservePerAccount}
+          commitmentReservePerAccount={commitmentReservePerAccount}
           cardReserveDetails={cardReserveState.perCard}
           paymentAccountNameByCardId={paymentAccountNameByCardId}
           paymentSources={paymentSources}
