@@ -76,6 +76,18 @@ export interface SafeToSpendContext {
   cardPaymentReservedTotal?: Money;
   /** Sum of `expected_amount_minor` across open/overdue bill predictions. Zero when there are none. */
   upcomingBillsTotal: Money;
+  /**
+   * Sum of `reserved_minor` across all upcoming planned_commitment_occurrences
+   * for active commitments. Zero when no planned commitments exist. Optional
+   * (omitted until the planned_commitments feature is in use) -- defaults to
+   * zero so existing callers that predated the feature continue to compile.
+   *
+   * This reserve is ADDITIVE with `upcomingBillsTotal` (auto-detected bills)
+   * and MUST NOT double-count: migrated manual bills have their bill_definition
+   * soft-deleted (so getUpcomingBillsTotal excludes them) before their
+   * planned_commitment_occurrence reserved amounts appear here.
+   */
+  commitmentReservedTotal?: Money;
   /** Undefined (not zero-valued) when `hasActiveBudget` is false -- there is no meaningful "empty budget" figure to report, only its absence. */
   budget?: { totalAmount: Money; totalSpent: Money };
   hasActiveGoals: boolean;
@@ -98,6 +110,8 @@ export interface SafeToSpendResult {
    */
   cardPaymentReservedTotal: Money;
   upcomingBillsTotal: Money;
+  /** Sum of reserved_minor across upcoming planned_commitment_occurrences. Zero when no planned commitments exist. */
+  commitmentReservedTotal: Money;
   /** Bank+Cash owned money -- as of Phase 29, this always equals `availableBalance` (Credit Card no longer contributes to either). */
   ownedSpendableTotal: Money;
   /** Credit Card available credit (limit minus used, never the limit) -- display-only, NEVER included in `amount`/`availableBalance`. Zero when the user has no credit cards. */
@@ -148,8 +162,11 @@ export function calculateSafeToSpend(ctx: SafeToSpendContext): SafeToSpendResult
     base = { state: "budget_and_goals", amount: Money.min(budgetRemaining, cashAfterReserves), budgetRemaining };
   }
 
-  // Upcoming bills are subtracted unconditionally, on top of every state above.
-  const amount = base.amount.subtract(ctx.upcomingBillsTotal);
+  // Bills total and commitment reserve are both subtracted unconditionally
+  // on top of every state above. They are additive (bills = auto-detected;
+  // commitments = user-created planned obligations) and must not double-count.
+  const commitmentReservedTotal = ctx.commitmentReservedTotal ?? Money.zero(currency);
+  const amount = base.amount.subtract(ctx.upcomingBillsTotal).subtract(commitmentReservedTotal);
 
   return {
     state: base.state,
@@ -159,6 +176,7 @@ export function calculateSafeToSpend(ctx: SafeToSpendContext): SafeToSpendResult
     goalReservedTotal: ctx.goalReservedTotal,
     cardPaymentReservedTotal,
     upcomingBillsTotal: ctx.upcomingBillsTotal,
+    commitmentReservedTotal,
     ownedSpendableTotal: ctx.ownedSpendableTotal ?? availableBalance,
     creditAvailableTotal: ctx.creditAvailableTotal ?? Money.zero(currency),
   };

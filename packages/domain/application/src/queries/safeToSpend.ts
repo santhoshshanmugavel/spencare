@@ -2,6 +2,7 @@ import { Money, calculateSafeToSpend, getSpendableMinor, type SafeToSpendResult 
 import {
   getActiveGoalsReservedTotal,
   getUpcomingBillsTotal,
+  getCommitmentReservedTotal,
   listAccounts as listAccountsRow,
   listCreditCardPaymentSources,
   deriveCardPaymentReserveState,
@@ -94,6 +95,7 @@ export async function getSafeToSpend(ctx: AuthContext): Promise<SafeToSpendResul
       goalReservedTotal: Money.zero(currency),
       cardPaymentReservedTotal: Money.zero(currency),
       upcomingBillsTotal: Money.zero(currency),
+      commitmentReservedTotal: Money.zero(currency),
       ownedSpendableTotal: Money.zero(currency),
       creditAvailableTotal: Money.sum(currency, creditAccounts.map((a) => toSpendable(a, currency))),
     };
@@ -104,10 +106,11 @@ export async function getSafeToSpend(ctx: AuthContext): Promise<SafeToSpendResul
   const ownedSpendableTotal = Money.sum(currency, cashBalances);
   const creditAvailableTotal = Money.sum(currency, creditAccounts.map((a) => toSpendable(a, currency)));
 
-  const [usages, goalsAggregate, upcomingBillsMinor, paymentSources] = await Promise.all([
+  const [usages, goalsAggregate, upcomingBillsMinor, commitmentReservedMinor, paymentSources] = await Promise.all([
     listBudgetsWithUsage(ctx, currentPeriodStart()),
     getActiveGoalsReservedTotal(ctx.supabase, ctx.userId),
     getUpcomingBillsTotal(ctx.supabase, ctx.userId),
+    getCommitmentReservedTotal(ctx.supabase, ctx.userId),
     listCreditCardPaymentSources(ctx.supabase, ctx.userId),
   ]);
 
@@ -129,6 +132,7 @@ export async function getSafeToSpend(ctx: AuthContext): Promise<SafeToSpendResul
     goalReservedTotal: Money.fromMinorUnits(BigInt(goalsAggregate.totalMinor), currency),
     cardPaymentReservedTotal,
     upcomingBillsTotal: Money.fromMinorUnits(BigInt(upcomingBillsMinor), currency),
+    commitmentReservedTotal: Money.fromMinorUnits(BigInt(commitmentReservedMinor), currency),
     budget,
     hasActiveGoals: goalsAggregate.count > 0,
     hasActiveBudget,

@@ -29,3 +29,33 @@ export * from "./notificationsRepo.js";
 export * from "./channelConnectionsRepo.js";
 export * from "./notificationPreferencesRepo.js";
 export * from "./creditCardPaymentSourcesRepo.js";
+export {
+  createPlannedCommitment,
+  updatePlannedCommitment,
+  deletePlannedCommitment,
+  getPlannedCommitment,
+  listPlannedCommitments,
+  listUpcomingOccurrences,
+  getCommitmentReservedTotal,
+  markOccurrencePaid,
+  type CommitmentStatus,
+  type CommitmentTenureType,
+  type CommitmentOccurrenceStatus,
+  type PlannedCommitmentRow,
+  type PlannedCommitmentOccurrenceRow,
+  type PlannedCommitmentOccurrenceWithCommitment,
+  type CreatePlannedCommitmentPatch,
+  type UpdatePlannedCommitmentPatch,
+} from "./plannedCommitmentsRepo.js";
+export {
+  createLoan,
+  updateLoan,
+  deleteLoan,
+  getLoan,
+  listLoans,
+  type LoanType,
+  type LoanStatus,
+  type LoanRow,
+  type CreateLoanPatch,
+  type UpdateLoanPatch,
+} from "./loansRepo.js";

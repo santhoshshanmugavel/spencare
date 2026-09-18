@@ -386,3 +386,30 @@ export type {
   CardPaymentReserveState,
   CardReserveDetail,
 } from "@spencare/domain-infra";
+export {
+  listCommitments,
+  listUpcoming,
+  addCommitment,
+  editCommitment,
+  removeCommitment,
+  payOccurrence,
+  getPlannedCommitmentById,
+  type PlannedCommitmentRow,
+  type PlannedCommitmentOccurrenceRow,
+  type PlannedCommitmentOccurrenceWithCommitment,
+} from "./queries/plannedCommitments.js";
+export {
+  listAllLoans,
+  addLoan,
+  editLoan,
+  removeLoan,
+  getLoanById,
+  type LoanRow,
+} from "./queries/loans.js";
+export type {
+  CommitmentStatus,
+  CommitmentTenureType,
+  CommitmentOccurrenceStatus,
+  LoanType,
+  LoanStatus,
+} from "@spencare/domain-infra";

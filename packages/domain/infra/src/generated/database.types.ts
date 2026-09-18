@@ -1246,6 +1246,226 @@ export type Database = {
         }
         Relationships: []
       }
+      loans: {
+        Row: {
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          end_date: string | null
+          id: string
+          installment_amount_minor: number
+          interest_rate_pct: number | null
+          lender_name: string | null
+          loan_type: "home" | "car" | "personal" | "education" | "business" | "other"
+          name: string
+          next_payment_date: string | null
+          notes: string | null
+          outstanding_minor: number | null
+          payment_account_id: string | null
+          principal_minor: number
+          repayment_frequency: Database["public"]["Enums"]["recurrence_interval"]
+          start_date: string | null
+          status: "active" | "completed" | "cancelled"
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          end_date?: string | null
+          id?: string
+          installment_amount_minor: number
+          interest_rate_pct?: number | null
+          lender_name?: string | null
+          loan_type?: "home" | "car" | "personal" | "education" | "business" | "other"
+          name: string
+          next_payment_date?: string | null
+          notes?: string | null
+          outstanding_minor?: number | null
+          payment_account_id?: string | null
+          principal_minor: number
+          repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
+          start_date?: string | null
+          status?: "active" | "completed" | "cancelled"
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          end_date?: string | null
+          id?: string
+          installment_amount_minor?: number
+          interest_rate_pct?: number | null
+          lender_name?: string | null
+          loan_type?: "home" | "car" | "personal" | "education" | "business" | "other"
+          name?: string
+          next_payment_date?: string | null
+          notes?: string | null
+          outstanding_minor?: number | null
+          payment_account_id?: string | null
+          principal_minor?: number
+          repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
+          start_date?: string | null
+          status?: "active" | "completed" | "cancelled"
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      planned_commitment_occurrences: {
+        Row: {
+          amount_minor: number
+          commitment_id: string
+          created_at: string
+          due_date: string
+          id: string
+          matched_transaction_id: string | null
+          paid_at: string | null
+          reserved_minor: number
+          status: "upcoming" | "paid" | "skipped"
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_minor: number
+          commitment_id: string
+          created_at?: string
+          due_date: string
+          id?: string
+          matched_transaction_id?: string | null
+          paid_at?: string | null
+          reserved_minor?: number
+          status?: "upcoming" | "paid" | "skipped"
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_minor?: number
+          commitment_id?: string
+          created_at?: string
+          due_date?: string
+          id?: string
+          matched_transaction_id?: string | null
+          paid_at?: string | null
+          reserved_minor?: number
+          status?: "upcoming" | "paid" | "skipped"
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planned_commitment_occurrences_commitment_id_fkey"
+            columns: ["commitment_id"]
+            isOneToOne: false
+            referencedRelation: "planned_commitments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planned_commitment_occurrences_matched_transaction_id_fkey"
+            columns: ["matched_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planned_commitments: {
+        Row: {
+          amount_is_estimate: boolean
+          amount_minor: number
+          category_id: string | null
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          funding_account_id: string | null
+          id: string
+          migrated_from_bill_id: string | null
+          name: string
+          next_payment_date: string
+          notes: string | null
+          payment_frequency: Database["public"]["Enums"]["recurrence_interval"]
+          saving_amount_minor: number | null
+          saving_cadence: Database["public"]["Enums"]["recurrence_interval"] | null
+          status: "active" | "paused" | "completed" | "cancelled"
+          tenure_end_date: string | null
+          tenure_payments: number | null
+          tenure_type: "none" | "n_payments" | "end_date"
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_is_estimate?: boolean
+          amount_minor: number
+          category_id?: string | null
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          funding_account_id?: string | null
+          id?: string
+          migrated_from_bill_id?: string | null
+          name: string
+          next_payment_date: string
+          notes?: string | null
+          payment_frequency: Database["public"]["Enums"]["recurrence_interval"]
+          saving_amount_minor?: number | null
+          saving_cadence?: Database["public"]["Enums"]["recurrence_interval"] | null
+          status?: "active" | "paused" | "completed" | "cancelled"
+          tenure_end_date?: string | null
+          tenure_payments?: number | null
+          tenure_type?: "none" | "n_payments" | "end_date"
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_is_estimate?: boolean
+          amount_minor?: number
+          category_id?: string | null
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          funding_account_id?: string | null
+          id?: string
+          migrated_from_bill_id?: string | null
+          name?: string
+          next_payment_date?: string
+          notes?: string | null
+          payment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
+          saving_amount_minor?: number | null
+          saving_cadence?: Database["public"]["Enums"]["recurrence_interval"] | null
+          status?: "active" | "paused" | "completed" | "cancelled"
+          tenure_end_date?: string | null
+          tenure_payments?: number | null
+          tenure_type?: "none" | "n_payments" | "end_date"
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planned_commitments_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planned_commitments_funding_account_id_fkey"
+            columns: ["funding_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planned_commitments_migrated_from_bill_id_fkey"
+            columns: ["migrated_from_bill_id"]
+            isOneToOne: false
+            referencedRelation: "bill_definitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null

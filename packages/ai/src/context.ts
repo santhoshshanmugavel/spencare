@@ -110,6 +110,7 @@ export async function buildAiContext(ctx: AuthContext, uiContext?: AiContext["ui
         currency: safeToSpendResult.amount.currencyCode,
         ownedSpendableMinor: Number(safeToSpendResult.ownedSpendableTotal.amountMinorUnits),
         creditAvailableMinor: Number(safeToSpendResult.creditAvailableTotal.amountMinorUnits),
+        commitmentReservedMinor: Number(safeToSpendResult.commitmentReservedTotal.amountMinorUnits),
       },
       // Every account type is represented -- credit_card/investment are
       // NEVER excluded (Spensa Spec v1.0 Correction Pass, Conflict-1: the
