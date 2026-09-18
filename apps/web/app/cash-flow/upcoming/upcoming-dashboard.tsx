@@ -1,19 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import { CalendarClock, CreditCard, Landmark, Plus } from "lucide-react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { CalendarClock, CreditCard, Landmark, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import type {
   PlannedCommitmentOccurrenceWithCommitment,
+  PlannedCommitmentRow,
   BillPredictionWithDefinition,
   LoanRow,
   AccountRow,
 } from "@spencare/domain-application";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { EmptyState } from "@/components/spencare/empty-state";
+import { CommitmentSheet } from "./commitment-sheet";
+import { LoanSheet } from "./loan-sheet";
+import { CommitmentActions } from "./commitment-actions";
+import { deleteLoanAction } from "./actions";
 
 const CURRENCY = "INR";
 
@@ -35,23 +48,19 @@ function daysUntil(isoDate: string): number {
 
 function DueDateLabel({ isoDate }: { isoDate: string }) {
   const days = daysUntil(isoDate);
-  if (days < 0) {
+  if (days < 0)
     return <span className="text-xs font-medium text-destructive">Overdue {formatDate(isoDate)}</span>;
-  }
-  if (days === 0) {
+  if (days === 0)
     return <span className="text-xs font-medium text-amber-500">Due today</span>;
-  }
-  if (days <= 7) {
+  if (days <= 7)
     return <span className="text-xs font-medium text-amber-500">Due {formatDate(isoDate)}</span>;
-  }
   return <span className="text-xs text-muted-foreground">{formatDate(isoDate)}</span>;
 }
 
 function ReserveLabel({ reservedMinor, amountMinor }: { reservedMinor: number; amountMinor: number }) {
   const shortfall = amountMinor - reservedMinor;
-  if (shortfall <= 0) {
+  if (shortfall <= 0)
     return <span className="text-xs text-emerald-600 dark:text-emerald-400">Fully reserved</span>;
-  }
   return (
     <span className="text-xs text-amber-600 dark:text-amber-400">
       <Money
@@ -94,32 +103,86 @@ function dateGroup(isoDate: string): Group {
   if (days === 0) return "today";
   if (days <= 7) return "week";
   const today = new Date();
-  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const remaining = lastDay - today.getDate();
+  const remaining = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - today.getDate();
   if (days <= remaining) return "month";
   return "later";
 }
 
 const GROUP_ORDER: Group[] = ["overdue", "today", "week", "month", "later"];
 
+function LoanActions({
+  loan,
+  accounts,
+  onChanged,
+  onEdit,
+}: {
+  loan: LoanRow;
+  accounts: AccountRow[];
+  onChanged: () => void;
+  onEdit: (loan: LoanRow) => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  async function handleDelete() {
+    if (!confirm(`Delete "${loan.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    await deleteLoanAction(loan.id);
+    onChanged();
+    setDeleting(false);
+  }
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-8" aria-label="Loan actions">
+          <MoreHorizontal className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => onEdit(loan)}>Edit loan</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={handleDelete}
+          disabled={deleting}
+          className="text-destructive focus:text-destructive"
+        >
+          <Trash2 className="size-4 mr-2" />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function UpcomingDashboard({
   commitmentOccurrences,
+  commitments,
   billPredictions,
   loans,
   accounts,
   masked,
 }: {
   commitmentOccurrences: PlannedCommitmentOccurrenceWithCommitment[];
+  commitments: PlannedCommitmentRow[];
   billPredictions: BillPredictionWithDefinition[];
   loans: LoanRow[];
   accounts: AccountRow[];
   masked: boolean;
 }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [commitmentSheetOpen, setCommitmentSheetOpen] = useState(false);
+  const [loanSheetOpen, setLoanSheetOpen] = useState(false);
+  const [editingLoan, setEditingLoan] = useState<LoanRow | undefined>(undefined);
   const [showPredictions, setShowPredictions] = useState(false);
+
+  const commitmentById = new Map(commitments.map((c) => [c.id, c]));
   const accountById = new Map(accounts.map((a) => [a.id, a]));
 
   const upcomingBills = billPredictions.filter((p) => p.status === "open" || p.status === "overdue");
   const activeLoans = loans.filter((l) => l.status === "active" && l.next_payment_date != null);
+
+  function refresh() {
+    startTransition(() => router.refresh());
+  }
 
   type Item =
     | { kind: "commitment"; occ: PlannedCommitmentOccurrenceWithCommitment }
@@ -154,17 +217,13 @@ export function UpcomingDashboard({
           <p className="text-sm text-muted-foreground mt-0.5">What needs your attention next</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="touch" variant="outline" asChild>
-            <a href="/cash-flow/upcoming/new-loan">
-              <Plus className="size-4 mr-1" aria-hidden="true" />
-              Add loan
-            </a>
+          <Button size="touch" variant="outline" onClick={() => { setEditingLoan(undefined); setLoanSheetOpen(true); }}>
+            <Plus className="size-4 mr-1" aria-hidden="true" />
+            Add loan
           </Button>
-          <Button size="touch" asChild>
-            <a href="/cash-flow/upcoming/new-commitment">
-              <Plus className="size-4 mr-1" aria-hidden="true" />
-              Add commitment
-            </a>
+          <Button size="touch" onClick={() => setCommitmentSheetOpen(true)}>
+            <Plus className="size-4 mr-1" aria-hidden="true" />
+            Add commitment
           </Button>
         </div>
       </div>
@@ -185,6 +244,7 @@ export function UpcomingDashboard({
                   {items.map((item) => {
                     if (item.kind === "commitment") {
                       const occ = item.occ;
+                      const commitment = commitmentById.get(occ.commitment_id);
                       const fundingAccount = occ.planned_commitments.funding_account_id
                         ? accountById.get(occ.planned_commitments.funding_account_id)
                         : null;
@@ -203,11 +263,21 @@ export function UpcomingDashboard({
                             </span>
                           }
                           trailing={
-                            <Money
-                              value={DomainMoney.fromMinorUnits(BigInt(occ.amount_minor), CURRENCY)}
-                              masked={masked}
-                              size="numeric"
-                            />
+                            <div className="flex items-center gap-1">
+                              <Money
+                                value={DomainMoney.fromMinorUnits(BigInt(occ.amount_minor), CURRENCY)}
+                                masked={masked}
+                                size="numeric"
+                              />
+                              {commitment && (
+                                <CommitmentActions
+                                  occ={occ}
+                                  commitment={commitment}
+                                  accounts={accounts}
+                                  onChanged={refresh}
+                                />
+                              )}
+                            </div>
                           }
                         />
                       );
@@ -235,11 +305,22 @@ export function UpcomingDashboard({
                             </span>
                           }
                           trailing={
-                            <Money
-                              value={DomainMoney.fromMinorUnits(BigInt(loan.installment_amount_minor), loan.currency)}
-                              masked={masked}
-                              size="numeric"
-                            />
+                            <div className="flex items-center gap-1">
+                              <Money
+                                value={DomainMoney.fromMinorUnits(
+                                  BigInt(loan.installment_amount_minor),
+                                  loan.currency,
+                                )}
+                                masked={masked}
+                                size="numeric"
+                              />
+                              <LoanActions
+                                loan={loan}
+                                accounts={accounts}
+                                onChanged={refresh}
+                                onEdit={(l) => { setEditingLoan(l); setLoanSheetOpen(true); }}
+                              />
+                            </div>
                           }
                         />
                       );
@@ -291,6 +372,21 @@ export function UpcomingDashboard({
           )}
         </div>
       )}
+
+      <CommitmentSheet
+        open={commitmentSheetOpen}
+        onOpenChange={setCommitmentSheetOpen}
+        onSaved={() => { setCommitmentSheetOpen(false); refresh(); }}
+        accounts={accounts}
+      />
+
+      <LoanSheet
+        open={loanSheetOpen}
+        onOpenChange={(v) => { setLoanSheetOpen(v); if (!v) setEditingLoan(undefined); }}
+        onSaved={() => { setLoanSheetOpen(false); setEditingLoan(undefined); refresh(); }}
+        accounts={accounts}
+        existing={editingLoan}
+      />
     </div>
   );
 }

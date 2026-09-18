@@ -8,8 +8,10 @@ import {
   listBudgetsWithUsage,
   listCategories,
   listGoals,
+  listUpcoming,
+  listAllLoans,
   type AuthContext,
-getProfileForDisplay,
+  getProfileForDisplay,
 } from "@spencare/domain-application";
 import { calculateGoalPaceStatus } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
@@ -20,6 +22,7 @@ import { NotificationBell } from "@/components/spencare/notification-bell";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { HomeContent, type SafeToSpendPlain, type NetWorthPlain } from "./home-content";
+import { UpcomingWidget, type UpcomingWidgetItem } from "./upcoming-widget";
 import {
   parsePeriodKey,
   resolvePeriod,
@@ -62,7 +65,7 @@ export default async function HomePage({
   // Fetch all data in parallel. Trend: 12 months always so the chart shows
   // a useful window and prior-period delta computation has data to work with.
   const TREND_FETCH_MONTHS = Math.max(trendMonths, 12);
-  const [profile, safeToSpendResult, netWorthResult, accounts, budgetUsages, goals, categories, trend, expenseByCategory] =
+  const [profile, safeToSpendResult, netWorthResult, accounts, budgetUsages, goals, categories, trend, expenseByCategory, upcomingOccurrences, activeLoans] =
     await Promise.all([
       getProfile(ctx),
       getSafeToSpend(ctx),
@@ -73,6 +76,8 @@ export default async function HomePage({
       listCategories(ctx),
       getCashFlowTrend(ctx, TREND_FETCH_MONTHS, currentMonthStart),
       getCashFlowByCategory(ctx, { periodStart: filterPeriodStart, periodEnd: filterPeriodEnd }, "expense"),
+      listUpcoming(ctx, { limit: 10 }),
+      listAllLoans(ctx),
     ]);
 
   // ── Tier 1 safe shapes (Server→Client boundary: no Money instances) ──────
@@ -253,6 +258,39 @@ export default async function HomePage({
   const periodLabel =
     DASHBOARD_PERIOD_OPTIONS.find((o) => o.key === periodKey)?.label ?? "This month";
 
+  // ── Upcoming widget items ─────────────────────────────────────────────────
+  const now = new Date();
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const monthEndIso = monthEnd.toISOString().slice(0, 10);
+
+  const upcomingWidgetItems: UpcomingWidgetItem[] = [
+    ...upcomingOccurrences.slice(0, 8).map((occ) => ({
+      id: `c-${occ.id}`,
+      kind: "commitment" as const,
+      name: occ.planned_commitments.name,
+      amountMinor: occ.amount_minor,
+      currency: "INR",
+      dueDate: occ.due_date,
+      shortfallMinor: Math.max(0, occ.amount_minor - occ.reserved_minor),
+    })),
+    ...activeLoans
+      .filter((l) => l.status === "active" && l.next_payment_date != null)
+      .slice(0, 4)
+      .map((l) => ({
+        id: `l-${l.id}`,
+        kind: "loan" as const,
+        name: l.name,
+        amountMinor: l.installment_amount_minor,
+        currency: l.currency,
+        dueDate: l.next_payment_date!,
+        shortfallMinor: 0,
+      })),
+  ].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  const totalThisMonthMinor = upcomingWidgetItems
+    .filter((i) => i.dueDate <= monthEndIso)
+    .reduce((s, i) => s + i.amountMinor, 0);
+
 
   const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null = _displayProfile?.avatarSignedUrl ?? (user.user_metadata?.avatar_url as string | null ?? null);
@@ -268,6 +306,15 @@ export default async function HomePage({
       }
     >
       <div className="mx-auto max-w-4xl space-y-6 py-8">
+        {upcomingWidgetItems.length > 0 && (
+          <div className="max-w-2xl mx-auto">
+            <UpcomingWidget
+              items={upcomingWidgetItems}
+              masked={profile?.privacy_mode_enabled ?? false}
+              totalThisMonthMinor={totalThisMonthMinor}
+            />
+          </div>
+        )}
         <HomeContent
           displayName={profile?.display_name ?? null}
           safeToSpend={safeToSpend}

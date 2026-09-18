@@ -30,6 +30,17 @@ import {
   proposeRevokeMcpSessionSchema,
   createGoalContributionPlanSchema,
   updateGoalContributionPlanSchema,
+  proposeCreateCommitmentSchema,
+  proposeUpdateCommitmentSchema,
+  proposeReserveCommitmentSchema,
+  proposeSkipCommitmentOccurrenceSchema,
+  proposeMarkCommitmentPaidSchema,
+  proposePauseCommitmentSchema,
+  proposeResumeCommitmentSchema,
+  proposeDeleteCommitmentSchema,
+  proposeCreateLoanSchema,
+  proposeUpdateLoanSchema,
+  proposeDeleteLoanSchema,
   confirmCommandSchema,
   cancelCommandSchema,
 } from "@spencare/validation";
@@ -51,6 +62,7 @@ import {
   getGoalContributionPlanById,
   calculateNextOccurrence,
   FREQUENCY_LABELS,
+  listCommitments,
   type McpAuthContext,
   type ProposalPreviewField,
 } from "@spencare/domain-application";
@@ -802,6 +814,227 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
         return proposeCommand(ctx, "mcp", "deleteGoalContributionPlan", { planId }, {
           summary: "Delete the contribution plan. The goal's saved balance is unchanged.",
           fields: [{ label: "Action", value: "Remove reminder schedule (no money affected)" }],
+        });
+      }),
+  );
+
+  // ── Commitment write tools ───────────────────────────────────────────────
+
+  server.registerTool(
+    "proposeCreateCommitment",
+    {
+      description: "Propose adding a new planned commitment (insurance, rent, subscription, etc.) with an optional saving schedule. This is a PLANNING + REMINDER system only. No money is moved automatically. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposeCreateCommitmentSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeCreateCommitment", "write", async () => {
+        const input = proposeCreateCommitmentSchema.parse(rawInput);
+        const privacyMode = await isPrivacyModeEnabled(ctx);
+        const amountText = describeAmountForProvider(input.amountMinor, input.currency ?? "INR", privacyMode);
+        const accounts = await listAccounts(ctx);
+        const fundingAccName = input.fundingAccountId
+          ? (accounts.find((a) => a.id === input.fundingAccountId)?.name ?? "the selected account")
+          : null;
+        const fields: ProposalPreviewField[] = [
+          { label: "Name", value: input.name },
+          { label: "Amount", value: amountText + (input.amountIsEstimate ? " (estimate)" : "") },
+          { label: "Payment frequency", value: input.paymentFrequency },
+          { label: "Next payment", value: input.nextPaymentDate },
+        ];
+        if (fundingAccName) fields.push({ label: "Funding account", value: fundingAccName });
+        if (input.savingCadence) {
+          const saveText = input.savingAmountMinor ? describeAmountForProvider(input.savingAmountMinor, input.currency ?? "INR", privacyMode) : "?";
+          fields.push({ label: "Saving schedule", value: `${saveText} ${input.savingCadence} from ${input.firstSavingDate ?? "?"}` });
+        }
+        return proposeCommand(ctx, "mcp", "createCommitment", input as unknown as Record<string, unknown>, {
+          summary: `Create commitment "${input.name}" for ${amountText} ${input.paymentFrequency}. Planning only — no automatic transfers.`,
+          fields,
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeUpdateCommitment",
+    {
+      description: "Propose updating a planned commitment. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { commitmentId: z.string().uuid(), ...proposeUpdateCommitmentSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeUpdateCommitment", "write", async () => {
+        const { commitmentId, ...rest } = rawInput as { commitmentId: string; [k: string]: unknown };
+        const input = proposeUpdateCommitmentSchema.parse(rest);
+        const commitments = await listCommitments(ctx);
+        const name = commitments.find((c) => c.id === commitmentId)?.name ?? "this commitment";
+        return proposeCommand(ctx, "mcp", "updateCommitment", { commitmentId, ...input } as Record<string, unknown>, {
+          summary: `Update commitment "${name}".`,
+          fields: [{ label: "Commitment", value: name }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeDeleteCommitment",
+    {
+      description: "Propose deleting a planned commitment and all its future occurrences. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposeDeleteCommitmentSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeDeleteCommitment", "write", async () => {
+        const { commitmentId } = proposeDeleteCommitmentSchema.parse(rawInput);
+        const commitments = await listCommitments(ctx);
+        const name = commitments.find((c) => c.id === commitmentId)?.name ?? "this commitment";
+        return proposeCommand(ctx, "mcp", "deleteCommitment", { commitmentId }, {
+          summary: `Delete commitment "${name}". This cannot be undone.`,
+          fields: [{ label: "Commitment", value: name }, { label: "Warning", value: "All future occurrences will be removed." }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposePauseCommitment",
+    {
+      description: "Propose pausing a planned commitment so future occurrences stop generating. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposePauseCommitmentSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposePauseCommitment", "write", async () => {
+        const { commitmentId } = proposePauseCommitmentSchema.parse(rawInput);
+        const commitments = await listCommitments(ctx);
+        const name = commitments.find((c) => c.id === commitmentId)?.name ?? "this commitment";
+        return proposeCommand(ctx, "mcp", "pauseCommitment", { commitmentId }, {
+          summary: `Pause commitment "${name}".`,
+          fields: [{ label: "Commitment", value: name }, { label: "Action", value: "Pause (future occurrences stop)" }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeResumeCommitment",
+    {
+      description: "Propose resuming a paused planned commitment. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposeResumeCommitmentSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeResumeCommitment", "write", async () => {
+        const { commitmentId } = proposeResumeCommitmentSchema.parse(rawInput);
+        const commitments = await listCommitments(ctx);
+        const name = commitments.find((c) => c.id === commitmentId)?.name ?? "this commitment";
+        return proposeCommand(ctx, "mcp", "resumeCommitment", { commitmentId }, {
+          summary: `Resume commitment "${name}".`,
+          fields: [{ label: "Commitment", value: name }, { label: "Action", value: "Resume" }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeReserveCommitment",
+    {
+      description: "Propose marking a portion of an account's balance as logically reserved for an upcoming commitment occurrence. This is a LOGICAL protection only. No money moves. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposeReserveCommitmentSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeReserveCommitment", "write", async () => {
+        const input = proposeReserveCommitmentSchema.parse(rawInput);
+        const privacyMode = await isPrivacyModeEnabled(ctx);
+        const amountText = describeAmountForProvider(input.reserveAmountMinor, "INR", privacyMode);
+        return proposeCommand(ctx, "mcp", "reserveOccurrence", input as unknown as Record<string, unknown>, {
+          summary: `Reserve ${amountText} for this commitment occurrence. Logical protection only — no actual transfer.`,
+          fields: [
+            { label: "Reserve amount", value: amountText },
+            { label: "Note", value: "Safe to Spend will reflect this reservation." },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeSkipCommitmentOccurrence",
+    {
+      description: "Propose skipping one upcoming occurrence of a planned commitment. The occurrence will be marked as skipped. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposeSkipCommitmentOccurrenceSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeSkipCommitmentOccurrence", "write", async () => {
+        const input = proposeSkipCommitmentOccurrenceSchema.parse(rawInput);
+        return proposeCommand(ctx, "mcp", "skipOccurrence", input as unknown as Record<string, unknown>, {
+          summary: "Skip this commitment occurrence.",
+          fields: [{ label: "Action", value: "Skip (mark as skipped)" }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeMarkCommitmentPaid",
+    {
+      description: "Propose marking a commitment occurrence as paid (without linking a transaction). Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposeMarkCommitmentPaidSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeMarkCommitmentPaid", "write", async () => {
+        const input = proposeMarkCommitmentPaidSchema.parse(rawInput);
+        return proposeCommand(ctx, "mcp", "markOccurrencePaid", input as unknown as Record<string, unknown>, {
+          summary: "Mark this commitment occurrence as paid.",
+          fields: [{ label: "Action", value: "Mark as paid" }],
+        });
+      }),
+  );
+
+  // ── Loan write tools ─────────────────────────────────────────────────────
+
+  server.registerTool(
+    "proposeCreateLoan",
+    {
+      description: "Propose adding a new loan so Spencare can track installment payments. This is tracking only — no money is moved. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposeCreateLoanSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeCreateLoan", "write", async () => {
+        const input = proposeCreateLoanSchema.parse(rawInput);
+        const privacyMode = await isPrivacyModeEnabled(ctx);
+        const principalText = describeAmountForProvider(input.principalMinor, input.currency ?? "INR", privacyMode);
+        const installText = describeAmountForProvider(input.installmentAmountMinor, input.currency ?? "INR", privacyMode);
+        return proposeCommand(ctx, "mcp", "createLoan", input as unknown as Record<string, unknown>, {
+          summary: `Add loan "${input.name}" — principal ${principalText}, installment ${installText} ${input.repaymentFrequency}.`,
+          fields: [
+            { label: "Name", value: input.name },
+            { label: "Type", value: input.loanType ?? "personal" },
+            { label: "Principal", value: principalText },
+            { label: "Installment", value: installText },
+            { label: "Frequency", value: input.repaymentFrequency },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeUpdateLoan",
+    {
+      description: "Propose updating a loan's details. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { loanId: z.string().uuid(), ...proposeUpdateLoanSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeUpdateLoan", "write", async () => {
+        const { loanId, ...rest } = rawInput as { loanId: string; [k: string]: unknown };
+        const input = proposeUpdateLoanSchema.parse(rest);
+        return proposeCommand(ctx, "mcp", "updateLoan", { loanId, ...input } as Record<string, unknown>, {
+          summary: "Update loan details.",
+          fields: [{ label: "Loan ID", value: loanId }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeDeleteLoan",
+    {
+      description: "Propose deleting a loan record. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposeDeleteLoanSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeDeleteLoan", "write", async () => {
+        const { loanId } = proposeDeleteLoanSchema.parse(rawInput);
+        return proposeCommand(ctx, "mcp", "deleteLoan", { loanId }, {
+          summary: "Delete this loan record. This cannot be undone.",
+          fields: [{ label: "Action", value: "Delete loan" }],
         });
       }),
   );

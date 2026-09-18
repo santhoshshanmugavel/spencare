@@ -8,6 +8,7 @@ import {
   type AuthContext,
   getProfileForDisplay,
 } from "@spencare/domain-application";
+
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { PRIMARY_NAV_ITEMS } from "@/lib/nav-items";
@@ -33,9 +34,10 @@ export default async function UpcomingPage() {
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
 
-  const [accounts, commitmentOccurrences, loans, billPredictions, profile] = await Promise.all([
+  const [accounts, commitmentOccurrences, commitments, loans, billPredictions, profile] = await Promise.all([
     listAccounts(ctx),
     listUpcoming(ctx, { limit: 50 }),
+    listCommitments(ctx),
     listAllLoans(ctx),
     listBillPredictions(ctx, { status: ["open", "overdue"] }),
     getProfile(ctx),
@@ -67,6 +69,7 @@ export default async function UpcomingPage() {
       <div className="mx-auto max-w-2xl py-8">
         <UpcomingDashboard
           commitmentOccurrences={commitmentOccurrences}
+          commitments={commitments}
           billPredictions={billPredictions}
           loans={loans}
           accounts={accounts}

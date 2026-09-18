@@ -156,6 +156,30 @@ export const proposeRevokeMcpSessionSchema = z.object({
 });
 export type ProposeRevokeMcpSessionInput = z.infer<typeof proposeRevokeMcpSessionSchema>;
 
+// ── Commitment and Loan propose schemas ───────────────────────────────────
+import { createCommitmentSchema, updateCommitmentSchema, reserveCommitmentSchema, skipOccurrenceSchema, markCommitmentPaidSchema } from "./commitments.js";
+import { createLoanSchema, updateLoanSchema } from "./loans.js";
+export {
+  createCommitmentSchema as proposeCreateCommitmentSchema,
+  updateCommitmentSchema as proposeUpdateCommitmentSchema,
+  reserveCommitmentSchema as proposeReserveCommitmentSchema,
+  skipOccurrenceSchema as proposeSkipCommitmentOccurrenceSchema,
+  markCommitmentPaidSchema as proposeMarkCommitmentPaidSchema,
+  createLoanSchema as proposeCreateLoanSchema,
+  updateLoanSchema as proposeUpdateLoanSchema,
+};
+
+const proposeCommitmentIdSchema = z.object({ commitmentId: z.string().uuid() });
+export const proposePauseCommitmentSchema = proposeCommitmentIdSchema;
+export const proposeResumeCommitmentSchema = proposeCommitmentIdSchema;
+export const proposeDeleteCommitmentSchema = proposeCommitmentIdSchema;
+
+const proposeLoanIdSchema = z.object({ loanId: z.string().uuid() });
+export const proposeDeleteLoanSchema = proposeLoanIdSchema;
+
+export type ProposeCreateCommitmentInput = z.infer<typeof createCommitmentSchema>;
+export type ProposeUpdateCommitmentInput = z.infer<typeof updateCommitmentSchema>;
+
 // ── CONFIRMATION_COMMAND_TYPES ─────────────────────────────────────────────
 /** All distinct `pending_confirmations.command_type` values -- kept as a literal union so an unsupported type is a compile-time error, not a runtime surprise. */
 export const CONFIRMATION_COMMAND_TYPES = [
@@ -193,6 +217,19 @@ export const CONFIRMATION_COMMAND_TYPES = [
   "pauseGoalContributionPlan",
   "resumeGoalContributionPlan",
   "deleteGoalContributionPlan",
+  // Planned Commitments (planning + reminder, no money movement)
+  "createCommitment",
+  "updateCommitment",
+  "deleteCommitment",
+  "pauseCommitment",
+  "resumeCommitment",
+  "reserveOccurrence",
+  "skipOccurrence",
+  "markOccurrencePaid",
+  // Loans (tracking only, no money movement)
+  "createLoan",
+  "updateLoan",
+  "deleteLoan",
 ] as const;
 export type ConfirmationCommandType = (typeof CONFIRMATION_COMMAND_TYPES)[number];
 

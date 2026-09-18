@@ -2,7 +2,7 @@ import type { TypedSupabaseClient } from "./supabaseClients.js";
 import type { RecurrenceInterval } from "./billsRepo.js";
 
 export type { RecurrenceInterval };
-export type LoanType = "home" | "car" | "personal" | "education" | "business" | "other";
+export type LoanType = "home" | "car" | "bike" | "personal" | "education" | "business" | "other";
 export type LoanStatus = "active" | "completed" | "cancelled";
 
 export interface LoanRow {

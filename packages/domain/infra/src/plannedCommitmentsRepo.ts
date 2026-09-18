@@ -292,3 +292,102 @@ export async function markOccurrencePaid(
   if (error) throw error;
   return data as PlannedCommitmentOccurrenceRow;
 }
+
+export async function markOccurrencePaidNoTransaction(
+  client: TypedSupabaseClient,
+  userId: string,
+  occurrenceId: string,
+): Promise<PlannedCommitmentOccurrenceRow> {
+  const { data, error } = await client
+    .from("planned_commitment_occurrences")
+    .update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+    })
+    .eq("id", occurrenceId)
+    .eq("user_id", userId)
+    .eq("status", "upcoming")
+    .select(OCCURRENCE_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as PlannedCommitmentOccurrenceRow;
+}
+
+export async function skipOccurrence(
+  client: TypedSupabaseClient,
+  userId: string,
+  occurrenceId: string,
+): Promise<PlannedCommitmentOccurrenceRow> {
+  const { data, error } = await client
+    .from("planned_commitment_occurrences")
+    .update({ status: "skipped" })
+    .eq("id", occurrenceId)
+    .eq("user_id", userId)
+    .eq("status", "upcoming")
+    .select(OCCURRENCE_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as PlannedCommitmentOccurrenceRow;
+}
+
+export async function updateOccurrenceReserve(
+  client: TypedSupabaseClient,
+  userId: string,
+  occurrenceId: string,
+  additionalMinor: number,
+): Promise<PlannedCommitmentOccurrenceRow> {
+  const { data: current, error: fetchErr } = await client
+    .from("planned_commitment_occurrences")
+    .select(OCCURRENCE_COLUMNS)
+    .eq("id", occurrenceId)
+    .eq("user_id", userId)
+    .eq("status", "upcoming")
+    .single();
+  if (fetchErr) throw fetchErr;
+
+  const occ = current as PlannedCommitmentOccurrenceRow;
+  const newReserved = Math.min(occ.amount_minor, occ.reserved_minor + additionalMinor);
+
+  const { data, error } = await client
+    .from("planned_commitment_occurrences")
+    .update({ reserved_minor: newReserved })
+    .eq("id", occurrenceId)
+    .eq("user_id", userId)
+    .select(OCCURRENCE_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as PlannedCommitmentOccurrenceRow;
+}
+
+export async function setCommitmentStatus(
+  client: TypedSupabaseClient,
+  userId: string,
+  commitmentId: string,
+  status: CommitmentStatus,
+): Promise<PlannedCommitmentRow> {
+  const { data, error } = await client
+    .from("planned_commitments")
+    .update({ status })
+    .eq("id", commitmentId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .select(COMMITMENT_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as PlannedCommitmentRow;
+}
+
+export async function getOccurrence(
+  client: TypedSupabaseClient,
+  userId: string,
+  occurrenceId: string,
+): Promise<PlannedCommitmentOccurrenceRow | null> {
+  const { data, error } = await client
+    .from("planned_commitment_occurrences")
+    .select(OCCURRENCE_COLUMNS)
+    .eq("id", occurrenceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as PlannedCommitmentOccurrenceRow | null;
+}

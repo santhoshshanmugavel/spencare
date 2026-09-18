@@ -6,6 +6,11 @@ import {
   listPlannedCommitments,
   listUpcomingOccurrences,
   markOccurrencePaid,
+  markOccurrencePaidNoTransaction,
+  skipOccurrence,
+  updateOccurrenceReserve,
+  setCommitmentStatus,
+  getOccurrence,
   type PlannedCommitmentRow,
   type PlannedCommitmentOccurrenceRow,
   type PlannedCommitmentOccurrenceWithCommitment,
@@ -63,4 +68,47 @@ export async function payOccurrence(
   transactionId: string,
 ): Promise<PlannedCommitmentOccurrenceRow> {
   return markOccurrencePaid(ctx.supabase, ctx.userId, occurrenceId, transactionId);
+}
+
+export async function markOccurrencePaidManually(
+  ctx: AuthContext,
+  occurrenceId: string,
+): Promise<PlannedCommitmentOccurrenceRow> {
+  return markOccurrencePaidNoTransaction(ctx.supabase, ctx.userId, occurrenceId);
+}
+
+export async function skipCommitmentOccurrence(
+  ctx: AuthContext,
+  occurrenceId: string,
+): Promise<PlannedCommitmentOccurrenceRow> {
+  return skipOccurrence(ctx.supabase, ctx.userId, occurrenceId);
+}
+
+export async function reserveForOccurrence(
+  ctx: AuthContext,
+  occurrenceId: string,
+  additionalMinor: number,
+): Promise<PlannedCommitmentOccurrenceRow> {
+  return updateOccurrenceReserve(ctx.supabase, ctx.userId, occurrenceId, additionalMinor);
+}
+
+export async function pauseCommitment(
+  ctx: AuthContext,
+  commitmentId: string,
+): Promise<PlannedCommitmentRow> {
+  return setCommitmentStatus(ctx.supabase, ctx.userId, commitmentId, "paused");
+}
+
+export async function resumeCommitment(
+  ctx: AuthContext,
+  commitmentId: string,
+): Promise<PlannedCommitmentRow> {
+  return setCommitmentStatus(ctx.supabase, ctx.userId, commitmentId, "active");
+}
+
+export async function getCommitmentOccurrence(
+  ctx: AuthContext,
+  occurrenceId: string,
+): Promise<PlannedCommitmentOccurrenceRow | null> {
+  return getOccurrence(ctx.supabase, ctx.userId, occurrenceId);
 }

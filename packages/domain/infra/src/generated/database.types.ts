@@ -1256,7 +1256,7 @@ export type Database = {
           installment_amount_minor: number
           interest_rate_pct: number | null
           lender_name: string | null
-          loan_type: "home" | "car" | "personal" | "education" | "business" | "other"
+          loan_type: "home" | "car" | "bike" | "personal" | "education" | "business" | "other"
           name: string
           next_payment_date: string | null
           notes: string | null
@@ -1278,7 +1278,7 @@ export type Database = {
           installment_amount_minor: number
           interest_rate_pct?: number | null
           lender_name?: string | null
-          loan_type?: "home" | "car" | "personal" | "education" | "business" | "other"
+          loan_type?: "home" | "car" | "bike" | "personal" | "education" | "business" | "other"
           name: string
           next_payment_date?: string | null
           notes?: string | null
@@ -1300,7 +1300,7 @@ export type Database = {
           installment_amount_minor?: number
           interest_rate_pct?: number | null
           lender_name?: string | null
-          loan_type?: "home" | "car" | "personal" | "education" | "business" | "other"
+          loan_type?: "home" | "car" | "bike" | "personal" | "education" | "business" | "other"
           name?: string
           next_payment_date?: string | null
           notes?: string | null
