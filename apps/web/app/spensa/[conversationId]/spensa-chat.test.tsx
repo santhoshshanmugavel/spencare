@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,7 +96,8 @@ describe("<SpensaChat> — empty/new-conversation state", () => {
     render(<SpensaChat {...baseProps} conversationId={null} />);
     await user.click(screen.getByRole("button", { name: "Add an expense" }));
 
-    expect(screen.getByText("Add an expense")).toBeInTheDocument();
+    const log = screen.getByRole("log");
+    expect(within(log).getByText("Add an expense")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Sure, what did you spend on?")).toBeInTheDocument());
     expect(fetch).toHaveBeenCalledWith(
       "/api/spensa/chat",

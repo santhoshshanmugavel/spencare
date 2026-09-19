@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Loader2, AlertTriangle, Sparkles, MessageSquarePlus, Send, Bot } from "lucide-react";
+import { Loader2, AlertTriangle, Sparkles, MessageSquarePlus, Send, Bot, Mic, MicOff, Copy, Check, RefreshCw } from "lucide-react";
 import type { AccountRow, CategoryRow, GoalRow } from "@spencare/domain-application";
 import type { AiConversationRow, AiMessageRow } from "@spencare/ai";
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,9 @@ export function SpensaChat({
   const [confirmStates, setConfirmStates] = useState<Record<string, { state: ConsequentialActionState; errorMessage?: string }>>({});
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [isPending, startTransition] = useTransition();
+  const [isListening, setIsListening] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const starterSentRef = useRef(false);
@@ -188,6 +191,46 @@ export function SpensaChat({
       await cancelCommandAction(confirmationId);
       setConfirmStates((s) => ({ ...s, [confirmationId]: { state: "cancelled" } }));
     });
+  }
+
+  function getSpeechRecognitionClass() {
+    if (typeof window === "undefined") return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition ?? null;
+  }
+
+  function handleVoiceToggle() {
+    const SR = getSpeechRecognitionClass();
+    if (!SR) return;
+
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const recognition = new SR();
+    recognitionRef.current = recognition;
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (event: { results: { [0]: { [0]: { transcript: string } } } }) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? "";
+      if (transcript) {
+        setInput((prev) => (prev ? prev + " " + transcript : transcript));
+        if (inputRef.current) {
+          inputRef.current.style.height = "auto";
+          inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 160) + "px";
+        }
+      }
+    };
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.start();
+    setIsListening(true);
   }
 
   const isEmpty = messages.length === 0 && !isStreaming;
@@ -319,6 +362,19 @@ export function SpensaChat({
                 disabled={isStreaming}
               />
             </div>
+            {getSpeechRecognitionClass() ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={handleVoiceToggle}
+                disabled={isStreaming}
+                className={cn("size-12 shrink-0 rounded-xl", isListening && "text-destructive")}
+                aria-label={isListening ? "Stop recording" : "Voice input"}
+              >
+                {isListening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+              </Button>
+            ) : null}
             <Button
               type="submit"
               size="icon"
@@ -414,6 +470,30 @@ function TypingDots() {
   );
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        });
+      }}
+      className={cn(
+        "mt-1 flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground/50",
+        "opacity-0 group-hover:opacity-100 transition-opacity",
+        "hover:bg-muted hover:text-muted-foreground",
+      )}
+      aria-label="Copy message"
+    >
+      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 function MessageBubble({
   message,
   confirmState,
@@ -479,7 +559,7 @@ function MessageBubble({
 
   // Assistant text
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-3 group">
       <AiAvatar />
       <div className="min-w-0 flex-1 pt-0.5">
         <div className="prose prose-sm max-w-none text-foreground dark:prose-invert
@@ -495,6 +575,7 @@ function MessageBubble({
           prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text ?? ""}</ReactMarkdown>
         </div>
+        <CopyButton text={message.text ?? ""} />
       </div>
     </div>
   );
