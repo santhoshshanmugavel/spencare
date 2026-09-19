@@ -29,7 +29,7 @@ export function ErrorState({
     >
       <div
         className={cn(
-          "flex items-center justify-center rounded-2xl bg-destructive/10 text-destructive",
+          "flex items-center justify-center rounded-[var(--radius-lg)] bg-destructive/10 text-destructive",
           size === "sm" && "size-10",
           size === "md" && "size-12",
           size === "lg" && "size-16"

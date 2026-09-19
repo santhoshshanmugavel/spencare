@@ -73,7 +73,7 @@ export function EmptyState({
       {icon && (
         <div
           className={cn(
-            "flex items-center justify-center rounded-2xl bg-muted text-muted-foreground",
+            "flex items-center justify-center rounded-[var(--radius-lg)] bg-muted text-muted-foreground",
             size === "sm" && "size-10",
             size === "md" && "size-12",
             size === "lg" && "size-16"
