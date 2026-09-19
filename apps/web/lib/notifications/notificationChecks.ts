@@ -70,44 +70,48 @@ async function runChecksForUser(
     .gte("period_end", todayIso);
 
   for (const budget of budgets ?? []) {
-    // Fetch category name for display
-    const { data: category } = await serviceRoleSupabase
-      .from("categories")
-      .select("name")
-      .eq("id", budget.category_id)
-      .maybeSingle();
+    try {
+      // Fetch category name for display
+      const { data: category } = await serviceRoleSupabase
+        .from("categories")
+        .select("name")
+        .eq("id", budget.category_id)
+        .maybeSingle();
 
-    const budgetName = category?.name ?? "Budget";
+      const budgetName = category?.name ?? "Budget";
 
-    // Sum expenses in this category during the budget period
-    const { data: txns } = await serviceRoleSupabase
-      .from("transactions")
-      .select("amount_minor, currency")
-      .eq("user_id", userId)
-      .eq("category_id", budget.category_id)
-      .eq("type", "expense")
-      .gte("occurred_at", budget.period_start)
-      .lte("occurred_at", budget.period_end + "T23:59:59Z")
-      .is("deleted_at", null);
+      // Sum expenses in this category during the budget period
+      const { data: txns } = await serviceRoleSupabase
+        .from("transactions")
+        .select("amount_minor, currency")
+        .eq("user_id", userId)
+        .eq("category_id", budget.category_id)
+        .eq("type", "expense")
+        .gte("occurred_at", budget.period_start)
+        .lte("occurred_at", budget.period_end + "T23:59:59Z")
+        .is("deleted_at", null);
 
-    const spentMinor = (txns ?? []).reduce((sum, t) => sum + Math.abs(t.amount_minor ?? 0), 0);
-    const currency = txns?.[0]?.currency ?? "INR";
+      const spentMinor = (txns ?? []).reduce((sum, t) => sum + Math.abs(t.amount_minor ?? 0), 0);
+      const currency = txns?.[0]?.currency ?? "INR";
 
-    const periodEnd = new Date(budget.period_end);
-    const daysLeft = Math.max(0, Math.ceil((periodEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+      const periodEnd = new Date(budget.period_end);
+      const daysLeft = Math.max(0, Math.ceil((periodEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
 
-    await checkBudgetThreshold({
-      serviceRoleSupabase,
-      userId,
-      userEmail,
-      budgetId: budget.id,
-      budgetName,
-      spentMinor,
-      limitMinor: budget.amount_minor,
-      daysLeft,
-      currency,
-    });
-    checksRun++;
+      await checkBudgetThreshold({
+        serviceRoleSupabase,
+        userId,
+        userEmail,
+        budgetId: budget.id,
+        budgetName,
+        spentMinor,
+        limitMinor: budget.amount_minor,
+        daysLeft,
+        currency,
+      });
+      checksRun++;
+    } catch {
+      // Individual check failure must not stop other checks
+    }
   }
 
   // ---- Account balance checks ----
@@ -119,18 +123,22 @@ async function runChecksForUser(
 
   for (const account of accounts ?? []) {
     if (account.type === "bank" || account.type === "cash") {
-      const LOW_THRESHOLD = 50000; // ₹500 in minor units
-      await checkBalanceThreshold({
-        serviceRoleSupabase,
-        userId,
-        userEmail,
-        accountId: account.id,
-        accountName: account.name,
-        balanceMinor: account.balance_minor ?? 0,
-        lowThresholdMinor: LOW_THRESHOLD,
-        currency: account.currency ?? "INR",
-      });
-      checksRun++;
+      try {
+        const LOW_THRESHOLD = 50000; // ₹500 in minor units
+        await checkBalanceThreshold({
+          serviceRoleSupabase,
+          userId,
+          userEmail,
+          accountId: account.id,
+          accountName: account.name,
+          balanceMinor: account.balance_minor ?? 0,
+          lowThresholdMinor: LOW_THRESHOLD,
+          currency: account.currency ?? "INR",
+        });
+        checksRun++;
+      } catch {
+        // Individual check failure must not stop other checks
+      }
     }
   }
 
@@ -163,20 +171,24 @@ async function runChecksForUser(
   }
 
   for (const prediction of predictions ?? []) {
-    const billDef = billDefMap[prediction.bill_definition_id];
-    if (!billDef) continue;
+    try {
+      const billDef = billDefMap[prediction.bill_definition_id];
+      if (!billDef) continue;
 
-    await checkBillReminder({
-      serviceRoleSupabase,
-      userId,
-      userEmail,
-      billId: prediction.bill_definition_id,
-      billName: billDef.merchant_pattern,
-      dueDateIso: prediction.expected_date,
-      expectedAmountMinor: prediction.expected_amount_minor ?? null,
-      currency: "INR",
-    });
-    checksRun++;
+      await checkBillReminder({
+        serviceRoleSupabase,
+        userId,
+        userEmail,
+        billId: prediction.bill_definition_id,
+        billName: billDef.merchant_pattern,
+        dueDateIso: prediction.expected_date,
+        expectedAmountMinor: prediction.expected_amount_minor ?? null,
+        currency: "INR",
+      });
+      checksRun++;
+    } catch {
+      // Individual check failure must not stop other checks
+    }
   }
 
   // ---- Goal contribution plan reminders ----
@@ -205,20 +217,24 @@ async function runChecksForUser(
     }
 
     for (const plan of plans ?? []) {
-      if (!plan.next_due_at) continue;
-      const goalName = goalNameMap[plan.goal_id] ?? "Goal";
-      await checkGoalPlanReminder({
-        serviceRoleSupabase,
-        userId,
-        userEmail,
-        planId: plan.id,
-        goalId: plan.goal_id,
-        goalName,
-        amountMinor: plan.amount_minor,
-        frequency: plan.frequency,
-        nextDueAtIso: plan.next_due_at,
-      });
-      checksRun++;
+      try {
+        if (!plan.next_due_at) continue;
+        const goalName = goalNameMap[plan.goal_id] ?? "Goal";
+        await checkGoalPlanReminder({
+          serviceRoleSupabase,
+          userId,
+          userEmail,
+          planId: plan.id,
+          goalId: plan.goal_id,
+          goalName,
+          amountMinor: plan.amount_minor,
+          frequency: plan.frequency,
+          nextDueAtIso: plan.next_due_at,
+        });
+        checksRun++;
+      } catch {
+        // Individual check failure must not stop other checks
+      }
     }
   }
 
@@ -248,21 +264,25 @@ async function runChecksForUser(
     }
 
     for (const occ of occurrences ?? []) {
-      const commitment = commitmentMap[occ.commitment_id];
-      if (!commitment) continue;
-      await checkCommitmentReminder({
-        serviceRoleSupabase,
-        userId,
-        userEmail,
-        occurrenceId: occ.id,
-        commitmentId: occ.commitment_id,
-        commitmentName: commitment.name,
-        dueDateIso: occ.due_date,
-        amountMinor: occ.amount_minor,
-        reservedMinor: occ.reserved_minor,
-        currency: commitment.currency,
-      });
-      checksRun++;
+      try {
+        const commitment = commitmentMap[occ.commitment_id];
+        if (!commitment) continue;
+        await checkCommitmentReminder({
+          serviceRoleSupabase,
+          userId,
+          userEmail,
+          occurrenceId: occ.id,
+          commitmentId: occ.commitment_id,
+          commitmentName: commitment.name,
+          dueDateIso: occ.due_date,
+          amountMinor: occ.amount_minor,
+          reservedMinor: occ.reserved_minor,
+          currency: commitment.currency,
+        });
+        checksRun++;
+      } catch {
+        // Individual check failure must not stop other checks
+      }
     }
   }
 
@@ -281,18 +301,22 @@ async function runChecksForUser(
     .lte("next_payment_date", loanWindowAhead);
 
   for (const loan of loans ?? []) {
-    if (!loan.next_payment_date) continue;
-    await checkLoanReminder({
-      serviceRoleSupabase,
-      userId,
-      userEmail,
-      loanId: loan.id,
-      loanName: loan.name,
-      dueDateIso: loan.next_payment_date,
-      installmentMinor: loan.installment_amount_minor,
-      currency: loan.currency,
-    });
-    checksRun++;
+    try {
+      if (!loan.next_payment_date) continue;
+      await checkLoanReminder({
+        serviceRoleSupabase,
+        userId,
+        userEmail,
+        loanId: loan.id,
+        loanName: loan.name,
+        dueDateIso: loan.next_payment_date,
+        installmentMinor: loan.installment_amount_minor,
+        currency: loan.currency,
+      });
+      checksRun++;
+    } catch {
+      // Individual check failure must not stop other checks
+    }
   }
 
   return checksRun;

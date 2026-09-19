@@ -68,9 +68,13 @@ export function isChannelEnabled(
   const globalPref = preferences.find(
     (p) => p.channel === channel && p.event_type === null,
   );
-  // Default: email and in_app are enabled, telegram/slack need explicit connection
+  // Default: all channels enabled except slack (no implementation yet).
+  // Telegram is gated by getChannelConnectionMetadata in the engine -- if no
+  // active connection exists, meta.chat_id is null and nothing is sent anyway.
+  // Defaulting to true means connecting Telegram is sufficient without also
+  // requiring a separate preference row.
   if (!globalPref) {
-    return channel === "email" || channel === "in_app";
+    return channel !== "slack";
   }
   return globalPref.enabled;
 }

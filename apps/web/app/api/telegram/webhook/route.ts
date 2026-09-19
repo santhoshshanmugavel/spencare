@@ -5,6 +5,7 @@ import {
   saveChannelConnection,
   getAllTelegramConnections,
   disconnectChannel,
+  upsertNotificationPreference,
 } from "@spencare/domain-infra";
 import { sendTelegramMessage } from "@/lib/notifications/telegramProvider";
 
@@ -136,6 +137,16 @@ async function handleStart({
       username ? `@${username}` : firstName,
       encryptionKey,
     );
+
+    // Auto-enable telegram notifications for this user so the delivery engine
+    // routes to their chat_id. Without this preference row, isChannelEnabled()
+    // returns false and no notifications are delivered even when connected.
+    await upsertNotificationPreference(serviceRoleSupabase, {
+      userId,
+      channel: "telegram",
+      eventType: null,
+      enabled: true,
+    }).catch(() => undefined); // Non-fatal — backfill migration covers existing users
 
     await reply(
       chatId,
