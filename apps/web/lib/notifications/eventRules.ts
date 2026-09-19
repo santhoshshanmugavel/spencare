@@ -514,20 +514,29 @@ export async function checkCreditCardBillingReminder(input: CreditCardBillingRul
     } else if (daysUntilDue === 3) {
       eventType = "CC_PAYMENT_3_DAYS";
       dedupeKey = `cc_pay_3d_${accountId}_${dueDateIso}`;
+    } else if (daysUntilDue === 1) {
+      eventType = "CC_PAYMENT_1_DAY";
+      dedupeKey = `cc_pay_1d_${accountId}_${dueDateIso}`;
     } else if (daysUntilDue === 0) {
       eventType = "CC_PAYMENT_TODAY";
       dedupeKey = `cc_pay_today_${accountId}_${dueDateIso}`;
+    } else if (daysUntilDue < 0 && daysUntilDue >= -7 && outstandingMinor > 0) {
+      eventType = "CC_PAYMENT_OVERDUE";
+      dedupeKey = `cc_pay_overdue_${accountId}_${dueDateIso}_${Math.abs(daysUntilDue)}d`;
     }
   }
 
   if (!eventType) return;
 
+  const isOverdue = daysUntilDue < 0;
+  const extraCtx = isOverdue ? { daysOverdue: Math.abs(daysUntilDue) } : {};
+
   await deliverNotification(serviceRoleSupabase, {
     userId, userEmail,
     eventType,
-    financialContext: { accountName, outstandingMinor, usedMinor: outstandingMinor, currency },
+    financialContext: { accountName, outstandingMinor, usedMinor: outstandingMinor, currency, ...extraCtx },
     category: "account",
-    severity: daysUntilDue === 0 ? "warning" : "info",
+    severity: isOverdue ? "critical" : daysUntilDue === 0 ? "warning" : "info",
     entityType: "account",
     entityId: accountId,
     actionUrl: "/settings/accounts",

@@ -29,7 +29,7 @@ export type NotificationEventType =
   | "COMMITMENT_AUTO_PAID" | "COMMITMENT_AUTO_PAY_FAILED" | "COMMITMENT_AUTO_PROTECTED" | "COMMITMENT_PREPARATION"
   | "LOAN_7_DAYS" | "LOAN_DUE_TODAY" | "LOAN_OVERDUE"
   | "CC_STATEMENT_7_DAYS" | "CC_STATEMENT_TODAY"
-  | "CC_PAYMENT_7_DAYS" | "CC_PAYMENT_3_DAYS" | "CC_PAYMENT_TODAY"
+  | "CC_PAYMENT_7_DAYS" | "CC_PAYMENT_3_DAYS" | "CC_PAYMENT_1_DAY" | "CC_PAYMENT_TODAY" | "CC_PAYMENT_OVERDUE"
   | "TRANSACTION_LARGE" | "TRANSACTION_UNUSUAL"
   | "SECURITY_PASSWORD_CHANGED" | "SECURITY_NEW_LOGIN" | "SECURITY_2FA_CHANGED"
   | "GMAIL_CONNECTED" | "GMAIL_CONNECTION_ERROR" | "MCP_CONNECTED" | "MCP_REVOKED"
@@ -445,6 +445,20 @@ export function composeNotificationMessage(
       return {
         title: `${accountName} payment due today`,
         body: `Your ${accountName} credit card payment of ${fmt(outstandingMinor, currency)} is due today.`,
+      };
+    }
+    case "CC_PAYMENT_1_DAY": {
+      const { accountName, outstandingMinor } = c as { accountName: string; outstandingMinor: number };
+      return {
+        title: `${accountName} payment due tomorrow`,
+        body: `Your ${accountName} credit card payment of ${fmt(outstandingMinor, currency)} is due tomorrow.`,
+      };
+    }
+    case "CC_PAYMENT_OVERDUE": {
+      const { accountName, outstandingMinor, daysOverdue } = c as { accountName: string; outstandingMinor: number; daysOverdue: number };
+      return {
+        title: `${accountName} payment overdue`,
+        body: `Your ${accountName} credit card payment of ${fmt(outstandingMinor, currency)} is ${daysOverdue} day${daysOverdue === 1 ? "" : "s"} overdue.`,
       };
     }
 
