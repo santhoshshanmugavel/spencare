@@ -2,7 +2,9 @@ import type { TypedSupabaseClient } from "./supabaseClients.js";
 import type { TransactionRow } from "./transactionsRepo.js";
 
 /** Mirrors `RecurrenceInterval` from `@spencare/domain-core` -- inlined rather than imported, matching every other enum-shaped column on `TransactionRow`/`GoalRow` above, since this package has no dependency on domain-core. */
-export type RecurrenceInterval = "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "irregular";
+export type RecurrenceInterval =
+  | "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "irregular"
+  | "one_time" | "daily" | "every_2_months" | "every_6_months" | "every_2_years" | "every_3_years";
 
 /**
  * Phase 12 -- this file now owns the full Bills repository (extending the

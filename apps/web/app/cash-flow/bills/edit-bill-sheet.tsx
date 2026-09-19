@@ -68,7 +68,7 @@ export function EditBillSheet({
     defaultValues: {
       merchantPattern: bill.merchant_pattern,
       expectedAmountMinor: bill.expected_amount_minor,
-      recurrenceInterval: bill.recurrence_interval,
+      recurrenceInterval: bill.recurrence_interval as (typeof RECURRENCE_INTERVALS)[number],
       categoryId: bill.category_id,
     },
   });

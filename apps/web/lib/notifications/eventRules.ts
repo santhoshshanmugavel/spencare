@@ -341,6 +341,33 @@ export async function checkCommitmentReminder(input: CommitmentRuleInput): Promi
   });
 }
 
+interface PreparationRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  commitmentId: string;
+  commitmentName: string;
+  savingAmountMinor: number;
+  nextPaymentDateIso: string;
+  todayIso: string;
+  currency?: string;
+}
+
+export async function checkPreparationReminder(input: PreparationRuleInput): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, commitmentId, commitmentName, savingAmountMinor, nextPaymentDateIso, todayIso } = input;
+  const currency = input.currency ?? "INR";
+  const dedupeKey = `commitment_preparation_${commitmentId}_${todayIso}`;
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType: "COMMITMENT_PREPARATION",
+    financialContext: { commitmentName, savingAmountMinor, nextPaymentDateIso, currency },
+    category: "commitment",
+    severity: "info",
+    entityType: "commitment",
+    entityId: commitmentId,
+    actionUrl: "/cash-flow/upcoming",
+    dedupeKey,
+  });
+}
+
 interface CreditRuleInput extends UserTarget {
   serviceRoleSupabase: TypedSupabaseClient;
   accountId: string;

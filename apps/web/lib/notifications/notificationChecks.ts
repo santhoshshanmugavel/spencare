@@ -5,7 +5,8 @@
  */
 
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
-import { checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkLoanReminder } from "./eventRules";
+import { checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder } from "./eventRules";
+import { savingDatesForOccurrence } from "@spencare/domain-core";
 
 interface CheckOutcome {
   userId: string;
@@ -304,6 +305,74 @@ async function runChecksForUser(
       } catch {
         // Individual check failure must not stop other checks
       }
+    }
+  }
+
+  // ---- Planned commitment preparation reminders ----
+  // Fire on saving dates where today is in the projected saving schedule.
+  const prepWindowAhead = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const { data: prepCommitments } = await serviceRoleSupabase
+    .from("planned_commitments")
+    .select("id, name, currency, saving_cadence, saving_day_rule, saving_amount_minor, first_saving_date, next_payment_date, payment_frequency")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .not("saving_cadence", "is", null)
+    .not("saving_amount_minor", "is", null)
+    .not("first_saving_date", "is", null);
+
+  for (const pc of prepCommitments ?? []) {
+    try {
+      if (!pc.saving_cadence || !pc.saving_amount_minor || !pc.first_saving_date) continue;
+      // Find the next upcoming occurrence to determine the prep window end
+      const { data: nextOcc } = await serviceRoleSupabase
+        .from("planned_commitment_occurrences")
+        .select("due_date")
+        .eq("commitment_id", pc.id)
+        .eq("status", "upcoming")
+        .gte("due_date", todayIso)
+        .lte("due_date", prepWindowAhead)
+        .order("due_date", { ascending: true })
+        .limit(1)
+        .single();
+      if (!nextOcc) continue;
+
+      // Find the previous occurrence to bound the prep window start
+      const { data: prevOcc } = await serviceRoleSupabase
+        .from("planned_commitment_occurrences")
+        .select("due_date")
+        .eq("commitment_id", pc.id)
+        .lt("due_date", nextOcc.due_date)
+        .order("due_date", { ascending: false })
+        .limit(1)
+        .single();
+
+      const savingDates = savingDatesForOccurrence({
+        firstSavingDate: pc.first_saving_date,
+        savingCadence: pc.saving_cadence as Parameters<typeof savingDatesForOccurrence>[0]["savingCadence"],
+        savingDayRule: pc.saving_day_rule,
+        prevOccurrenceDueDate: prevOcc?.due_date ?? null,
+        thisOccurrenceDueDate: nextOcc.due_date,
+        today: todayIso,
+      });
+
+      if (savingDates.includes(todayIso)) {
+        await checkPreparationReminder({
+          serviceRoleSupabase,
+          userId,
+          userEmail,
+          commitmentId: pc.id,
+          commitmentName: pc.name,
+          savingAmountMinor: pc.saving_amount_minor,
+          nextPaymentDateIso: nextOcc.due_date,
+          todayIso,
+          currency: pc.currency,
+        });
+        checksRun++;
+      }
+    } catch {
+      // Individual check failure must not stop other checks
     }
   }
 

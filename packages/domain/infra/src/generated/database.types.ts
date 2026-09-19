@@ -1398,12 +1398,14 @@ export type Database = {
           next_payment_date: string
           notes: string | null
           payment_account_id: string | null
+          payment_day_rule: number | null
           payment_frequency: Database["public"]["Enums"]["recurrence_interval"]
           reserve_account_id: string | null
           saving_amount_minor: number | null
           saving_cadence:
             | Database["public"]["Enums"]["recurrence_interval"]
             | null
+          saving_day_rule: number | null
           status: Database["public"]["Enums"]["commitment_status"]
           tenure_end_date: string | null
           tenure_payments: number | null
@@ -1428,12 +1430,14 @@ export type Database = {
           next_payment_date: string
           notes?: string | null
           payment_account_id?: string | null
+          payment_day_rule?: number | null
           payment_frequency: Database["public"]["Enums"]["recurrence_interval"]
           reserve_account_id?: string | null
           saving_amount_minor?: number | null
           saving_cadence?:
             | Database["public"]["Enums"]["recurrence_interval"]
             | null
+          saving_day_rule?: number | null
           status?: Database["public"]["Enums"]["commitment_status"]
           tenure_end_date?: string | null
           tenure_payments?: number | null
@@ -1458,12 +1462,14 @@ export type Database = {
           next_payment_date?: string
           notes?: string | null
           payment_account_id?: string | null
+          payment_day_rule?: number | null
           payment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
           reserve_account_id?: string | null
           saving_amount_minor?: number | null
           saving_cadence?:
             | Database["public"]["Enums"]["recurrence_interval"]
             | null
+          saving_day_rule?: number | null
           status?: Database["public"]["Enums"]["commitment_status"]
           tenure_end_date?: string | null
           tenure_payments?: number | null
@@ -2200,6 +2206,12 @@ export type Database = {
         | "quarterly"
         | "yearly"
         | "irregular"
+        | "one_time"
+        | "daily"
+        | "every_2_months"
+        | "every_6_months"
+        | "every_2_years"
+        | "every_3_years"
       staged_review_status:
         | "pending"
         | "accepted"
@@ -2403,6 +2415,12 @@ export const Constants = {
         "quarterly",
         "yearly",
         "irregular",
+        "one_time",
+        "daily",
+        "every_2_months",
+        "every_6_months",
+        "every_2_years",
+        "every_3_years",
       ],
       staged_review_status: [
         "pending",

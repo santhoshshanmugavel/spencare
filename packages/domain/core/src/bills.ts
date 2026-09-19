@@ -8,7 +8,9 @@
  * weekly/monthly/yearly intervals").
  */
 
-export type RecurrenceInterval = "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "irregular";
+export type RecurrenceInterval =
+  | "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "irregular"
+  | "one_time" | "daily" | "every_2_months" | "every_6_months" | "every_2_years" | "every_3_years";
 
 /**
  * `predictNextOccurrence` -- the lifecycle step system-model.md §13
@@ -38,12 +40,23 @@ export function predictNextOccurrence(currentDateIso: string, interval: Recurren
       return addDays(currentDateIso, 7);
     case "biweekly":
       return addDays(currentDateIso, 14);
+    case "daily":
+      return addDays(currentDateIso, 1);
     case "monthly":
       return addMonthsClamped(currentDateIso, 1);
+    case "every_2_months":
+      return addMonthsClamped(currentDateIso, 2);
     case "quarterly":
       return addMonthsClamped(currentDateIso, 3);
+    case "every_6_months":
+      return addMonthsClamped(currentDateIso, 6);
     case "yearly":
       return addYearsClamped(currentDateIso, 1);
+    case "every_2_years":
+      return addYearsClamped(currentDateIso, 2);
+    case "every_3_years":
+      return addYearsClamped(currentDateIso, 3);
+    case "one_time":
     case "irregular":
       return null;
   }
@@ -138,7 +151,8 @@ export interface RecurringCandidate {
 const MIN_OCCURRENCES_FOR_PATTERN = 3;
 const AMOUNT_TOLERANCE_PCT = 10;
 
-const INTERVAL_DAY_RANGES: Record<Exclude<RecurrenceInterval, "irregular">, [number, number]> = {
+type DetectableInterval = "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly";
+const INTERVAL_DAY_RANGES: Record<DetectableInterval, [number, number]> = {
   weekly: [5, 9],
   biweekly: [11, 17],
   monthly: [25, 35],
@@ -195,7 +209,7 @@ export function detectRecurring(transactions: RecurringSignalInput[]): Recurring
     let bestInterval: RecurrenceInterval | null = null;
     let bestDateScore = 0;
     for (const [interval, [lo, hi]] of Object.entries(INTERVAL_DAY_RANGES) as Array<
-      [Exclude<RecurrenceInterval, "irregular">, [number, number]]
+      [DetectableInterval, [number, number]]
     >) {
       if (gaps.length === 0) continue;
       const matching = gaps.filter((g) => g >= lo && g <= hi).length;

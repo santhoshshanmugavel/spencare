@@ -107,6 +107,10 @@ function firstSavingDateFromWeeklyRule(isoDay: number): string {
   return cur.toISOString().slice(0, 10);
 }
 
+function nextPaymentDateFromWeekdayRule(isoDay: number): string {
+  return firstSavingDateFromWeeklyRule(isoDay);
+}
+
 
 function useMoneyField(initialMinor?: number) {
   const [display, setDisplay] = useState(initialMinor ? minorUnitsToDisplay(initialMinor, CURRENCY) : "");
@@ -193,7 +197,13 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
 
   const hasSavingSchedule = !!savingCadence;
   const hasReserveAccount = !!reserveAccountId;
-  const isRecurring = paymentFrequency !== "one_time" && paymentFrequency !== "irregular";
+
+  // Payment date UI branches by frequency
+  const paymentIsMonthly = paymentFrequency === "monthly";
+  const paymentIsWeekly = paymentFrequency === "weekly" || paymentFrequency === "biweekly";
+  const EXACT_DATE_FREQUENCIES = ["every_2_months", "quarterly", "every_6_months", "yearly", "every_2_years", "every_3_years", "daily"];
+  const paymentIsExactRecurring = EXACT_DATE_FREQUENCIES.includes(paymentFrequency);
+  const paymentIsOneTimeOrIrregular = paymentFrequency === "one_time" || paymentFrequency === "irregular";
 
   // Saving day rule needs a day-of-month picker for monthly, day-of-week for weekly/biweekly, or date for daily
   const savingNeedsMonthDay = savingCadence === "monthly";
@@ -214,6 +224,12 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
       savingAmountField.setDisplay("");
       alreadyReservedField.setDisplay("");
     }
+  }
+
+  function handlePaymentFrequencyChange(freq: string, fieldOnChange: (v: string) => void) {
+    fieldOnChange(freq);
+    setValue("nextPaymentDate", "");
+    setValue("paymentDayRule", null);
   }
 
   function handleSavingCadenceChange(cadence: string | null, fieldOnChange: (v: string | null) => void) {
@@ -368,7 +384,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
             name="paymentFrequency"
             render={({ field }) => (
               <FormField id="c-freq" label="How often do you pay?" error={msg(errors.paymentFrequency)}>
-                <Select value={field.value} onValueChange={field.onChange}>
+                <Select value={field.value} onValueChange={(v) => handlePaymentFrequencyChange(v, field.onChange)}>
                   <SelectTrigger id="c-freq">
                     <SelectValue placeholder="Choose frequency" />
                   </SelectTrigger>
@@ -382,16 +398,16 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
             )}
           />
 
-          {/* Payment day (recurring) or exact date (one-time) */}
-          {isRecurring ? (
+          {/* Payment day - frequency-aware */}
+          {paymentIsMonthly && (
             <Controller
               control={control}
               name="paymentDayRule"
               render={({ field }) => (
                 <FormField
                   id="c-day-rule"
-                  label="Which day do you pay?"
-                  hint="Spencare will schedule future payments on this day each period."
+                  label="Which day is it due?"
+                  hint="Spencare will schedule future payments on this day each month."
                   error={msg(errors.paymentDayRule)}
                 >
                   <Select
@@ -416,8 +432,75 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                 </FormField>
               )}
             />
-          ) : (
-            <FormField id="c-next-pay" label="Payment date" error={msg(errors.nextPaymentDate)}>
+          )}
+
+          {paymentIsWeekly && (
+            <Controller
+              control={control}
+              name="paymentDayRule"
+              render={({ field }) => (
+                <FormField
+                  id="c-payment-weekday"
+                  label="Which day is it due?"
+                  hint="Spencare will schedule future payments on this day each week."
+                  error={msg(errors.paymentDayRule)}
+                >
+                  <Select
+                    value={field.value != null ? String(field.value) : ""}
+                    onValueChange={(v) => {
+                      const rule = v ? parseInt(v, 10) : null;
+                      field.onChange(rule);
+                      if (rule != null) {
+                        setValue("nextPaymentDate", nextPaymentDateFromWeekdayRule(rule));
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="c-payment-weekday">
+                      <SelectValue placeholder="Choose day of week" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DAY_OF_WEEK_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              )}
+            />
+          )}
+
+          {paymentIsExactRecurring && (
+            <Controller
+              control={control}
+              name="nextPaymentDate"
+              render={({ field }) => (
+                <FormField
+                  id="c-next-pay"
+                  label="When is the next payment due?"
+                  hint="This sets the anchor date. Spencare projects future payments from here."
+                  error={msg(errors.nextPaymentDate)}
+                >
+                  <Input
+                    id="c-next-pay"
+                    type="date"
+                    value={field.value ?? ""}
+                    onChange={(e) => {
+                      const dateVal = e.target.value;
+                      field.onChange(dateVal);
+                      if (dateVal && dateVal.length === 10) {
+                        setValue("paymentDayRule", parseInt(dateVal.slice(8, 10), 10));
+                      }
+                    }}
+                    aria-invalid={!!errors.nextPaymentDate}
+                    aria-describedby={errors.nextPaymentDate ? errorId("c-next-pay") : undefined}
+                  />
+                </FormField>
+              )}
+            />
+          )}
+
+          {paymentIsOneTimeOrIrregular && (
+            <FormField id="c-next-pay" label="When is this payment due?" error={msg(errors.nextPaymentDate)}>
               <Input
                 id="c-next-pay"
                 type="date"
