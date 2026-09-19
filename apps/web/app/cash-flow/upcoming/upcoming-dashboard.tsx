@@ -289,6 +289,52 @@ export function UpcomingDashboard({
         })}
       </div>
 
+      {/* Month summary */}
+      {selectedItems.length > 0 && (() => {
+        let paymentsDue = 0;
+        let toProtect = 0;
+        for (const item of selectedItems) {
+          if (item.kind === "commitment") {
+            paymentsDue += item.occ.amount_minor;
+            if (item.occ.planned_commitments.reserve_account_id) {
+              const shortfall = item.occ.amount_minor - item.occ.reserved_minor;
+              if (shortfall > 0) toProtect += shortfall;
+            }
+          } else if (item.kind === "projected") {
+            paymentsDue += item.proj.amountMinor;
+          } else if (item.kind === "loan") {
+            paymentsDue += item.loan.installment_amount_minor;
+          }
+        }
+        if (paymentsDue === 0 && toProtect === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/40 px-4 py-3 text-sm">
+            {paymentsDue > 0 && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Payments due</span>
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(paymentsDue), CURRENCY)}
+                  masked={masked}
+                  size="numeric"
+                  className="text-sm font-semibold"
+                />
+              </div>
+            )}
+            {toProtect > 0 && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Still to protect</span>
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(toProtect), CURRENCY)}
+                  masked={masked}
+                  size="numeric"
+                  className="text-sm font-semibold text-amber-600 dark:text-amber-400"
+                />
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {!hasAnything ? (
         <EmptyState
           icon={<CalendarClock className="size-10 text-muted-foreground" />}

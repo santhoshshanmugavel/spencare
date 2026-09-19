@@ -4,11 +4,11 @@ import { axe } from "jest-axe";
 import { describe, expect, it, vi } from "vitest";
 import type {
   AccountRow,
-  BillPredictionWithDefinition,
   BudgetWithUsage,
   CashFlowPeriodComparison,
   CategoryRow,
   TransactionRow,
+  UpcomingProjection,
 } from "@spencare/domain-application";
 import { CashFlowOverview } from "./cash-flow-overview";
 
@@ -76,7 +76,14 @@ const baseProps = {
   expenseByCategory: [{ categoryId: "dining", amountMinor: 5000, percent: 100 }],
   incomeByCategory: [],
   recentTransactions: [transaction],
-  upcomingBills: [] as BillPredictionWithDefinition[],
+  upcomingProjection: {
+    events: [],
+    paymentDueMinor: 0,
+    preparationMinor: 0,
+    goalContributionMinor: 0,
+    loanInstallmentMinor: 0,
+    currency: "INR",
+  } as UpcomingProjection,
   budgetUsages: [] as BudgetWithUsage[],
 };
 
@@ -210,7 +217,7 @@ describe("<CashFlowOverview> — CF-D07: donut never shows a Goals slice", () =>
   });
 });
 
-describe("<CashFlowOverview> — in-page tab switcher (Recent Transactions / Upcoming Bills)", () => {
+describe("<CashFlowOverview> — in-page tab switcher (Recent Transactions / Upcoming)", () => {
   it("uses real tab semantics, not plain links", () => {
     render(<CashFlowOverview {...baseProps} />);
     const tabs = screen.getAllByRole("tab");
@@ -218,58 +225,66 @@ describe("<CashFlowOverview> — in-page tab switcher (Recent Transactions / Upc
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
   });
 
-  it("switches to Upcoming Bills content on click, with correct aria-selected", async () => {
+  it("switches to Upcoming content on click, with correct aria-selected", async () => {
     const user = userEvent.setup();
     render(
       <CashFlowOverview
         {...baseProps}
-        upcomingBills={[
-          {
-            id: "p1",
-            bill_definition_id: "bill-1",
-            user_id: "user-a",
-            expected_date: "2026-09-15",
-            expected_amount_minor: 49900,
-            status: "open",
-            matched_transaction_id: null,
-            matched_at: null,
-            created_at: "",
-            updated_at: "",
-            bill_definitions: { merchant_pattern: "Netflix", category_id: null, recurrence_interval: "monthly", deleted_at: null },
-            matched_transaction: null,
-          },
-        ]}
+        upcomingProjection={{
+          events: [
+            {
+              id: "proj:commitment_payment:c1:2026-09-15",
+              kind: "commitment_payment",
+              date: "2026-09-15",
+              title: "Netflix",
+              subtitle: "Monthly",
+              amountMinor: 49900,
+              currency: "INR",
+              sourceId: "c1",
+              projected: true,
+            },
+          ],
+          paymentDueMinor: 49900,
+          preparationMinor: 0,
+          goalContributionMinor: 0,
+          loanInstallmentMinor: 0,
+          currency: "INR",
+        }}
       />,
     );
-    await user.click(screen.getByRole("tab", { name: /upcoming bills/i }));
-    expect(screen.getByRole("tab", { name: /upcoming bills/i })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /upcoming/i }));
+    expect(screen.getByRole("tab", { name: /upcoming/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Netflix")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /view all bills/i })).toHaveAttribute("href", "/cash-flow/bills");
+    expect(screen.getByRole("link", { name: /view full schedule/i })).toHaveAttribute("href", "/cash-flow/upcoming");
   });
 
-  it("shows a count badge on the Upcoming Bills tab when bills exist", () => {
+  it("shows a count badge on the Upcoming tab when events exist", () => {
     render(
       <CashFlowOverview
         {...baseProps}
-        upcomingBills={[
-          {
-            id: "p1",
-            bill_definition_id: "bill-1",
-            user_id: "user-a",
-            expected_date: "2026-09-15",
-            expected_amount_minor: 49900,
-            status: "open",
-            matched_transaction_id: null,
-            matched_at: null,
-            created_at: "",
-            updated_at: "",
-            bill_definitions: { merchant_pattern: "Netflix", category_id: null, recurrence_interval: "monthly", deleted_at: null },
-            matched_transaction: null,
-          },
-        ]}
+        upcomingProjection={{
+          events: [
+            {
+              id: "proj:commitment_payment:c1:2026-09-15",
+              kind: "commitment_payment",
+              date: "2026-09-15",
+              title: "Netflix",
+              subtitle: "Monthly",
+              amountMinor: 49900,
+              currency: "INR",
+              sourceId: "c1",
+              projected: true,
+            },
+          ],
+          paymentDueMinor: 49900,
+          preparationMinor: 0,
+          goalContributionMinor: 0,
+          loanInstallmentMinor: 0,
+          currency: "INR",
+        }}
       />,
     );
-    expect(screen.getByRole("tab", { name: "Upcoming bills (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Upcoming (1)" })).toBeInTheDocument();
   });
 });
 

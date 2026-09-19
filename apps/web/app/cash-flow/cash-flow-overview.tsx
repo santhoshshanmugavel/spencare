@@ -7,12 +7,13 @@ import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, CalendarClock, Search, Spa
 import { Money as DomainMoney, ACCOUNT_TYPE_LABELS, filterByCapability, getSpendableMinor, getTransactionDisplay } from "@spencare/domain-core";
 import type {
   AccountRow,
-  BillPredictionWithDefinition,
   BudgetWithUsage,
   CashFlowPeriodComparison,
   CategoryRow,
   CategorySlice,
   TransactionRow,
+  UpcomingEvent,
+  UpcomingProjection,
 } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,7 +38,6 @@ import {
 import { AddTransactionSheet } from "./transactions/add-transaction-sheet";
 import { TransactionDetailDialog } from "./transactions/transaction-detail-dialog";
 import { DeleteTransactionDialog } from "./transactions/delete-transaction-dialog";
-import { BillNowSheet } from "./bills/bill-now-sheet";
 
 /**
  * The Cash Flow workspace (SP-081 base, Phase 30B reference-fidelity
@@ -114,7 +114,7 @@ export function CashFlowOverview({
   expenseByCategory,
   incomeByCategory,
   recentTransactions,
-  upcomingBills,
+  upcomingProjection,
   budgetUsages,
 }: {
   periodStart: string;
@@ -127,16 +127,15 @@ export function CashFlowOverview({
   expenseByCategory: CategorySlice[];
   incomeByCategory: CategorySlice[];
   recentTransactions: TransactionRow[];
-  upcomingBills: BillPredictionWithDefinition[];
+  upcomingProjection: UpcomingProjection;
   budgetUsages: BudgetWithUsage[];
 }) {
   const router = useRouter();
-  const [previewTab, setPreviewTab] = useState<"transactions" | "bills">("transactions");
+  const [previewTab, setPreviewTab] = useState<"transactions" | "upcoming">("transactions");
   const [donutMode, setDonutMode] = useState<"expense" | "income">("expense");
   const [addOpen, setAddOpen] = useState(false);
   const [detail, setDetail] = useState<TransactionRow | null>(null);
   const [quickDeleting, setQuickDeleting] = useState<TransactionRow | null>(null);
-  const [billNowing, setBillNowing] = useState<BillPredictionWithDefinition | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
@@ -171,17 +170,16 @@ export function CashFlowOverview({
       }),
     [recentTransactions, categoryFilter, query],
   );
-  const filteredBills = useMemo(
+  const filteredUpcoming = useMemo(
     () =>
-      upcomingBills.filter((b) => {
-        if (categoryFilter !== "all" && b.bill_definitions.category_id !== categoryFilter) return false;
+      upcomingProjection.events.filter((e) => {
         if (query === "") return true;
-        return b.bill_definitions.merchant_pattern.toLowerCase().includes(query);
+        return e.title.toLowerCase().includes(query) || (e.subtitle?.toLowerCase().includes(query) ?? false);
       }),
-    [upcomingBills, categoryFilter, query],
+    [upcomingProjection.events, query],
   );
   const transactionGroups = useMemo(() => groupByDate(filteredTransactions, (t) => toLocalDate(t.occurred_at)), [filteredTransactions]);
-  const billGroups = useMemo(() => groupByDate(filteredBills, (b) => b.expected_date), [filteredBills]);
+  const upcomingGroups = useMemo(() => groupByDate(filteredUpcoming, (e) => e.date), [filteredUpcoming]);
 
   const expenseSlices = toDonutSlices(expenseByCategory, categories);
   const insight = computeSpendingInsight(expenseSlices, comparison.expense.deltaPercent);
@@ -361,7 +359,7 @@ export function CashFlowOverview({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <TabsList>
                 <TabsTrigger value="transactions">Recent transactions</TabsTrigger>
-                <TabsTrigger value="bills">Upcoming bills{upcomingBills.length > 0 ? ` (${upcomingBills.length})` : ""}</TabsTrigger>
+                <TabsTrigger value="upcoming">Upcoming{upcomingProjection.events.length > 0 ? ` (${upcomingProjection.events.length})` : ""}</TabsTrigger>
               </TabsList>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -447,74 +445,67 @@ export function CashFlowOverview({
               </div>
             </TabsContent>
 
-            <TabsContent value="bills" className="space-y-3">
-              {filteredBills.length === 0 ? (
+            <TabsContent value="upcoming" className="space-y-3">
+              {filteredUpcoming.length === 0 ? (
                 <Card>
                   <CardContent className="p-0">
                     <EmptyState
-                      title={upcomingBills.length === 0 ? "No upcoming bills" : "No matches"}
-                      description={upcomingBills.length === 0 ? "Add a recurring bill so Spencare can predict when it's due." : "No upcoming bills match your search."}
-                      action={upcomingBills.length === 0 ? { label: "Go to Bills", onClick: () => router.push("/cash-flow/bills") } : undefined}
+                      title={upcomingProjection.events.length === 0 ? "Nothing upcoming this month" : "No matches"}
+                      description={
+                        upcomingProjection.events.length === 0
+                          ? "Add a commitment or goal to see upcoming payments here."
+                          : "No upcoming events match your search."
+                      }
                       size="sm"
                     />
                   </CardContent>
                 </Card>
               ) : (
-                billGroups.map((group) => {
-                  const yetToSpend = group.items.reduce((sum, b) => sum + (b.expected_amount_minor ?? 0), 0);
-                  const yetToSpendMoney = DomainMoney.fromMinorUnits(BigInt(yetToSpend), CURRENCY as never);
+                upcomingGroups.map((group) => {
+                  const groupTotal = group.items
+                    .filter((e) => e.kind === "commitment_payment" || e.kind === "loan" || e.kind === "goal_contribution")
+                    .reduce((sum, e) => sum + e.amountMinor, 0);
+                  const groupTotalMoney = DomainMoney.fromMinorUnits(BigInt(groupTotal), CURRENCY as never);
                   return (
                     <div key={group.date} className="space-y-1.5">
                       <div className="flex items-center gap-3 px-1">
                         <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{formatGroupDate(group.date)}</h2>
                         <div className="flex-1 h-px bg-border" />
-                        <span className="text-xs text-muted-foreground">
-                          Yet to spend{" "}
-                          <Money value={yetToSpendMoney} masked={masked} size="body" tone="neutral" className="inline" />
-                        </span>
+                        {groupTotal > 0 ? (
+                          <span className="text-xs text-muted-foreground">
+                            Due{" "}
+                            <Money value={groupTotalMoney} masked={masked} size="body" tone="neutral" className="inline" />
+                          </span>
+                        ) : null}
                       </div>
                       <Card>
                         <CardContent className="px-2 py-1.5 space-y-0.5">
-                          {group.items.map((p) => {
-                            const isToday = p.expected_date === new Date().toISOString().slice(0, 10);
+                          {group.items.map((e: UpcomingEvent) => {
+                            const isPrepEvent = e.kind === "commitment_preparation";
                             return (
                               <ListRow
-                                key={p.id}
+                                key={e.id}
                                 icon={
                                   <div className="flex size-9 items-center justify-center rounded-xl bg-muted" aria-hidden="true">
-                                    <CalendarClock className="size-4 text-muted-foreground" />
+                                    {isPrepEvent
+                                      ? <Sparkles className="size-4 text-muted-foreground" />
+                                      : <CalendarClock className="size-4 text-muted-foreground" />}
                                   </div>
                                 }
-                                title={p.bill_definitions.merchant_pattern}
+                                title={e.title}
+                                subtitle={e.subtitle ?? undefined}
                                 metadata={[
-                                  categoryById.get(p.bill_definitions.category_id ?? "")?.name ? (
-                                    <span key="cat">{categoryById.get(p.bill_definitions.category_id ?? "")?.name}</span>
+                                  e.categoryId ? (
+                                    <span key="cat">{categoryById.get(e.categoryId)?.name}</span>
                                   ) : null,
                                 ].filter(Boolean)}
                                 trailing={
-                                  <div className="text-right">
-                                    {p.expected_amount_minor != null ? (
-                                      <Money
-                                        value={DomainMoney.fromMinorUnits(BigInt(p.expected_amount_minor), CURRENCY as never)}
-                                        masked={masked}
-                                        size="numeric"
-                                        tone="neutral"
-                                      />
-                                    ) : (
-                                      <span className="text-sm text-muted-foreground">Amount varies</span>
-                                    )}
-                                    {isToday ? (
-                                      <div>
-                                        <button
-                                          type="button"
-                                          className="text-xs font-medium text-primary hover:underline"
-                                          onClick={() => setBillNowing(p)}
-                                        >
-                                          Bill Now
-                                        </button>
-                                      </div>
-                                    ) : null}
-                                  </div>
+                                  <Money
+                                    value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)}
+                                    masked={masked}
+                                    size="numeric"
+                                    tone={isPrepEvent ? "positive" : "neutral"}
+                                  />
                                 }
                               />
                             );
@@ -526,8 +517,8 @@ export function CashFlowOverview({
                 })
               )}
               <div className="text-right">
-                <Link href="/cash-flow/bills" className="text-sm font-medium text-primary hover:underline">
-                  View all bills →
+                <Link href="/cash-flow/upcoming" className="text-sm font-medium text-primary hover:underline">
+                  View full schedule →
                 </Link>
               </div>
             </TabsContent>
@@ -720,21 +711,6 @@ export function CashFlowOverview({
         />
       ) : null}
 
-      {billNowing ? (
-        <BillNowSheet
-          prediction={billNowing}
-          accounts={accounts}
-          categories={categories}
-          open={!!billNowing}
-          onOpenChange={(o) => {
-            if (!o) setBillNowing(null);
-          }}
-          onPaid={() => {
-            setBillNowing(null);
-            handleMutated();
-          }}
-        />
-      ) : null}
     </div>
   );
 }

@@ -2,12 +2,13 @@ import {
   getCashFlowByCategory,
   getProfile,
   getRecentTransactions,
-  getUpcomingBills,
   compareCashFlowPeriods,
   listAccounts,
   listBudgetsWithUsage,
   listCategories,
+  getUpcomingProjection,
   type AuthContext,
+  type UpcomingProjection,
 getProfileForDisplay,
 } from "@spencare/domain-application";
 import { lastDayOfMonth } from "@spencare/domain-core";
@@ -21,23 +22,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { CashFlowOverview } from "./cash-flow-overview";
 
-/**
- * `/cash-flow` — the missing Overview landing page, per Phase 13's locked
- * scope: NEW and additive. `/cash-flow/transactions`, `/cash-flow/budgets`,
- * and `/cash-flow/bills` are untouched, regression-safe, and remain
- * independently reachable. This page composes a summarized view of the
- * same underlying data (Safe-to-Spend, category breakdown, recent
- * transactions, upcoming bills, budget usage) -- it owns no business logic
- * of its own; every figure is either a pure aggregation over already-typed
- * rows (`getCashFlowOverview`/`getCashFlowByCategory`, domain-core) or a
- * direct, unmodified call into an existing Phase 7/8/9/10/12 query.
- *
- * `?month=YYYY-MM-01` mirrors Budgets' own existing period-switch
- * convention (`/cash-flow/budgets`) rather than inventing a new one.
- * `?account=<id>` is the account filter (system-model.md §14: "account
- * filter... must recalculate the applicable header metric") -- omitted
- * means "All accounts".
- */
+export type { UpcomingProjection };
 
 function currentPeriodStart(): string {
   const now = new Date();
@@ -71,7 +56,7 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
 
-  const [accounts, categories, profile, comparison, expenseByCategory, incomeByCategory, recentTransactions, upcomingBills, budgetUsages] =
+  const [accounts, categories, profile, comparison, expenseByCategory, incomeByCategory, recentTransactions, upcomingProjection, budgetUsages] =
     await Promise.all([
       listAccounts(ctx),
       listCategories(ctx),
@@ -83,25 +68,12 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
       ),
       getCashFlowByCategory(ctx, { periodStart, periodEnd, accountId }, "expense"),
       getCashFlowByCategory(ctx, { periodStart, periodEnd, accountId }, "income"),
-      // Phase 30B reference-fidelity pass: the Cash Flow reference shows a
-      // full, date-grouped transaction workspace, not a 5-row preview --
-      // "Transactions must visually dominate the page." A larger fetch
-      // limit is a query-parameter change only, not new business logic;
-      // "View all transactions"/"View all bills" still link to the
-      // unbounded full-history routes for anything beyond this window.
       getRecentTransactions(ctx, { accountId, limit: 25 }),
-      getUpcomingBills(ctx, 25),
+      getUpcomingProjection(ctx, { startDate: periodStart, endDate: periodEnd }),
       listBudgetsWithUsage(ctx, periodStart),
     ]);
 
-  // Phase 35 reference-fidelity correction: this page no longer computes
-  // a global Safe-to-Spend/Net Worth figure of its own -- see the render
-  // comment in `cash-flow-overview.tsx` for the full reasoning (four
-  // independent reference screens, none show one). Home remains the
-  // single owner of that global figure; `getSafeToSpend`/`getNetWorth`
-  // themselves are unchanged.
   const selectedAccount = accountId ? (accounts.find((a) => a.id === accountId) ?? null) : null;
-
 
   const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null = _displayProfile?.avatarSignedUrl ?? (user.user_metadata?.avatar_url as string | null ?? null);
@@ -131,7 +103,7 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
           expenseByCategory={expenseByCategory}
           incomeByCategory={incomeByCategory}
           recentTransactions={recentTransactions}
-          upcomingBills={upcomingBills}
+          upcomingProjection={upcomingProjection}
           budgetUsages={budgetUsages}
         />
       </div>

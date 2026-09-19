@@ -109,10 +109,17 @@ export default async function UpcomingPage() {
 
   const prepEvents = generatePrepEvents(commitments, commitmentOccurrences, windowEnd);
 
-  // Project virtual occurrences for future months that have no persisted DB row yet.
-  // persistedMonths: "commitmentId:YYYY-MM" keys for months already covered by a DB occurrence.
+  // Build persistedMonths from ALL occurrence statuses (upcoming, paid, skipped) so that paid
+  // months are not re-projected. listUpcoming only returns status='upcoming' occurrences, so we
+  // need a separate lightweight query for the full deduplication set.
+  const { data: allOccurrenceKeys } = await supabase
+    .from("planned_commitment_occurrences")
+    .select("commitment_id, due_date")
+    .eq("user_id", user.id)
+    .lte("due_date", windowEnd);
+
   const persistedMonths = new Set<string>();
-  for (const occ of commitmentOccurrences) {
+  for (const occ of allOccurrenceKeys ?? []) {
     persistedMonths.add(`${occ.commitment_id}:${occ.due_date.slice(0, 7)}`);
   }
 

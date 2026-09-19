@@ -169,6 +169,12 @@ export {
   resolveGoalImageUrls,
 } from "./queries/goals.js";
 export { getGoalContributionPlan, getGoalContributionPlanById, listGoalContributionPlans } from "./queries/goalContributionPlans.js";
+export {
+  getUpcomingProjection,
+  type UpcomingProjection,
+  type UpcomingEvent,
+  type UpcomingEventKind,
+} from "./queries/upcomingProjection.js";
 export { getBill, listBillPredictions } from "./queries/bills.js";
 export {
   getCashFlowOverview,

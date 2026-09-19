@@ -34,11 +34,57 @@ import { createClient } from "@supabase/supabase-js";
 import {
   savingDatesForOccurrence,
   predictNextOccurrence,
+  resolveRecurringDay,
   type RecurrenceInterval,
 } from "@spencare/domain-core";
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
 import { deliverNotification } from "@/lib/notifications/engine";
 import { getLocalDate } from "@/lib/notifications/dailySummary";
+
+// ── Canonical next-date computation ───────────────────────────────────────────
+
+/**
+ * Compute the canonical next payment date after `dueDate` for a commitment.
+ *
+ * For month-based frequencies (monthly, quarterly, etc.) this uses
+ * resolveRecurringDay() with the stored payment_day_rule, eliminating the
+ * cascading month-end clamp bug where Feb 28 (clamped from Jan 31) would
+ * become the anchor for March, yielding Mar 28 instead of Mar 31.
+ *
+ * For non-month-based frequencies (weekly, biweekly) and one_time,
+ * the existing predictNextOccurrence is used (no month-end issue there).
+ */
+function computeCanonicalNextDate(
+  dueDate: string,
+  paymentFrequency: string,
+  paymentDayRule: number | null,
+): string | null {
+  if (paymentFrequency === "one_time") return null;
+
+  // Month-step map (same as MONTHS_PER_INTERVAL in commitments.ts)
+  const MONTHS: Partial<Record<string, number>> = {
+    monthly: 1,
+    every_2_months: 2,
+    quarterly: 3,
+    every_6_months: 6,
+    yearly: 12,
+    every_2_years: 24,
+    every_3_years: 36,
+  };
+  const monthStep = MONTHS[paymentFrequency];
+
+  if (monthStep !== undefined && paymentDayRule != null) {
+    // Canonical: compute from the day rule, not from the (possibly clamped) due date
+    const [dy, dm] = dueDate.split("-").map(Number) as [number, number];
+    let targetMonth = dm + monthStep - 1;
+    const targetYear = dy + Math.floor(targetMonth / 12);
+    targetMonth = (targetMonth % 12) + 1;
+    return resolveRecurringDay({ year: targetYear, month: targetMonth, paymentDayRule });
+  }
+
+  // Day-based frequencies: use the existing chaining function (no month-end issue)
+  return predictNextOccurrence(dueDate, paymentFrequency as RecurrenceInterval);
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -85,7 +131,7 @@ export async function runAutoPayForUser(
       planned_commitments!inner(
         id, name, status, deleted_at,
         auto_pay_enabled, payment_account_id, category_id, payment_frequency,
-        tenure_type, tenure_payments, tenure_end_date
+        payment_day_rule, tenure_type, tenure_payments, tenure_end_date
       )
     `)
     .eq("user_id", userId)
@@ -136,9 +182,8 @@ export async function runAutoPayForUser(
       continue;
     }
 
-    const nextDueDate = paymentFrequency === "one_time"
-      ? null
-      : predictNextOccurrence(dueDate, paymentFrequency as RecurrenceInterval);
+    const paymentDayRule = commitment.payment_day_rule as number | null;
+    const nextDueDate = computeCanonicalNextDate(dueDate, paymentFrequency, paymentDayRule);
 
     if ((commitment.tenure_type as string) === "n_payments" && commitment.tenure_payments != null) {
       const { count } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
