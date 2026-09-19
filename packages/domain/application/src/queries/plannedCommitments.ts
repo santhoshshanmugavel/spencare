@@ -12,6 +12,7 @@ import {
   setCommitmentStatus,
   getOccurrence,
   insertPlannedCommitmentOccurrence,
+  callPayCommitmentOccurrenceAtomic,
   type PlannedCommitmentRow,
   type PlannedCommitmentOccurrenceRow,
   type PlannedCommitmentOccurrenceWithCommitment,
@@ -110,6 +111,34 @@ export async function resumeCommitment(
   return setCommitmentStatus(ctx.supabase, ctx.userId, commitmentId, "active");
 }
 
+/**
+ * Atomically pay a commitment occurrence via a SECURITY DEFINER RPC:
+ *   1. Create the expense transaction (bank/cash only; credit-card skips this).
+ *   2. Mark the occurrence as paid.
+ *   3. Insert the next occurrence if nextDueDate is provided.
+ * Returns the transaction id and next due date.
+ */
+export async function payCommitmentOccurrenceAtomic(
+  ctx: AuthContext,
+  params: {
+    occurrenceId: string;
+    commitmentId: string;
+    accountId: string | null;
+    categoryId: string;
+    amountMinor: number;
+    itemName: string;
+    occurredAt: string; // ISO date or datetime; slice to YYYY-MM-DD
+    nextDueDate: string | null;
+    skipTransaction: boolean;
+  },
+): Promise<{ transactionId: string | null; nextDueDate: string | null }> {
+  return callPayCommitmentOccurrenceAtomic(ctx.supabase, {
+    ...params,
+    userId: ctx.userId,
+    occurredAt: params.occurredAt.slice(0, 10),
+  });
+}
+
 export async function getCommitmentOccurrence(
   ctx: AuthContext,
   occurrenceId: string,
@@ -140,6 +169,19 @@ export async function advanceCommitmentOccurrence(
   // Respect end_date tenure
   if (commitment.tenure_type === "end_date" && commitment.tenure_end_date) {
     if (nextDate > commitment.tenure_end_date) {
+      await setCommitmentStatus(ctx.supabase, ctx.userId, commitmentId, "completed");
+      return null;
+    }
+  }
+
+  // Respect n_payments tenure: count paid occurrences (current payment already marked paid)
+  if (commitment.tenure_type === "n_payments" && commitment.tenure_payments != null) {
+    const { count } = await ctx.supabase
+      .from("planned_commitment_occurrences")
+      .select("id", { count: "exact", head: true })
+      .eq("commitment_id", commitmentId)
+      .eq("status", "paid");
+    if ((count ?? 0) >= commitment.tenure_payments) {
       await setCommitmentStatus(ctx.supabase, ctx.userId, commitmentId, "completed");
       return null;
     }

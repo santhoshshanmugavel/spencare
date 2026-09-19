@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, CreditCard, Landmark, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, CreditCard, Landmark, MoreHorizontal, PiggyBank, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import type {
   PlannedCommitmentOccurrenceWithCommitment,
@@ -29,6 +29,7 @@ import { CommitmentSheet } from "./commitment-sheet";
 import { LoanSheet } from "./loan-sheet";
 import { CommitmentActions } from "./commitment-actions";
 import { deleteLoanAction } from "./actions";
+import type { PrepEvent } from "./page";
 
 const CURRENCY = "INR";
 
@@ -154,6 +155,7 @@ export function UpcomingDashboard({
   loans,
   accounts,
   categories,
+  prepEvents,
   masked,
 }: {
   commitmentOccurrences: PlannedCommitmentOccurrenceWithCommitment[];
@@ -162,6 +164,7 @@ export function UpcomingDashboard({
   loans: LoanRow[];
   accounts: AccountRow[];
   categories: CategoryRow[];
+  prepEvents: PrepEvent[];
   masked: boolean;
 }) {
   const router = useRouter();
@@ -185,17 +188,20 @@ export function UpcomingDashboard({
   type Item =
     | { kind: "commitment"; occ: PlannedCommitmentOccurrenceWithCommitment }
     | { kind: "loan"; loan: LoanRow }
-    | { kind: "prediction"; pred: BillPredictionWithDefinition };
+    | { kind: "prediction"; pred: BillPredictionWithDefinition }
+    | { kind: "preparation"; ev: PrepEvent };
 
   function itemDate(item: Item): string {
     if (item.kind === "commitment") return item.occ.due_date;
     if (item.kind === "loan") return item.loan.next_payment_date!;
+    if (item.kind === "preparation") return item.ev.date;
     return item.pred.expected_date;
   }
 
   const allItems: Item[] = [
     ...commitmentOccurrences.map((occ) => ({ kind: "commitment" as const, occ })),
     ...activeLoans.map((loan) => ({ kind: "loan" as const, loan })),
+    ...prepEvents.map((ev) => ({ kind: "preparation" as const, ev })),
     ...(showPredictions ? upcomingBills.map((pred) => ({ kind: "prediction" as const, pred })) : []),
   ];
 
@@ -341,6 +347,42 @@ export function UpcomingDashboard({
                             />
                           )}
                         </div>
+                      }
+                    />
+                  );
+                }
+
+                if (item.kind === "preparation") {
+                  const ev = item.ev;
+                  const category = ev.commitment.category_id ? categoryById.get(ev.commitment.category_id) : null;
+                  const PrepIcon = (category ? getCategoryIcon(category.icon) : null) ?? PiggyBank;
+                  const paymentDate = formatDate(commitmentOccurrences.find(o => o.commitment_id === ev.commitment.id)?.due_date ?? ev.date);
+                  return (
+                    <ListRow
+                      key={`prep-${ev.commitment.id}-${ev.date}`}
+                      icon={<PrepIcon className="size-4 text-muted-foreground opacity-60" />}
+                      title={
+                        <span className="flex items-center gap-1.5">
+                          <span>Prepare for {ev.commitment.name}</span>
+                          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                            <ShieldCheck className="size-3 mr-0.5" />
+                            Saving
+                          </span>
+                        </span>
+                      }
+                      subtitle={
+                        <span className="flex items-center gap-2">
+                          <DueDateLabel isoDate={ev.date} />
+                          <span className="text-xs text-muted-foreground">toward {paymentDate} payment</span>
+                        </span>
+                      }
+                      trailing={
+                        <Money
+                          value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), CURRENCY)}
+                          masked={masked}
+                          size="numeric"
+                          className="text-muted-foreground"
+                        />
                       }
                     />
                   );

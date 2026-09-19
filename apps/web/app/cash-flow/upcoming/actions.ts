@@ -12,11 +12,14 @@ import {
   markOccurrencePaidManually,
   payOccurrence,
   advanceCommitmentOccurrence,
+  payCommitmentOccurrenceAtomic,
   createTransaction,
+  predictNextOccurrence,
   addLoan,
   editLoan,
   removeLoan,
   type AuthContext,
+  type RecurrenceInterval,
 } from "@spencare/domain-application";
 import {
   createCommitmentSchema,
@@ -180,7 +183,7 @@ export async function reserveOccurrenceAction(occurrenceId: string, additionalMi
   }
 }
 
-/** Mark a commitment occurrence as paid with an actual expense transaction. */
+/** Mark a commitment occurrence as paid. Uses atomic RPC for bank/cash; credit-card marks paid without a transaction. */
 export async function markOccurrencePaidAction(input: {
   occurrenceId: string;
   commitmentId: string;
@@ -190,6 +193,7 @@ export async function markOccurrencePaidAction(input: {
   categoryId: string | null;
   itemName: string;
   occurredAt: string;
+  paymentFrequency: string;
 }) {
   const parse = markCommitmentPaidSchema.safeParse({ occurrenceId: input.occurrenceId });
   if (!parse.success) return { ok: false as const, error: { message: "Invalid occurrence." } };
@@ -197,28 +201,38 @@ export async function markOccurrencePaidAction(input: {
   if (!input.categoryId) return { ok: false as const, error: { message: "Category is required to record a payment." } };
   const ctx = await requireAuthContext();
   try {
-    // Step 1: Create actual expense transaction
-    const txResult = await createTransaction.execute(ctx, {
-      kind: "expense",
-      accountId: input.accountId,
+    // Look up account type to determine payment path
+    const { data: account } = await ctx.supabase
+      .from("accounts")
+      .select("type")
+      .eq("id", input.accountId)
+      .eq("user_id", ctx.userId)
+      .maybeSingle();
+
+    const isCreditCard = account?.type === "credit_card";
+
+    // Pre-compute next occurrence date in TypeScript (date-boundary-safe)
+    let nextDueDate: string | null = null;
+    if ((input.paymentFrequency as string) !== "one_time") {
+      nextDueDate = predictNextOccurrence(input.occurrenceDueDate, input.paymentFrequency as RecurrenceInterval);
+    }
+
+    // Atomic RPC: creates transaction + marks occurrence paid + inserts next occurrence
+    const result = await payCommitmentOccurrenceAtomic(ctx, {
+      occurrenceId: input.occurrenceId,
+      commitmentId: input.commitmentId,
+      accountId: isCreditCard ? null : input.accountId,
       categoryId: input.categoryId,
       amountMinor: input.amountMinor,
       itemName: input.itemName,
       occurredAt: input.occurredAt,
+      nextDueDate,
+      skipTransaction: isCreditCard,
     });
-    if (!txResult.ok) return { ok: false as const, error: { message: txResult.error.message } };
-
-    // Step 2: Link transaction to occurrence (marks it paid)
-    // Note: if this fails, txResult.value.id exists but is unlinked. The user can re-try;
-    // the duplicate-transaction risk is low since payOccurrence checks status='upcoming'.
-    await payOccurrence(ctx, input.occurrenceId, txResult.value.id);
-
-    // Step 3: Generate the next occurrence for recurring commitments
-    await advanceCommitmentOccurrence(ctx, input.commitmentId, input.occurrenceDueDate);
 
     revalidateAll();
-    revalidatePath("/cash-flow/transactions");
-    return { ok: true as const, transactionId: txResult.value.id };
+    if (result.transactionId) revalidatePath("/cash-flow/transactions");
+    return { ok: true as const, transactionId: result.transactionId, nextOccurrenceDate: result.nextDueDate, isCreditCard };
   } catch (e) {
     return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to mark paid." } };
   }

@@ -120,10 +120,23 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
       categoryId: commitment.category_id ?? null,
       itemName: commitment.name,
       occurredAt,
+      paymentFrequency: commitment.payment_frequency,
     });
     setLoading(false);
     if (!result.ok) { toastError(result.error.message); return; }
-    toastConfirmed(`${commitment.name} marked as paid. Transaction added.`);
+    let msg = `${commitment.name} payment recorded.`;
+    if (result.isCreditCard) {
+      msg += " Your card statement will capture this charge.";
+    } else if (result.transactionId) {
+      msg += " Transaction added.";
+    }
+    if (result.nextOccurrenceDate) {
+      const nextFormatted = new Date(result.nextOccurrenceDate + "T00:00:00Z").toLocaleDateString("en-IN", {
+        day: "numeric", month: "short", timeZone: "UTC",
+      });
+      msg += ` Next: ${nextFormatted}.`;
+    }
+    toastConfirmed(msg);
     setMarkPaidOpen(false);
     onChanged();
   }
@@ -255,7 +268,9 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
               </Select>
               {paidAccount && (
                 <p className="text-xs text-muted-foreground">
-                  {paidAccount.type === "credit_card" ? "Card outstanding will increase." : "Account balance will decrease."}
+                  {paidAccount.type === "credit_card"
+                    ? "No transaction is created for card payments. Your card statement or Gmail sync will capture this charge."
+                    : "Account balance will decrease by this amount."}
                 </p>
               )}
             </div>

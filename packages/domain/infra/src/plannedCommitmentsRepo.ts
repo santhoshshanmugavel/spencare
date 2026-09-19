@@ -424,6 +424,40 @@ export async function getOccurrence(
   return data as PlannedCommitmentOccurrenceRow | null;
 }
 
+export async function callPayCommitmentOccurrenceAtomic(
+  client: TypedSupabaseClient,
+  params: {
+    userId: string;
+    occurrenceId: string;
+    commitmentId: string;
+    accountId: string | null;
+    categoryId: string;
+    amountMinor: number;
+    itemName: string;
+    occurredAt: string; // ISO date string YYYY-MM-DD
+    nextDueDate: string | null;
+    skipTransaction: boolean;
+  },
+): Promise<{ transactionId: string | null; nextDueDate: string | null }> {
+  // Cast to any: generated types predate this function; avoid regenerating types mid-session.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (client as any).rpc("pay_commitment_occurrence_atomic", {
+    p_user_id: params.userId,
+    p_occurrence_id: params.occurrenceId,
+    p_commitment_id: params.commitmentId,
+    p_account_id: params.accountId,
+    p_category_id: params.categoryId,
+    p_amount_minor: params.amountMinor,
+    p_item_name: params.itemName,
+    p_occurred_at: params.occurredAt,
+    p_next_due_date: params.nextDueDate,
+    p_skip_transaction: params.skipTransaction,
+  });
+  if (error) throw error;
+  const result = (data ?? {}) as { transaction_id: string | null; next_due_date: string | null };
+  return { transactionId: result.transaction_id, nextDueDate: result.next_due_date };
+}
+
 export async function insertPlannedCommitmentOccurrence(
   client: TypedSupabaseClient,
   userId: string,

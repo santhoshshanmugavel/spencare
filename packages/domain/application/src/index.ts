@@ -401,6 +401,7 @@ export {
   getPlannedCommitmentById,
   getCommitmentOccurrence,
   advanceCommitmentOccurrence,
+  payCommitmentOccurrenceAtomic,
   type PlannedCommitmentRow,
   type PlannedCommitmentOccurrenceRow,
   type PlannedCommitmentOccurrenceWithCommitment,
