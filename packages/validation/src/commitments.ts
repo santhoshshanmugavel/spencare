@@ -57,7 +57,7 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a date in YYYY
 export const createCommitmentSchema = z
   .object({
     name: z.string().trim().min(1, "Give this commitment a name.").max(120, "Name is too long."),
-    categoryId: z.string().uuid("Invalid category.").nullable().optional(),
+    categoryId: z.string().uuid("Choose a category for this commitment."),
     amountMinor: amountSchema,
     amountIsEstimate: z.boolean().default(false),
     currency: z.string().length(3).default("INR"),

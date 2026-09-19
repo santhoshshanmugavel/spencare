@@ -11,7 +11,7 @@ import {
   SAVING_CADENCE_LABELS,
   type CreateCommitmentInput,
 } from "@spencare/validation";
-import type { AccountRow } from "@spencare/domain-application";
+import type { AccountRow, CategoryRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -28,6 +28,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
+import { CreditCard } from "lucide-react";
+import { getCategoryIcon } from "@/lib/category-icons";
 import { createCommitmentAction, updateCommitmentAction } from "./actions";
 import type { PlannedCommitmentRow } from "@spencare/domain-application";
 
@@ -55,10 +57,11 @@ interface CommitmentSheetProps {
   onOpenChange: (v: boolean) => void;
   onSaved: () => void;
   accounts: AccountRow[];
+  categories: CategoryRow[];
   existing?: PlannedCommitmentRow;
 }
 
-export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existing }: CommitmentSheetProps) {
+export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categories, existing }: CommitmentSheetProps) {
   const isEdit = !!existing;
   const amountField = useMoneyField(existing?.amount_minor);
   const savingAmountField = useMoneyField(existing?.saving_amount_minor ?? undefined);
@@ -77,6 +80,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
     resolver: zodResolver(createCommitmentSchema),
     defaultValues: {
       name: existing?.name ?? "",
+      categoryId: existing?.category_id ?? "",
       amountMinor: existing?.amount_minor ?? (undefined as unknown as number),
       amountIsEstimate: existing?.amount_is_estimate ?? false,
       currency: CURRENCY,
@@ -105,7 +109,6 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
   const hasSavingSchedule = !!savingCadence;
   const hasReserveAccount = !!reserveAccountId;
 
-  // When credit card is selected, clear reserve and saving fields
   function handlePaymentAccountChange(accountId: string | null, fieldOnChange: (v: string | null) => void) {
     fieldOnChange(accountId || null);
     const account = accounts.find((a) => a.id === accountId);
@@ -123,7 +126,23 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
   async function onSubmit(data: CreateCommitmentInput) {
     let result;
     if (isEdit && existing) {
-      result = await updateCommitmentAction(existing.id, data);
+      result = await updateCommitmentAction(existing.id, {
+        name: data.name,
+        categoryId: data.categoryId,
+        amountMinor: data.amountMinor,
+        amountIsEstimate: data.amountIsEstimate,
+        paymentFrequency: data.paymentFrequency,
+        nextPaymentDate: data.nextPaymentDate,
+        paymentAccountId: data.paymentAccountId,
+        reserveAccountId: data.reserveAccountId,
+        savingCadence: data.savingCadence,
+        savingAmountMinor: data.savingAmountMinor,
+        firstSavingDate: data.firstSavingDate,
+        tenureType: data.tenureType,
+        tenurePayments: data.tenurePayments,
+        tenureEndDate: data.tenureEndDate,
+        notes: data.notes,
+      });
     } else {
       result = await createCommitmentAction(data);
     }
@@ -152,16 +171,16 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
           <SheetDescription>
             {isEdit
               ? "Update this planned commitment."
-              : "Track a planned payment and set aside money over time."}
+              : "Plan a future payment and optionally protect money ahead of time."}
           </SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4 px-4 pb-6">
           {/* Name */}
-          <FormField id="c-name" label="Name" error={msg(errors.name)}>
+          <FormField id="c-name" label="What are you planning for?" error={msg(errors.name)}>
             <Input
               id="c-name"
-              placeholder="e.g. Star Health Insurance"
+              placeholder="e.g. Star Health Insurance, Netflix"
               aria-invalid={!!errors.name}
               aria-describedby={errors.name ? errorId("c-name") : undefined}
               {...register("name")}
@@ -169,7 +188,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
           </FormField>
 
           {/* Amount */}
-          <FormField id="c-amount" label="Amount (INR)" error={msg(errors.amountMinor)}>
+          <FormField id="c-amount" label="How much will you pay? (INR)" error={msg(errors.amountMinor)}>
             <Input
               id="c-amount"
               inputMode="decimal"
@@ -181,6 +200,41 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
             />
           </FormField>
 
+          {/* Category - required */}
+          <Controller
+            control={control}
+            name="categoryId"
+            render={({ field }) => (
+              <FormField
+                id="c-category"
+                label="Category"
+                error={msg(errors.categoryId)}
+              >
+                <Select
+                  value={field.value ?? ""}
+                  onValueChange={(v) => field.onChange(v || "")}
+                >
+                  <SelectTrigger id="c-category" aria-invalid={!!errors.categoryId}>
+                    <SelectValue placeholder="Choose a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => {
+                      const Icon = getCategoryIcon(cat.icon) ?? CreditCard;
+                      return (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          <span className="flex items-center gap-2">
+                            <Icon className="size-4 shrink-0 text-muted-foreground" />
+                            {cat.name}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </FormField>
+            )}
+          />
+
           {/* Estimate toggle */}
           <div className="flex items-center gap-3">
             <Controller
@@ -191,7 +245,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
               )}
             />
             <Label htmlFor="c-estimate" className="text-sm text-muted-foreground">
-              Amount is an estimate (varies)
+              Amount varies (estimate)
             </Label>
           </div>
 
@@ -200,10 +254,10 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
             control={control}
             name="paymentFrequency"
             render={({ field }) => (
-              <FormField id="c-freq" label="Payment frequency" error={msg(errors.paymentFrequency)}>
+              <FormField id="c-freq" label="How often do you pay?" error={msg(errors.paymentFrequency)}>
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger id="c-freq">
-                    <SelectValue placeholder="How often is this paid?" />
+                    <SelectValue placeholder="Choose frequency" />
                   </SelectTrigger>
                   <SelectContent>
                     {PAYMENT_FREQUENCIES.map((f) => (
@@ -226,15 +280,15 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
             />
           </FormField>
 
-          {/* Payment account - all types */}
+          {/* Payment account */}
           <Controller
             control={control}
             name="paymentAccountId"
             render={({ field }) => (
               <FormField
                 id="c-payment-account"
-                label="Payment account"
-                hint="The account used to make the actual payment (bank, cash, or credit card)."
+                label="Which account will you pay from?"
+                hint="Bank, cash, or credit card."
                 error={msg(errors.paymentAccountId)}
               >
                 <Select
@@ -242,7 +296,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
                   onValueChange={(v) => handlePaymentAccountChange(v || null, field.onChange)}
                 >
                   <SelectTrigger id="c-payment-account">
-                    <SelectValue placeholder="Which account pays this?" />
+                    <SelectValue placeholder="Choose payment account" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">No specific account</SelectItem>
@@ -263,8 +317,8 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
               render={({ field }) => (
                 <FormField
                   id="c-reserve-account"
-                  label="Reserve account"
-                  hint="The bank or cash account where money is logically set aside. Leave empty to track without reserving."
+                  label="Where do you want to protect money for this?"
+                  hint="Choose a bank or cash account to set money aside. Leave empty if you want to track without protecting money."
                   error={msg(errors.reserveAccountId)}
                 >
                   <Select
@@ -282,10 +336,10 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
                     }}
                   >
                     <SelectTrigger id="c-reserve-account">
-                      <SelectValue placeholder="No cash reserve" />
+                      <SelectValue placeholder="No cash protection" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No cash reserve</SelectItem>
+                      <SelectItem value="">No cash protection</SelectItem>
                       {reserveAccounts.map((a) => (
                         <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                       ))}
@@ -298,16 +352,16 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
 
           {isCreditCard && (
             <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border px-3 py-2">
-              Credit card payments are tracked but no cash is reserved. Spencare will not set aside money from any bank account for this commitment.
+              Credit card payments are tracked but no cash is set aside. Spencare will not reserve money from any bank account for this commitment.
             </p>
           )}
 
-          {/* Already reserved - only when reserve account is set */}
+          {/* Already protected - only when reserve account is set */}
           {hasReserveAccount && !isCreditCard && (
             <FormField
               id="c-already-reserved"
-              label="Money already set aside (INR)"
-              hint="If you have already saved part of this amount, enter it here. No transaction will be created."
+              label="Do you already have money set aside? (INR)"
+              hint="If you already saved part of this amount, enter it here. No transaction will be created."
               error={msg(errors.alreadyReservedMinor)}
             >
               <Input
@@ -329,7 +383,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
             control={control}
             name="tenureType"
             render={({ field }) => (
-              <FormField id="c-tenure" label="Duration" error={msg(errors.tenureType)}>
+              <FormField id="c-tenure" label="How long should this continue?" error={msg(errors.tenureType)}>
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger id="c-tenure">
                     <SelectValue />
@@ -337,7 +391,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
                   <SelectContent>
                     <SelectItem value="none">No end date</SelectItem>
                     <SelectItem value="n_payments">End after N payments</SelectItem>
-                    <SelectItem value="end_date">End on date</SelectItem>
+                    <SelectItem value="end_date">End on a date</SelectItem>
                   </SelectContent>
                 </Select>
               </FormField>
@@ -368,25 +422,25 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
             </FormField>
           )}
 
-          {/* Saving schedule - only when reserve account is set and not credit card */}
+          {/* Saving schedule - only when reserve account is set */}
           {hasReserveAccount && !isCreditCard && (
             <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
-              <p className="text-sm font-medium text-foreground">Saving schedule (optional)</p>
+              <p className="text-sm font-medium text-foreground">Set money aside ahead of time (optional)</p>
               <p className="text-xs text-muted-foreground">
-                Set aside money each period so the full amount is ready by the payment date.
+                Spencare will remind you to set aside money each period so the full amount is ready by the payment date.
               </p>
 
               <Controller
                 control={control}
                 name="savingCadence"
                 render={({ field }) => (
-                  <FormField id="c-saving-cadence" label="Save" error={msg(errors.savingCadence)}>
+                  <FormField id="c-saving-cadence" label="How often do you want to set money aside?" error={msg(errors.savingCadence)}>
                     <Select
                       value={field.value ?? ""}
                       onValueChange={(v) => field.onChange(v || null)}
                     >
                       <SelectTrigger id="c-saving-cadence">
-                        <SelectValue placeholder="Choose saving frequency" />
+                        <SelectValue placeholder="Choose frequency" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">No saving schedule</SelectItem>
@@ -401,7 +455,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
 
               {hasSavingSchedule && (
                 <>
-                  <FormField id="c-saving-amt" label="Amount to save each period (INR)" error={msg(errors.savingAmountMinor)}>
+                  <FormField id="c-saving-amt" label="How much to set aside each time? (INR)" error={msg(errors.savingAmountMinor)}>
                     <Input
                       id="c-saving-amt"
                       inputMode="decimal"
@@ -415,7 +469,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, existin
                     />
                   </FormField>
 
-                  <FormField id="c-first-save" label="First saving date" error={msg(errors.firstSavingDate)}>
+                  <FormField id="c-first-save" label="When do you start?" error={msg(errors.firstSavingDate)}>
                     <Input
                       id="c-first-save"
                       type="date"

@@ -10,6 +10,8 @@ import {
   skipCommitmentOccurrence,
   reserveForOccurrence,
   markOccurrencePaidManually,
+  payOccurrence,
+  createTransaction,
   addLoan,
   editLoan,
   removeLoan,
@@ -177,7 +179,43 @@ export async function reserveOccurrenceAction(occurrenceId: string, additionalMi
   }
 }
 
-export async function markOccurrencePaidAction(occurrenceId: string) {
+/** Mark a commitment occurrence as paid with an actual expense transaction. */
+export async function markOccurrencePaidAction(input: {
+  occurrenceId: string;
+  amountMinor: number;
+  accountId: string | null;
+  categoryId: string | null;
+  itemName: string;
+  occurredAt: string;
+}) {
+  const parse = markCommitmentPaidSchema.safeParse({ occurrenceId: input.occurrenceId });
+  if (!parse.success) return { ok: false as const, error: { message: "Invalid occurrence." } };
+  if (!input.accountId) return { ok: false as const, error: { message: "Payment account is required." } };
+  if (!input.categoryId) return { ok: false as const, error: { message: "Category is required to record a payment." } };
+  const ctx = await requireAuthContext();
+  try {
+    // Create actual expense transaction
+    const txResult = await createTransaction.execute(ctx, {
+      kind: "expense",
+      accountId: input.accountId,
+      categoryId: input.categoryId,
+      amountMinor: input.amountMinor,
+      itemName: input.itemName,
+      occurredAt: input.occurredAt,
+    });
+    if (!txResult.ok) return { ok: false as const, error: { message: txResult.error.message } };
+    // Link transaction to occurrence
+    await payOccurrence(ctx, input.occurrenceId, txResult.value.id);
+    revalidateAll();
+    revalidatePath("/cash-flow/transactions");
+    return { ok: true as const, transactionId: txResult.value.id };
+  } catch (e) {
+    return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to mark paid." } };
+  }
+}
+
+/** Mark paid without creating a transaction (for backward compat / manual override). */
+export async function markOccurrencePaidNoTransactionAction(occurrenceId: string) {
   const parse = markCommitmentPaidSchema.safeParse({ occurrenceId });
   if (!parse.success) return { ok: false as const, error: { message: "Invalid occurrence." } };
   const ctx = await requireAuthContext();

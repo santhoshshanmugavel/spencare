@@ -286,7 +286,7 @@ export function DashboardSection({
           <div className="mb-3 flex items-center gap-3">
             <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upcoming Commitments</h2>
             <div className="flex-1 h-px bg-border" />
-            <Link href="/cash-flow/bills" className="shrink-0 text-xs text-primary hover:underline">View all</Link>
+            <Link href="/cash-flow/upcoming" className="shrink-0 text-xs text-primary hover:underline">View all</Link>
           </div>
           <div className="divide-y divide-border">
             {upcomingBills.slice(0, 5).map((bill) => (

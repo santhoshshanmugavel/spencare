@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MoreHorizontal, Coins, CircleCheck, SkipForward, Pause, Play, Pencil, Trash2 } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
-import type { PlannedCommitmentOccurrenceWithCommitment, PlannedCommitmentRow, AccountRow } from "@spencare/domain-application";
+import type { PlannedCommitmentOccurrenceWithCommitment, PlannedCommitmentRow, AccountRow, CategoryRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,6 +21,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField } from "@/components/spencare/form-field";
 import { Money } from "@/components/spencare/money";
 import { toastConfirmed, toastError } from "@/lib/toast";
@@ -37,23 +39,42 @@ import { CommitmentSheet } from "./commitment-sheet";
 
 const CURRENCY = "INR";
 
+function toLocalDateTimeInputs(d: Date): { date: string; time: string } {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return { date, time };
+}
+
 interface CommitmentActionsProps {
   occ: PlannedCommitmentOccurrenceWithCommitment;
   commitment: PlannedCommitmentRow;
   accounts: AccountRow[];
+  categories: CategoryRow[];
   onChanged: () => void;
 }
 
-export function CommitmentActions({ occ, commitment, accounts, onChanged }: CommitmentActionsProps) {
+export function CommitmentActions({ occ, commitment, accounts, categories, onChanged }: CommitmentActionsProps) {
   const [reserveOpen, setReserveOpen] = useState(false);
+  const [markPaidOpen, setMarkPaidOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reserveDisplay, setReserveDisplay] = useState("");
   const [reserveMinor, setReserveMinor] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Mark-as-paid form state
+  const now = new Date();
+  const { date: todayDate, time: nowTime } = toLocalDateTimeInputs(now);
+  const [paidDate, setPaidDate] = useState(todayDate);
+  const [paidTime, setPaidTime] = useState(nowTime);
+  const defaultAccount = commitment.payment_account_id ?? "";
+  const [paidAccountId, setPaidAccountId] = useState(defaultAccount);
+
   const shortfall = occ.amount_minor - occ.reserved_minor;
   const isPaused = commitment.status === "paused";
+
+  const paymentAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash" || a.type === "credit_card");
 
   async function handleReserve() {
     if (!reserveMinor || reserveMinor <= 0) {
@@ -80,12 +101,23 @@ export function CommitmentActions({ occ, commitment, accounts, onChanged }: Comm
     onChanged();
   }
 
-  async function handleMarkPaid() {
+  async function handleMarkPaidConfirm() {
+    if (!paidAccountId) { toastError("Select the payment account."); return; }
     setLoading(true);
-    const result = await markOccurrencePaidAction(occ.id);
+    // Build ISO timestamp from local date + time inputs
+    const occurredAt = new Date(`${paidDate}T${paidTime}`).toISOString();
+    const result = await markOccurrencePaidAction({
+      occurrenceId: occ.id,
+      amountMinor: occ.amount_minor,
+      accountId: paidAccountId || null,
+      categoryId: commitment.category_id ?? null,
+      itemName: commitment.name,
+      occurredAt,
+    });
     setLoading(false);
     if (!result.ok) { toastError(result.error.message); return; }
-    toastConfirmed("Marked as paid.");
+    toastConfirmed(`${commitment.name} marked as paid. Transaction added.`);
+    setMarkPaidOpen(false);
     onChanged();
   }
 
@@ -110,6 +142,8 @@ export function CommitmentActions({ occ, commitment, accounts, onChanged }: Comm
     onChanged();
   }
 
+  const paidAccount = paymentAccounts.find((a) => a.id === paidAccountId);
+
   return (
     <>
       <DropdownMenu>
@@ -125,7 +159,7 @@ export function CommitmentActions({ occ, commitment, accounts, onChanged }: Comm
               Reserve money
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={handleMarkPaid}>
+          <DropdownMenuItem onSelect={() => setMarkPaidOpen(true)}>
             <CircleCheck className="size-4 mr-2" />
             Mark as paid
           </DropdownMenuItem>
@@ -153,14 +187,81 @@ export function CommitmentActions({ occ, commitment, accounts, onChanged }: Comm
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Mark as paid confirmation dialog */}
+      <Dialog open={markPaidOpen} onOpenChange={setMarkPaidOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark {commitment.name} as paid?</DialogTitle>
+            <DialogDescription>
+              This will record the payment, create a transaction, and remove it from Upcoming.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex justify-between text-sm border-b border-border pb-3">
+              <span className="text-muted-foreground">Amount</span>
+              <Money
+                value={DomainMoney.fromMinorUnits(BigInt(occ.amount_minor), CURRENCY)}
+                masked={false}
+                size="body"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="paid-date" className="text-sm">Payment date</Label>
+                <Input
+                  id="paid-date"
+                  type="date"
+                  value={paidDate}
+                  onChange={(e) => setPaidDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="paid-time" className="text-sm">Time</Label>
+                <Input
+                  id="paid-time"
+                  type="time"
+                  value={paidTime}
+                  onChange={(e) => setPaidTime(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="paid-account" className="text-sm">Payment account</Label>
+              <Select value={paidAccountId} onValueChange={setPaidAccountId}>
+                <SelectTrigger id="paid-account">
+                  <SelectValue placeholder="Which account did you pay from?" />
+                </SelectTrigger>
+                <SelectContent>
+                  {paymentAccounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {paidAccount && (
+                <p className="text-xs text-muted-foreground">
+                  {paidAccount.type === "credit_card" ? "Card outstanding will increase." : "Account balance will decrease."}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMarkPaidOpen(false)} disabled={loading}>Cancel</Button>
+            <Button onClick={handleMarkPaidConfirm} disabled={loading || !paidAccountId}>
+              {loading ? "Recording..." : "Mark as paid"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Reserve dialog */}
       <Dialog open={reserveOpen} onOpenChange={setReserveOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reserve money</DialogTitle>
             <DialogDescription>
-              Protect money in {commitment.name || "this commitment"}. The amount stays in your account
-              but is excluded from Safe to Spend.
+              Protect money for {commitment.name}. The amount stays in your account but is excluded from Safe to Spend.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -173,7 +274,7 @@ export function CommitmentActions({ occ, commitment, accounts, onChanged }: Comm
               />
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Already reserved</span>
+              <span className="text-muted-foreground">Already protected</span>
               <Money
                 value={DomainMoney.fromMinorUnits(BigInt(occ.reserved_minor), CURRENCY)}
                 masked={false}
@@ -188,7 +289,7 @@ export function CommitmentActions({ occ, commitment, accounts, onChanged }: Comm
                 size="body"
               />
             </div>
-            <FormField id="reserve-amt" label="Amount to reserve now (INR)">
+            <FormField id="reserve-amt" label="Amount to protect now (INR)">
               <Input
                 id="reserve-amt"
                 inputMode="decimal"
@@ -207,7 +308,7 @@ export function CommitmentActions({ occ, commitment, accounts, onChanged }: Comm
           <DialogFooter>
             <Button variant="outline" onClick={() => setReserveOpen(false)}>Cancel</Button>
             <Button onClick={handleReserve} disabled={loading || !reserveMinor}>
-              {loading ? "Reserving..." : "Reserve"}
+              {loading ? "Protecting..." : "Protect money"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -238,6 +339,7 @@ export function CommitmentActions({ occ, commitment, accounts, onChanged }: Comm
         onOpenChange={setEditOpen}
         onSaved={() => { setEditOpen(false); onChanged(); }}
         accounts={accounts}
+        categories={categories}
         existing={commitment}
       />
     </>

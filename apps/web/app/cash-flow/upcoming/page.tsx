@@ -5,6 +5,7 @@ import {
   listUpcoming,
   listAllLoans,
   listBillPredictions,
+  listCategories,
   type AuthContext,
   getProfileForDisplay,
 } from "@spencare/domain-application";
@@ -34,13 +35,14 @@ export default async function UpcomingPage() {
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
 
-  const [accounts, commitmentOccurrences, commitments, loans, billPredictions, profile] = await Promise.all([
+  const [accounts, commitmentOccurrences, commitments, loans, billPredictions, profile, categories] = await Promise.all([
     listAccounts(ctx),
     listUpcoming(ctx, { limit: 200, dueBefore: new Date(Date.now() + 180 * 86_400_000).toISOString().slice(0, 10) }),
     listCommitments(ctx),
     listAllLoans(ctx),
     listBillPredictions(ctx, { status: ["open", "overdue"] }),
     getProfile(ctx),
+    listCategories(ctx),
   ]);
 
   const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
@@ -73,6 +75,7 @@ export default async function UpcomingPage() {
           billPredictions={billPredictions}
           loans={loans}
           accounts={accounts}
+          categories={categories}
           masked={profile?.privacy_mode_enabled ?? false}
         />
       </div>

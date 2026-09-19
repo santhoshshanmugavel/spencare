@@ -10,7 +10,9 @@ import type {
   BillPredictionWithDefinition,
   LoanRow,
   AccountRow,
+  CategoryRow,
 } from "@spencare/domain-application";
+import { getCategoryIcon } from "@/lib/category-icons";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -151,6 +153,7 @@ export function UpcomingDashboard({
   billPredictions,
   loans,
   accounts,
+  categories,
   masked,
 }: {
   commitmentOccurrences: PlannedCommitmentOccurrenceWithCommitment[];
@@ -158,6 +161,7 @@ export function UpcomingDashboard({
   billPredictions: BillPredictionWithDefinition[];
   loans: LoanRow[];
   accounts: AccountRow[];
+  categories: CategoryRow[];
   masked: boolean;
 }) {
   const router = useRouter();
@@ -169,6 +173,7 @@ export function UpcomingDashboard({
 
   const commitmentById = new Map(commitments.map((c) => [c.id, c]));
   const accountById = new Map(accounts.map((a) => [a.id, a]));
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
 
   const upcomingBills = billPredictions.filter((p) => p.status === "open" || p.status === "overdue");
   const activeLoans = loans.filter((l) => l.status === "active" && l.next_payment_date != null);
@@ -294,18 +299,21 @@ export function UpcomingDashboard({
                     ? accountById.get(occ.planned_commitments.payment_account_id)
                     : null;
                   const isCredit = paymentAccount?.type === "credit_card";
+                  const category = occ.planned_commitments.category_id
+                    ? categoryById.get(occ.planned_commitments.category_id)
+                    : null;
+                  const CategoryIcon = (category ? getCategoryIcon(category.icon) : null) ?? (isCredit ? CreditCard : CalendarClock);
                   return (
                     <ListRow
                       key={`c-${occ.id}`}
-                      icon={
-                        isCredit
-                          ? <CreditCard className="size-4 text-muted-foreground" />
-                          : <CalendarClock className="size-4 text-muted-foreground" />
-                      }
+                      icon={<CategoryIcon className="size-4 text-muted-foreground" />}
                       title={occ.planned_commitments.name}
                       subtitle={
                         <span className="flex flex-wrap items-center gap-2">
                           <DueDateLabel isoDate={occ.due_date} />
+                          {category && (
+                            <span className="text-xs text-muted-foreground">{category.name}</span>
+                          )}
                           {occ.planned_commitments.reserve_account_id ? (
                             <ReserveLabel reservedMinor={occ.reserved_minor} amountMinor={occ.amount_minor} />
                           ) : isCredit ? (
@@ -328,6 +336,7 @@ export function UpcomingDashboard({
                               occ={occ}
                               commitment={commitment}
                               accounts={accounts}
+                              categories={categories}
                               onChanged={refresh}
                             />
                           )}
@@ -430,6 +439,7 @@ export function UpcomingDashboard({
         onOpenChange={setCommitmentSheetOpen}
         onSaved={() => { setCommitmentSheetOpen(false); refresh(); }}
         accounts={accounts}
+        categories={categories}
       />
 
       <LoanSheet
