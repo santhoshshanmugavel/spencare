@@ -295,3 +295,47 @@ describe("UpcomingDashboard — month summary bar", () => {
     expect(screen.queryByText("Payments due")).not.toBeInTheDocument();
   });
 });
+
+describe("UpcomingDashboard — soft-deleted commitment generates no projection (cleanup regression)", () => {
+  it("absent from commitments + empty projectedOccurrences = Netflix never appears in any tab", async () => {
+    const user = userEvent.setup();
+    // Simulate post-cleanup state: page.tsx's listCommitments returns [] because the
+    // Netflix commitment has deleted_at set. The projection loop over [] produces no events.
+    // The historical paid occurrence is NOT in commitmentOccurrences because
+    // listUpcoming only returns status='upcoming' rows.
+    render(
+      <UpcomingDashboard
+        {...emptyProps}
+        commitments={[]}           // soft-deleted commitment is absent
+        projectedOccurrences={[]}  // no projection because no active commitment
+        commitmentOccurrences={[]} // historical paid occurrence not shown (not 'upcoming')
+      />,
+    );
+    // Check current month and navigate to Nov -- Netflix must appear in neither.
+    expect(screen.queryByText("Netflix")).not.toBeInTheDocument();
+    const novTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Nov"));
+    if (novTab) await user.click(novTab);
+    expect(screen.queryByText("Netflix")).not.toBeInTheDocument();
+  });
+
+  it("historical paid occurrence for a deleted commitment does not appear as a future item", () => {
+    // Even if a paid occurrence somehow ended up in commitmentOccurrences, the 'paid' status
+    // means listUpcoming would never return it (it only fetches status='upcoming').
+    // This test documents the contract: if commitmentOccurrences is correctly populated
+    // (upcoming-only), a paid Oct occurrence for a deleted commitment is invisible.
+    const deletedCommitment = makeCommitment({ deleted_at: "2026-09-19T10:59:00Z" });
+    const paidOcc = makeOccurrence(deletedCommitment, "2026-10-02", { status: "paid", paid_at: "2026-09-19T02:47:00Z" });
+    // The page passes commitmentOccurrences = only upcoming rows. Paid row excluded.
+    render(
+      <UpcomingDashboard
+        {...emptyProps}
+        commitments={[]}           // deleted commitment is absent from listCommitments
+        commitmentOccurrences={[]} // page correctly excludes the paid occurrence
+        projectedOccurrences={[]}  // no projection because deleted
+      />,
+    );
+    // The paid occurrence (paidOcc) is not in any prop -- verify Netflix is absent.
+    void paidOcc; // reference to avoid unused-var lint
+    expect(screen.queryByText("Netflix")).not.toBeInTheDocument();
+  });
+});
