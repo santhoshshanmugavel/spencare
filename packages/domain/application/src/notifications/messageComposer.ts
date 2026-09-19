@@ -28,6 +28,8 @@ export type NotificationEventType =
   | "COMMITMENT_7_DAYS" | "COMMITMENT_3_DAYS" | "COMMITMENT_DUE_TODAY" | "COMMITMENT_OVERDUE" | "COMMITMENT_SHORTFALL"
   | "COMMITMENT_AUTO_PAID" | "COMMITMENT_AUTO_PAY_FAILED" | "COMMITMENT_AUTO_PROTECTED" | "COMMITMENT_PREPARATION"
   | "LOAN_7_DAYS" | "LOAN_DUE_TODAY" | "LOAN_OVERDUE"
+  | "CC_STATEMENT_7_DAYS" | "CC_STATEMENT_TODAY"
+  | "CC_PAYMENT_7_DAYS" | "CC_PAYMENT_3_DAYS" | "CC_PAYMENT_TODAY"
   | "TRANSACTION_LARGE" | "TRANSACTION_UNUSUAL"
   | "SECURITY_PASSWORD_CHANGED" | "SECURITY_NEW_LOGIN" | "SECURITY_2FA_CHANGED"
   | "GMAIL_CONNECTED" | "GMAIL_CONNECTION_ERROR" | "MCP_CONNECTED" | "MCP_REVOKED"
@@ -406,6 +408,43 @@ export function composeNotificationMessage(
       return {
         title: `${loanName} payment overdue`,
         body: `${loanName} installment was due ${daysPast} day${daysPast === 1 ? "" : "s"} ago. Record the payment when done.`,
+      };
+    }
+
+    // ---- Credit card billing reminders ----
+    case "CC_STATEMENT_7_DAYS": {
+      const { accountName } = c as { accountName: string };
+      return {
+        title: `${accountName} statement in 7 days`,
+        body: `Your ${accountName} statement will be generated in 7 days. Make sure your recent spending is accounted for.`,
+      };
+    }
+    case "CC_STATEMENT_TODAY": {
+      const { accountName, usedMinor } = c as { accountName: string; usedMinor: number };
+      return {
+        title: `${accountName} statement generated today`,
+        body: `Your ${accountName} statement is being cut today. Current outstanding: ${fmt(usedMinor, currency)}.`,
+      };
+    }
+    case "CC_PAYMENT_7_DAYS": {
+      const { accountName, outstandingMinor } = c as { accountName: string; outstandingMinor: number };
+      return {
+        title: `${accountName} payment due in 7 days`,
+        body: `Your ${accountName} credit card payment of ${fmt(outstandingMinor, currency)} is due next week.`,
+      };
+    }
+    case "CC_PAYMENT_3_DAYS": {
+      const { accountName, outstandingMinor } = c as { accountName: string; outstandingMinor: number };
+      return {
+        title: `${accountName} payment due in 3 days`,
+        body: `${fmt(outstandingMinor, currency)} due on ${accountName} in 3 days. Make the payment to avoid interest.`,
+      };
+    }
+    case "CC_PAYMENT_TODAY": {
+      const { accountName, outstandingMinor } = c as { accountName: string; outstandingMinor: number };
+      return {
+        title: `${accountName} payment due today`,
+        body: `Your ${accountName} credit card payment of ${fmt(outstandingMinor, currency)} is due today.`,
       };
     }
 

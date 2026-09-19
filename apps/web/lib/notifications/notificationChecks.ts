@@ -5,7 +5,8 @@
  */
 
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
-import { checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder } from "./eventRules";
+import { checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder, checkCreditCardBillingReminder } from "./eventRules";
+import { resolveRecurringDay } from "@spencare/domain-core";
 import { savingDatesForOccurrence } from "@spencare/domain-core";
 
 interface CheckOutcome {
@@ -118,7 +119,7 @@ async function runChecksForUser(
   // ---- Account balance checks ----
   const { data: accounts } = await serviceRoleSupabase
     .from("accounts")
-    .select("id, name, type, balance_minor, credit_limit_minor, credit_used_minor, currency")
+    .select("id, name, type, balance_minor, credit_limit_minor, credit_used_minor, currency, statement_generated_day, payment_due_day")
     .eq("user_id", userId)
     .eq("is_archived", false);
 
@@ -406,6 +407,58 @@ async function runChecksForUser(
       checksRun++;
     } catch {
       // Individual check failure must not stop other checks
+    }
+  }
+
+  // ---- Credit card billing reminders (statement cut day + payment due day) ----
+  for (const account of accounts ?? []) {
+    if (account.type !== "credit_card") continue;
+    const stmtDay: number | null = (account as { statement_generated_day?: number | null }).statement_generated_day ?? null;
+    const payDay: number | null = (account as { payment_due_day?: number | null }).payment_due_day ?? null;
+    if (stmtDay == null && payDay == null) continue;
+
+    // Check the current month and the next month so reminders fire near month boundaries.
+    const outstanding = account.credit_used_minor ?? 0;
+    for (const offset of [0, 1]) {
+      const checkDate = new Date(today.getTime() + offset * 28 * 24 * 60 * 60 * 1000);
+      const year = checkDate.getUTCFullYear();
+      const month = checkDate.getUTCMonth() + 1;
+
+      try {
+        if (stmtDay != null) {
+          const stmtDateIso = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
+          await checkCreditCardBillingReminder({
+            serviceRoleSupabase, userId, userEmail,
+            accountId: account.id,
+            accountName: account.name,
+            dueDateIso: stmtDateIso,
+            kind: "statement",
+            outstandingMinor: outstanding,
+            currency: account.currency ?? "INR",
+          });
+          checksRun++;
+        }
+      } catch {
+        // Individual check failure must not stop other checks
+      }
+
+      try {
+        if (payDay != null) {
+          const payDateIso = resolveRecurringDay({ year, month, paymentDayRule: payDay });
+          await checkCreditCardBillingReminder({
+            serviceRoleSupabase, userId, userEmail,
+            accountId: account.id,
+            accountName: account.name,
+            dueDateIso: payDateIso,
+            kind: "payment",
+            outstandingMinor: outstanding,
+            currency: account.currency ?? "INR",
+          });
+          checksRun++;
+        }
+      } catch {
+        // Individual check failure must not stop other checks
+      }
     }
   }
 

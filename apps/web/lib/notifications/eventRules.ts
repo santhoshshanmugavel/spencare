@@ -476,3 +476,61 @@ export async function checkLoanReminder(input: LoanRuleInput): Promise<void> {
     dedupeKey,
   });
 }
+
+interface CreditCardBillingRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  accountId: string;
+  accountName: string;
+  /** YYYY-MM-DD */
+  dueDateIso: string;
+  kind: "statement" | "payment";
+  outstandingMinor: number;
+  currency?: string;
+}
+
+export async function checkCreditCardBillingReminder(input: CreditCardBillingRuleInput): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, accountId, accountName, dueDateIso, kind, outstandingMinor } = input;
+  const currency = input.currency ?? "INR";
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const dueDate = new Date(dueDateIso + "T00:00:00Z");
+  const daysUntilDue = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000);
+
+  let eventType: DeliverNotificationInput["eventType"] | null = null;
+  let dedupeKey = "";
+
+  if (kind === "statement") {
+    if (daysUntilDue === 7) {
+      eventType = "CC_STATEMENT_7_DAYS";
+      dedupeKey = `cc_stmt_7d_${accountId}_${dueDateIso}`;
+    } else if (daysUntilDue === 0) {
+      eventType = "CC_STATEMENT_TODAY";
+      dedupeKey = `cc_stmt_today_${accountId}_${dueDateIso}`;
+    }
+  } else {
+    if (daysUntilDue === 7) {
+      eventType = "CC_PAYMENT_7_DAYS";
+      dedupeKey = `cc_pay_7d_${accountId}_${dueDateIso}`;
+    } else if (daysUntilDue === 3) {
+      eventType = "CC_PAYMENT_3_DAYS";
+      dedupeKey = `cc_pay_3d_${accountId}_${dueDateIso}`;
+    } else if (daysUntilDue === 0) {
+      eventType = "CC_PAYMENT_TODAY";
+      dedupeKey = `cc_pay_today_${accountId}_${dueDateIso}`;
+    }
+  }
+
+  if (!eventType) return;
+
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType,
+    financialContext: { accountName, outstandingMinor, usedMinor: outstandingMinor, currency },
+    category: "account",
+    severity: daysUntilDue === 0 ? "warning" : "info",
+    entityType: "account",
+    entityId: accountId,
+    actionUrl: "/settings/accounts",
+    dedupeKey,
+  });
+}
