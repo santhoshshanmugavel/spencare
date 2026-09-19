@@ -180,6 +180,80 @@ export async function reserveOccurrenceAction(occurrenceId: string, additionalMi
   }
 }
 
+/**
+ * Protect (logically reserve) money for a planned commitment occurrence from a
+ * preparation event. Unlike reserveOccurrenceAction this rejects over-reservation
+ * rather than silently clamping, validates the reserve account type server-side,
+ * and validates the occurrence belongs to the given commitment.
+ *
+ * Protection is a logical reservation only: no transaction is created, no account
+ * balance changes. Safe-to-Spend decreases by amountMinor.
+ */
+export async function protectOccurrenceAction(input: {
+  occurrenceId: string;
+  commitmentId: string;
+  amountMinor: number;
+  reserveAccountId: string;
+}) {
+  if (!input.occurrenceId || !input.commitmentId || !input.reserveAccountId) {
+    return { ok: false as const, error: { message: "Invalid input." } };
+  }
+  if (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0) {
+    return { ok: false as const, error: { message: "Amount must be greater than zero." } };
+  }
+
+  const ctx = await requireAuthContext();
+  try {
+    // Validate reserve account: must belong to user, be bank/cash, not archived
+    const { data: account, error: accErr } = await ctx.supabase
+      .from("accounts")
+      .select("id, type, is_archived")
+      .eq("id", input.reserveAccountId)
+      .eq("user_id", ctx.userId)
+      .maybeSingle();
+    if (accErr) throw accErr;
+    if (!account) return { ok: false as const, error: { message: "Reserve account not found." } };
+    if (account.type !== "bank" && account.type !== "cash") {
+      return { ok: false as const, error: { message: "Reserve account must be a bank or cash account." } };
+    }
+    if (account.is_archived) {
+      return { ok: false as const, error: { message: "Reserve account is archived." } };
+    }
+
+    // Validate occurrence belongs to user and this commitment, and is upcoming
+    const { data: occ, error: occErr } = await ctx.supabase
+      .from("planned_commitment_occurrences")
+      .select("id, status, amount_minor, reserved_minor")
+      .eq("id", input.occurrenceId)
+      .eq("user_id", ctx.userId)
+      .eq("commitment_id", input.commitmentId)
+      .maybeSingle();
+    if (occErr) throw occErr;
+    if (!occ) return { ok: false as const, error: { message: "Payment occurrence not found." } };
+    if ((occ as { status: string }).status === "paid") {
+      return { ok: false as const, error: { message: "This payment has already been recorded." } };
+    }
+    if ((occ as { status: string }).status !== "upcoming") {
+      return { ok: false as const, error: { message: "This occurrence cannot be protected." } };
+    }
+
+    const shortfall = (occ as { amount_minor: number; reserved_minor: number }).amount_minor
+      - (occ as { amount_minor: number; reserved_minor: number }).reserved_minor;
+    if (shortfall <= 0) {
+      return { ok: false as const, error: { message: "This payment is already fully protected." } };
+    }
+    if (input.amountMinor > shortfall) {
+      return { ok: false as const, error: { message: `You can protect at most ${input.amountMinor} more. Try a smaller amount.` } };
+    }
+
+    await reserveForOccurrence(ctx, input.occurrenceId, input.amountMinor);
+    revalidateAll();
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to protect." } };
+  }
+}
+
 /** Mark a commitment occurrence as paid. Always creates an expense transaction (bank, cash, or credit_card). */
 export async function markOccurrencePaidAction(input: {
   occurrenceId: string;

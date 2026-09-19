@@ -28,7 +28,9 @@ import { EmptyState } from "@/components/spencare/empty-state";
 import { CommitmentSheet } from "./commitment-sheet";
 import { LoanSheet } from "./loan-sheet";
 import { CommitmentActions } from "./commitment-actions";
+import { PrepProtectActions } from "./prep-protect-actions";
 import { deleteLoanAction } from "./actions";
+import { minorUnitsToDisplay } from "@/lib/money-input";
 import type { PrepEvent } from "./page";
 
 const CURRENCY = "INR";
@@ -63,19 +65,18 @@ function DueDateLabel({ isoDate }: { isoDate: string }) {
 function ReserveLabel({ reservedMinor, amountMinor }: { reservedMinor: number; amountMinor: number }) {
   const shortfall = amountMinor - reservedMinor;
   if (shortfall <= 0)
-    return <span className="text-xs text-emerald-600 dark:text-emerald-400">Fully reserved</span>;
-  if (reservedMinor === 0) return null;
-  return (
-    <span className="text-xs text-amber-600 dark:text-amber-400">
-      <Money
-        value={DomainMoney.fromMinorUnits(BigInt(shortfall), CURRENCY)}
-        masked={false}
-        size="body"
-        className="inline"
-      />{" "}
-      still needed
-    </span>
-  );
+    return (
+      <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+        Ready to pay
+      </span>
+    );
+  if (reservedMinor > 0)
+    return (
+      <span className="text-xs text-amber-600 dark:text-amber-400">
+        {minorUnitsToDisplay(reservedMinor, CURRENCY)} / {minorUnitsToDisplay(amountMinor, CURRENCY)} protected
+      </span>
+    );
+  return null;
 }
 
 // ── Month navigation ──────────────────────────────────────────────────────────
@@ -354,9 +355,20 @@ export function UpcomingDashboard({
 
                 if (item.kind === "preparation") {
                   const ev = item.ev;
+                  const occ = commitmentOccurrences.find((o) => o.commitment_id === ev.commitment.id);
                   const category = ev.commitment.category_id ? categoryById.get(ev.commitment.category_id) : null;
                   const PrepIcon = (category ? getCategoryIcon(category.icon) : null) ?? PiggyBank;
-                  const paymentDate = formatDate(commitmentOccurrences.find(o => o.commitment_id === ev.commitment.id)?.due_date ?? ev.date);
+                  const paymentDate = formatDate(occ?.due_date ?? ev.date);
+
+                  const reserveAccountId = ev.commitment.reserve_account_id;
+                  const reserveAccount = reserveAccountId ? (accountById.get(reserveAccountId) ?? null) : null;
+                  const bankCashAccounts = accounts.filter(
+                    (a) => (a.type === "bank" || a.type === "cash") && !a.is_archived,
+                  );
+
+                  const currentReserved = occ?.reserved_minor ?? 0;
+                  const totalNeeded = occ?.amount_minor ?? ev.amountMinor;
+
                   return (
                     <ListRow
                       key={`prep-${ev.commitment.id}-${ev.date}`}
@@ -371,18 +383,38 @@ export function UpcomingDashboard({
                         </span>
                       }
                       subtitle={
-                        <span className="flex items-center gap-2">
+                        <span className="flex flex-wrap items-center gap-2">
                           <DueDateLabel isoDate={ev.date} />
                           <span className="text-xs text-muted-foreground">toward {paymentDate} payment</span>
+                          {currentReserved > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              {minorUnitsToDisplay(currentReserved, CURRENCY)} / {minorUnitsToDisplay(totalNeeded, CURRENCY)} protected
+                            </span>
+                          )}
                         </span>
                       }
                       trailing={
-                        <Money
-                          value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), CURRENCY)}
-                          masked={masked}
-                          size="numeric"
-                          className="text-muted-foreground"
-                        />
+                        <div className="flex items-center gap-2">
+                          <Money
+                            value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), CURRENCY)}
+                            masked={masked}
+                            size="numeric"
+                            className="text-muted-foreground"
+                          />
+                          {occ && (
+                            <PrepProtectActions
+                              occurrenceId={occ.id}
+                              commitmentId={ev.commitment.id}
+                              occurrenceReservedMinor={currentReserved}
+                              occurrenceAmountMinor={totalNeeded}
+                              savingAmountMinor={ev.amountMinor}
+                              commitment={ev.commitment}
+                              reserveAccount={reserveAccount}
+                              bankCashAccounts={bankCashAccounts}
+                              onChanged={refresh}
+                            />
+                          )}
+                        </div>
                       }
                     />
                   );
