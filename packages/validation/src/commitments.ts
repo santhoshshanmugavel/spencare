@@ -85,6 +85,10 @@ export const createCommitmentSchema = z
     tenurePayments: z.number().int().positive().nullable().optional(),
     tenureEndDate: dateSchema.nullable().optional(),
     notes: z.string().max(500).nullable().optional(),
+    // Auto-pay: Spencare records the payment automatically on the due date.
+    autoPayEnabled: z.boolean().default(false),
+    // Auto-protect: Spencare automatically protects the preparation amount each saving period.
+    autoProtectEnabled: z.boolean().default(false),
   })
   .superRefine((data, ctx) => {
     if (data.tenureType === "n_payments" && !data.tenurePayments) {
@@ -151,6 +155,8 @@ export const updateCommitmentSchema = z.object({
   tenurePayments: z.number().int().positive().nullable().optional(),
   tenureEndDate: dateSchema.nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
+  autoPayEnabled: z.boolean().optional(),
+  autoProtectEnabled: z.boolean().optional(),
 });
 
 export type UpdateCommitmentInput = z.infer<typeof updateCommitmentSchema>;

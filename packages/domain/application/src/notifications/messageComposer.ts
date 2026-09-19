@@ -26,6 +26,7 @@ export type NotificationEventType =
   | "GOAL_PLAN_UPCOMING" | "GOAL_PLAN_DUE" | "GOAL_PLAN_MISSED"
   | "BILL_7_DAYS" | "BILL_3_DAYS" | "BILL_1_DAY" | "BILL_DUE_TODAY" | "BILL_OVERDUE" | "BILL_AMOUNT_CHANGED"
   | "COMMITMENT_7_DAYS" | "COMMITMENT_3_DAYS" | "COMMITMENT_DUE_TODAY" | "COMMITMENT_OVERDUE" | "COMMITMENT_SHORTFALL"
+  | "COMMITMENT_AUTO_PAID" | "COMMITMENT_AUTO_PAY_FAILED" | "COMMITMENT_AUTO_PROTECTED"
   | "LOAN_7_DAYS" | "LOAN_DUE_TODAY" | "LOAN_OVERDUE"
   | "TRANSACTION_LARGE" | "TRANSACTION_UNUSUAL"
   | "SECURITY_PASSWORD_CHANGED" | "SECURITY_NEW_LOGIN" | "SECURITY_2FA_CHANGED"
@@ -339,6 +340,38 @@ export function composeNotificationMessage(
       return {
         title: `${commitmentName} needs more saved`,
         body: `${fmt(shortfall, currency)} still needed for ${commitmentName}, due in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`,
+      };
+    }
+
+    // ---- Commitment automation results ----
+    case "COMMITMENT_AUTO_PAID": {
+      const { commitmentName, amountMinor, accountName, nextDueDateIso } = c as {
+        commitmentName: string; amountMinor: number; accountName: string; nextDueDateIso: string | null;
+      };
+      const nextPart = nextDueDateIso
+        ? ` Next payment: ${new Date(nextDueDateIso + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}.`
+        : "";
+      return {
+        title: `${commitmentName} payment recorded automatically`,
+        body: `${fmt(amountMinor, currency)} was recorded via ${accountName}.${nextPart}`,
+      };
+    }
+    case "COMMITMENT_AUTO_PAY_FAILED": {
+      const { commitmentName, amountMinor, reason } = c as {
+        commitmentName: string; amountMinor: number; reason: string;
+      };
+      return {
+        title: `${commitmentName} auto-pay could not complete`,
+        body: `The ${fmt(amountMinor, currency)} payment for ${commitmentName} could not be recorded automatically. Reason: ${reason}. Please record it manually.`,
+      };
+    }
+    case "COMMITMENT_AUTO_PROTECTED": {
+      const { commitmentName, protectedMinor, totalMinor } = c as {
+        commitmentName: string; protectedMinor: number; totalMinor: number;
+      };
+      return {
+        title: `${fmt(protectedMinor, currency)} protected for ${commitmentName}`,
+        body: `Spencare automatically protected ${fmt(protectedMinor, currency)} for ${commitmentName}. Total protected: ${fmt(Math.min(totalMinor, protectedMinor), currency)} of ${fmt(totalMinor, currency)}.`,
       };
     }
 

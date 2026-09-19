@@ -912,6 +912,83 @@ export type Database = {
           },
         ]
       }
+      loans: {
+        Row: {
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          end_date: string | null
+          id: string
+          installment_amount_minor: number
+          interest_rate_pct: number | null
+          lender_name: string | null
+          loan_type: Database["public"]["Enums"]["loan_type"]
+          name: string
+          next_payment_date: string | null
+          notes: string | null
+          outstanding_minor: number | null
+          payment_account_id: string | null
+          principal_minor: number
+          repayment_frequency: Database["public"]["Enums"]["recurrence_interval"]
+          start_date: string | null
+          status: Database["public"]["Enums"]["loan_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          end_date?: string | null
+          id?: string
+          installment_amount_minor: number
+          interest_rate_pct?: number | null
+          lender_name?: string | null
+          loan_type?: Database["public"]["Enums"]["loan_type"]
+          name: string
+          next_payment_date?: string | null
+          notes?: string | null
+          outstanding_minor?: number | null
+          payment_account_id?: string | null
+          principal_minor: number
+          repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["loan_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          end_date?: string | null
+          id?: string
+          installment_amount_minor?: number
+          interest_rate_pct?: number | null
+          lender_name?: string | null
+          loan_type?: Database["public"]["Enums"]["loan_type"]
+          name?: string
+          next_payment_date?: string | null
+          notes?: string | null
+          outstanding_minor?: number | null
+          payment_account_id?: string | null
+          principal_minor?: number
+          repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["loan_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loans_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mcp_sessions: {
         Row: {
           client_name: string
@@ -1246,75 +1323,6 @@ export type Database = {
         }
         Relationships: []
       }
-      loans: {
-        Row: {
-          created_at: string
-          currency: string
-          deleted_at: string | null
-          end_date: string | null
-          id: string
-          installment_amount_minor: number
-          interest_rate_pct: number | null
-          lender_name: string | null
-          loan_type: "home" | "car" | "bike" | "personal" | "education" | "business" | "other"
-          name: string
-          next_payment_date: string | null
-          notes: string | null
-          outstanding_minor: number | null
-          payment_account_id: string | null
-          principal_minor: number
-          repayment_frequency: Database["public"]["Enums"]["recurrence_interval"]
-          start_date: string | null
-          status: "active" | "completed" | "cancelled"
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          currency?: string
-          deleted_at?: string | null
-          end_date?: string | null
-          id?: string
-          installment_amount_minor: number
-          interest_rate_pct?: number | null
-          lender_name?: string | null
-          loan_type?: "home" | "car" | "bike" | "personal" | "education" | "business" | "other"
-          name: string
-          next_payment_date?: string | null
-          notes?: string | null
-          outstanding_minor?: number | null
-          payment_account_id?: string | null
-          principal_minor: number
-          repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
-          start_date?: string | null
-          status?: "active" | "completed" | "cancelled"
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          currency?: string
-          deleted_at?: string | null
-          end_date?: string | null
-          id?: string
-          installment_amount_minor?: number
-          interest_rate_pct?: number | null
-          lender_name?: string | null
-          loan_type?: "home" | "car" | "bike" | "personal" | "education" | "business" | "other"
-          name?: string
-          next_payment_date?: string | null
-          notes?: string | null
-          outstanding_minor?: number | null
-          payment_account_id?: string | null
-          principal_minor?: number
-          repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
-          start_date?: string | null
-          status?: "active" | "completed" | "cancelled"
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       planned_commitment_occurrences: {
         Row: {
           amount_minor: number
@@ -1325,7 +1333,7 @@ export type Database = {
           matched_transaction_id: string | null
           paid_at: string | null
           reserved_minor: number
-          status: "upcoming" | "paid" | "skipped"
+          status: Database["public"]["Enums"]["commitment_occurrence_status"]
           updated_at: string
           user_id: string
         }
@@ -1338,7 +1346,7 @@ export type Database = {
           matched_transaction_id?: string | null
           paid_at?: string | null
           reserved_minor?: number
-          status?: "upcoming" | "paid" | "skipped"
+          status?: Database["public"]["Enums"]["commitment_occurrence_status"]
           updated_at?: string
           user_id: string
         }
@@ -1351,7 +1359,7 @@ export type Database = {
           matched_transaction_id?: string | null
           paid_at?: string | null
           reserved_minor?: number
-          status?: "upcoming" | "paid" | "skipped"
+          status?: Database["public"]["Enums"]["commitment_occurrence_status"]
           updated_at?: string
           user_id?: string
         }
@@ -1376,6 +1384,8 @@ export type Database = {
         Row: {
           amount_is_estimate: boolean
           amount_minor: number
+          auto_pay_enabled: boolean
+          auto_protect_enabled: boolean
           category_id: string | null
           created_at: string
           currency: string
@@ -1391,17 +1401,21 @@ export type Database = {
           payment_frequency: Database["public"]["Enums"]["recurrence_interval"]
           reserve_account_id: string | null
           saving_amount_minor: number | null
-          saving_cadence: Database["public"]["Enums"]["recurrence_interval"] | null
-          status: "active" | "paused" | "completed" | "cancelled"
+          saving_cadence:
+            | Database["public"]["Enums"]["recurrence_interval"]
+            | null
+          status: Database["public"]["Enums"]["commitment_status"]
           tenure_end_date: string | null
           tenure_payments: number | null
-          tenure_type: "none" | "n_payments" | "end_date"
+          tenure_type: Database["public"]["Enums"]["commitment_tenure_type"]
           updated_at: string
           user_id: string
         }
         Insert: {
           amount_is_estimate?: boolean
           amount_minor: number
+          auto_pay_enabled?: boolean
+          auto_protect_enabled?: boolean
           category_id?: string | null
           created_at?: string
           currency?: string
@@ -1417,17 +1431,21 @@ export type Database = {
           payment_frequency: Database["public"]["Enums"]["recurrence_interval"]
           reserve_account_id?: string | null
           saving_amount_minor?: number | null
-          saving_cadence?: Database["public"]["Enums"]["recurrence_interval"] | null
-          status?: "active" | "paused" | "completed" | "cancelled"
+          saving_cadence?:
+            | Database["public"]["Enums"]["recurrence_interval"]
+            | null
+          status?: Database["public"]["Enums"]["commitment_status"]
           tenure_end_date?: string | null
           tenure_payments?: number | null
-          tenure_type?: "none" | "n_payments" | "end_date"
+          tenure_type?: Database["public"]["Enums"]["commitment_tenure_type"]
           updated_at?: string
           user_id: string
         }
         Update: {
           amount_is_estimate?: boolean
           amount_minor?: number
+          auto_pay_enabled?: boolean
+          auto_protect_enabled?: boolean
           category_id?: string | null
           created_at?: string
           currency?: string
@@ -1443,11 +1461,13 @@ export type Database = {
           payment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
           reserve_account_id?: string | null
           saving_amount_minor?: number | null
-          saving_cadence?: Database["public"]["Enums"]["recurrence_interval"] | null
-          status?: "active" | "paused" | "completed" | "cancelled"
+          saving_cadence?:
+            | Database["public"]["Enums"]["recurrence_interval"]
+            | null
+          status?: Database["public"]["Enums"]["commitment_status"]
           tenure_end_date?: string | null
           tenure_payments?: number | null
-          tenure_type?: "none" | "n_payments" | "end_date"
+          tenure_type?: Database["public"]["Enums"]["commitment_tenure_type"]
           updated_at?: string
           user_id?: string
         }
@@ -1467,6 +1487,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "planned_commitments_migrated_from_bill_id_fkey"
+            columns: ["migrated_from_bill_id"]
+            isOneToOne: false
+            referencedRelation: "bill_definitions"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "planned_commitments_payment_account_id_fkey"
             columns: ["payment_account_id"]
             isOneToOne: false
@@ -1478,13 +1505,6 @@ export type Database = {
             columns: ["reserve_account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "planned_commitments_migrated_from_bill_id_fkey"
-            columns: ["migrated_from_bill_id"]
-            isOneToOne: false
-            referencedRelation: "bill_definitions"
             referencedColumns: ["id"]
           },
         ]
@@ -1987,6 +2007,20 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      pay_commitment_occurrence_atomic: {
+        Args: {
+          p_account_id: string
+          p_amount_minor: number
+          p_category_id: string
+          p_commitment_id: string
+          p_item_name: string
+          p_next_due_date: string
+          p_occurred_at: string
+          p_occurrence_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       replace_active_ai_provider_credential: {
         Args: {
           p_encrypted_api_key: string
@@ -2113,6 +2147,9 @@ export type Database = {
       audit_actor: "web" | "spensa" | "mcp" | "system" | "gmail"
       bill_prediction_status: "open" | "matched" | "skipped" | "overdue"
       channel_connection_status: "connected" | "disconnected"
+      commitment_occurrence_status: "upcoming" | "paid" | "skipped"
+      commitment_status: "active" | "paused" | "completed" | "cancelled"
+      commitment_tenure_type: "none" | "n_payments" | "end_date"
       confirmation_source: "web" | "spensa" | "mcp" | "gmail"
       confirmation_status: "pending" | "confirmed" | "cancelled" | "expired"
       delivery_status: "pending" | "delivered" | "failed" | "skipped"
@@ -2136,6 +2173,15 @@ export type Database = {
         | "confirmed"
         | "failed"
         | "cancelled"
+      loan_status: "active" | "completed" | "cancelled"
+      loan_type:
+        | "home"
+        | "car"
+        | "personal"
+        | "education"
+        | "business"
+        | "other"
+        | "bike"
       notification_category:
         | "budget"
         | "goal"
@@ -2300,6 +2346,9 @@ export const Constants = {
       audit_actor: ["web", "spensa", "mcp", "system", "gmail"],
       bill_prediction_status: ["open", "matched", "skipped", "overdue"],
       channel_connection_status: ["connected", "disconnected"],
+      commitment_occurrence_status: ["upcoming", "paid", "skipped"],
+      commitment_status: ["active", "paused", "completed", "cancelled"],
+      commitment_tenure_type: ["none", "n_payments", "end_date"],
       confirmation_source: ["web", "spensa", "mcp", "gmail"],
       confirmation_status: ["pending", "confirmed", "cancelled", "expired"],
       delivery_status: ["pending", "delivered", "failed", "skipped"],
@@ -2324,6 +2373,16 @@ export const Constants = {
         "confirmed",
         "failed",
         "cancelled",
+      ],
+      loan_status: ["active", "completed", "cancelled"],
+      loan_type: [
+        "home",
+        "car",
+        "personal",
+        "education",
+        "business",
+        "other",
+        "bike",
       ],
       notification_category: [
         "budget",

@@ -52,7 +52,12 @@ export async function addCommitment(
   ctx: AuthContext,
   patch: CreatePlannedCommitmentPatch,
 ): Promise<PlannedCommitmentRow> {
-  return createPlannedCommitment(ctx.supabase, ctx.userId, patch);
+  // autoProtectEnabled requires a saving cadence; clear if not applicable
+  const autoProtectEnabled = !!(patch.autoProtectEnabled && patch.savingCadence && patch.savingAmountMinor);
+  return createPlannedCommitment(ctx.supabase, ctx.userId, {
+    ...patch,
+    autoProtectEnabled,
+  });
 }
 
 export async function editCommitment(

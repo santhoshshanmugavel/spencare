@@ -81,6 +81,8 @@ export async function createCommitmentAction(input: CreateCommitmentInput) {
       tenurePayments: data.tenurePayments ?? null,
       tenureEndDate: data.tenureEndDate ?? null,
       notes: data.notes ?? null,
+      autoPayEnabled: data.autoPayEnabled ?? false,
+      autoProtectEnabled: data.autoProtectEnabled ?? false,
       initialOccurrenceDate: data.nextPaymentDate,
     });
     revalidateAll();
@@ -113,6 +115,8 @@ export async function updateCommitmentAction(commitmentId: string, input: Update
       ...(data.tenurePayments !== undefined ? { tenurePayments: data.tenurePayments } : {}),
       ...(data.tenureEndDate !== undefined ? { tenureEndDate: data.tenureEndDate ?? null } : {}),
       ...(data.notes !== undefined ? { notes: data.notes } : {}),
+      ...(data.autoPayEnabled !== undefined ? { autoPayEnabled: data.autoPayEnabled } : {}),
+      ...(data.autoProtectEnabled !== undefined ? { autoProtectEnabled: data.autoProtectEnabled } : {}),
     });
     revalidateAll();
     return { ok: true as const, data: commitment };

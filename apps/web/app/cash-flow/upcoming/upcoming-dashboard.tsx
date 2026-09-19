@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, CreditCard, Landmark, MoreHorizontal, PiggyBank, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { CalendarClock, CreditCard, Landmark, MoreHorizontal, PiggyBank, Plus, ShieldCheck, Trash2, Zap } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import type {
   PlannedCommitmentOccurrenceWithCommitment,
@@ -328,6 +328,12 @@ export function UpcomingDashboard({
                           ) : null}
                           {paymentAccount && (
                             <span className="text-xs text-muted-foreground">via {paymentAccount.name}</span>
+                          )}
+                          {commitment?.auto_pay_enabled && occ.status === "upcoming" && (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                              <Zap className="size-3 mr-0.5" />
+                              Auto-pay
+                            </span>
                           )}
                         </span>
                       }

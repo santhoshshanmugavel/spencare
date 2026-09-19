@@ -96,6 +96,8 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
       tenurePayments: existing?.tenure_payments ?? null,
       tenureEndDate: existing?.tenure_end_date ?? null,
       notes: existing?.notes ?? null,
+      autoPayEnabled: existing?.auto_pay_enabled ?? false,
+      autoProtectEnabled: existing?.auto_protect_enabled ?? false,
     },
   });
 
@@ -142,6 +144,8 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
         tenurePayments: data.tenurePayments,
         tenureEndDate: data.tenureEndDate,
         notes: data.notes,
+        autoPayEnabled: data.autoPayEnabled,
+        autoProtectEnabled: data.autoProtectEnabled,
       });
     } else {
       result = await createCommitmentAction(data);
@@ -480,6 +484,58 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                   </FormField>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Auto-pay toggle - only when a payment account is selected */}
+          {paymentAccountId && (
+            <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Controller
+                  control={control}
+                  name="autoPayEnabled"
+                  render={({ field }) => (
+                    <Switch
+                      id="c-autopay"
+                      checked={!!field.value}
+                      onCheckedChange={field.onChange}
+                      className="mt-0.5 shrink-0"
+                    />
+                  )}
+                />
+                <div>
+                  <Label htmlFor="c-autopay" className="text-sm font-medium">Enable Auto-pay</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Spencare will automatically record this payment in your account on the scheduled date.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Auto-protect toggle - only when saving schedule is configured */}
+          {hasSavingSchedule && !isCreditCard && (
+            <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Controller
+                  control={control}
+                  name="autoProtectEnabled"
+                  render={({ field }) => (
+                    <Switch
+                      id="c-autoprotect"
+                      checked={!!field.value}
+                      onCheckedChange={field.onChange}
+                      className="mt-0.5 shrink-0"
+                    />
+                  )}
+                />
+                <div>
+                  <Label htmlFor="c-autoprotect" className="text-sm font-medium">Enable Auto-protect</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Spencare will automatically protect money on each saving date.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 

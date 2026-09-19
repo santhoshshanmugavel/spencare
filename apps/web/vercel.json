@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/daily-summary",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/commitment-automation",
+      "schedule": "30 2 * * *"
     }
   ]
 }

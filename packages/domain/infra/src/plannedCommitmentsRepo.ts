@@ -31,6 +31,17 @@ export interface PlannedCommitmentRow {
   status: CommitmentStatus;
   notes: string | null;
   migrated_from_bill_id: string | null;
+  /**
+   * When true, Spencare automatically records the payment transaction on the due date.
+   * Execution is server-side (cron). No actual bank debit is performed.
+   */
+  auto_pay_enabled: boolean;
+  /**
+   * When true, Spencare automatically updates reserved_minor on each saving cadence date.
+   * Requires saving_cadence, saving_amount_minor, and first_saving_date to be set.
+   * No transaction is created -- logical reservation only.
+   */
+  auto_protect_enabled: boolean;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -78,6 +89,10 @@ export interface CreatePlannedCommitmentPatch {
   initialOccurrenceDate: string | null;
   /** Amount already set aside by user before creating the commitment. Immediately sets reserved_minor on the first occurrence. Never creates a transaction. */
   alreadyReservedMinor: number | null;
+  /** Spencare will automatically record the payment on the due date. Defaults to false. */
+  autoPayEnabled?: boolean;
+  /** Spencare will automatically protect the preparation amount on each saving cadence date. Defaults to false. Requires saving_cadence to be set. */
+  autoProtectEnabled?: boolean;
 }
 
 export interface UpdatePlannedCommitmentPatch {
@@ -97,10 +112,12 @@ export interface UpdatePlannedCommitmentPatch {
   tenureEndDate?: string | null;
   status?: CommitmentStatus;
   notes?: string | null;
+  autoPayEnabled?: boolean;
+  autoProtectEnabled?: boolean;
 }
 
 const COMMITMENT_COLUMNS =
-  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, first_saving_date, funding_account_id, payment_account_id, reserve_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, created_at, updated_at, deleted_at";
+  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, first_saving_date, funding_account_id, payment_account_id, reserve_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, auto_pay_enabled, auto_protect_enabled, created_at, updated_at, deleted_at";
 
 const OCCURRENCE_COLUMNS =
   "id, commitment_id, user_id, due_date, amount_minor, reserved_minor, status, matched_transaction_id, paid_at, created_at, updated_at";
@@ -135,6 +152,8 @@ export async function createPlannedCommitment(
       tenure_payments: patch.tenurePayments,
       tenure_end_date: patch.tenureEndDate,
       notes: patch.notes,
+      auto_pay_enabled: patch.autoPayEnabled ?? false,
+      auto_protect_enabled: patch.autoProtectEnabled ?? false,
     })
     .select(COMMITMENT_COLUMNS)
     .single();
@@ -198,6 +217,8 @@ export async function updatePlannedCommitment(
       ...(patch.tenureEndDate !== undefined ? { tenure_end_date: patch.tenureEndDate } : {}),
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+      ...(patch.autoPayEnabled !== undefined ? { auto_pay_enabled: patch.autoPayEnabled } : {}),
+      ...(patch.autoProtectEnabled !== undefined ? { auto_protect_enabled: patch.autoProtectEnabled } : {}),
     })
     .eq("id", commitmentId)
     .eq("user_id", userId)
