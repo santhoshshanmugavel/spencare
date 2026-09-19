@@ -186,7 +186,7 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={handleSkip}>
             <SkipForward className="size-4 mr-2" />
-            Skip this occurrence
+            Skip this payment
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setEditOpen(true)}>
