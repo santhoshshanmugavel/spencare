@@ -100,7 +100,7 @@ function ProfileButton({ profile }: { profile: NavigationRailUserProfile }) {
       </Tooltip>
 
       {open ? (
-        <div className="absolute bottom-full left-full mb-0 ml-2 z-50 min-w-[200px] rounded-xl border border-border bg-background p-3 shadow-lg">
+        <div className="absolute bottom-full left-full mb-0 ml-2 z-50 min-w-[200px] rounded-[var(--radius-lg)] border border-border bg-background p-3 shadow-popover">
           <div className="mb-3 space-y-0.5 border-b border-border pb-3">
             {profile.name ? (
               <p className="text-sm font-medium text-foreground leading-tight">{profile.name}</p>

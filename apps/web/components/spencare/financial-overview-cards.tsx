@@ -80,8 +80,7 @@ export function SafeToSpendHeroCard({
 
   return (
     <Card className="overflow-hidden shadow-card">
-      {/* Subtle tinted header strip */}
-      <div className="bg-primary/5 px-5 pt-5 pb-4">
+      <div className="px-5 pt-5 pb-4">
         <span className="text-xs font-semibold uppercase tracking-wide text-primary/70">
           {safeToSpend.state === "balance_only" ? "Available Balance" : "Safe to Spend"}
         </span>

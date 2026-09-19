@@ -174,8 +174,8 @@ export function HomeContent({
       />
 
       {/* ── Tier 5: Spensa AI ─────────────────────────────────────────────── */}
-      <Card className="overflow-hidden border-primary/20 shadow-card">
-        <CardContent className="relative flex items-center gap-4 py-5 bg-primary/[0.03]">
+      <Card className="overflow-hidden">
+        <CardContent className="relative flex items-center gap-4 py-5">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
             <Sparkles className="size-5 text-primary" aria-hidden="true" />
           </div>
