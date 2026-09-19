@@ -31,7 +31,7 @@ import { CommitmentActions } from "./commitment-actions";
 import { PrepProtectActions } from "./prep-protect-actions";
 import { deleteLoanAction } from "./actions";
 import { minorUnitsToDisplay } from "@/lib/money-input";
-import type { PrepEvent } from "./page";
+import type { PrepEvent, ProjectedOccurrence } from "./page";
 
 const CURRENCY = "INR";
 
@@ -157,6 +157,7 @@ export function UpcomingDashboard({
   accounts,
   categories,
   prepEvents,
+  projectedOccurrences,
   masked,
 }: {
   commitmentOccurrences: PlannedCommitmentOccurrenceWithCommitment[];
@@ -166,6 +167,7 @@ export function UpcomingDashboard({
   accounts: AccountRow[];
   categories: CategoryRow[];
   prepEvents: PrepEvent[];
+  projectedOccurrences: ProjectedOccurrence[];
   masked: boolean;
 }) {
   const router = useRouter();
@@ -190,12 +192,14 @@ export function UpcomingDashboard({
     | { kind: "commitment"; occ: PlannedCommitmentOccurrenceWithCommitment }
     | { kind: "loan"; loan: LoanRow }
     | { kind: "prediction"; pred: BillPredictionWithDefinition }
-    | { kind: "preparation"; ev: PrepEvent };
+    | { kind: "preparation"; ev: PrepEvent }
+    | { kind: "projected"; proj: ProjectedOccurrence };
 
   function itemDate(item: Item): string {
     if (item.kind === "commitment") return item.occ.due_date;
     if (item.kind === "loan") return item.loan.next_payment_date!;
     if (item.kind === "preparation") return item.ev.date;
+    if (item.kind === "projected") return item.proj.date;
     return item.pred.expected_date;
   }
 
@@ -203,12 +207,13 @@ export function UpcomingDashboard({
     ...commitmentOccurrences.map((occ) => ({ kind: "commitment" as const, occ })),
     ...activeLoans.map((loan) => ({ kind: "loan" as const, loan })),
     ...prepEvents.map((ev) => ({ kind: "preparation" as const, ev })),
+    ...projectedOccurrences.map((proj) => ({ kind: "projected" as const, proj })),
     ...(showPredictions ? upcomingBills.map((pred) => ({ kind: "prediction" as const, pred })) : []),
   ];
 
-  // Month navigation: current month + next 5 months
+  // Month navigation: current month + next 11 months (12 total)
   const today = new Date();
-  const months = buildMonths(today, 6);
+  const months = buildMonths(today, 12);
   const currentMonthKey = months[0].key;
   const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
 
@@ -421,6 +426,33 @@ export function UpcomingDashboard({
                             />
                           )}
                         </div>
+                      }
+                    />
+                  );
+                }
+
+                if (item.kind === "projected") {
+                  const { proj } = item;
+                  const category = proj.commitment.category_id ? categoryById.get(proj.commitment.category_id) : null;
+                  const CategoryIcon = (category ? getCategoryIcon(category.icon) : null) ?? CalendarClock;
+                  return (
+                    <ListRow
+                      key={`proj-${proj.commitment.id}-${proj.date}`}
+                      icon={<CategoryIcon className="size-4 text-muted-foreground opacity-40" />}
+                      title={<span className="text-muted-foreground/70">{proj.commitment.name}</span>}
+                      subtitle={
+                        <span className="flex items-center gap-2">
+                          <DueDateLabel isoDate={proj.date} />
+                          <span className="text-xs text-muted-foreground/60 italic">Projected</span>
+                        </span>
+                      }
+                      trailing={
+                        <Money
+                          value={DomainMoney.fromMinorUnits(BigInt(proj.amountMinor), CURRENCY)}
+                          masked={masked}
+                          size="numeric"
+                          className="text-muted-foreground/60"
+                        />
                       }
                     />
                   );

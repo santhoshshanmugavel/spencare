@@ -130,7 +130,13 @@ export {
 
 export { generateMcpToken, hashMcpToken } from "./mcpToken.js";
 
-export { savingDatesForOccurrence, expectedReservedMinor } from "./commitments.js";
+export {
+  savingDatesForOccurrence,
+  expectedReservedMinor,
+  predictCommitmentNextOccurrence,
+  projectOccurrenceDates,
+  type PaymentFrequency,
+} from "./commitments.js";
 
 export { getTransactionDisplay, type TransactionDisplayFields } from "./transactionDisplay.js";
 

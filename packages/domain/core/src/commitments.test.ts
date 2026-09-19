@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { savingDatesForOccurrence } from "./commitments.js";
+import { savingDatesForOccurrence, predictCommitmentNextOccurrence, projectOccurrenceDates } from "./commitments.js";
 
 describe("savingDatesForOccurrence", () => {
   // ── Star Health golden case ───────────────────────────────────────────────
@@ -117,5 +117,91 @@ describe("savingDatesForOccurrence", () => {
     });
     // Cutoff is Oct 4 (dueDate < today), so only Oct 1
     expect(dates).toEqual(["2024-10-01"]);
+  });
+});
+
+describe("predictCommitmentNextOccurrence", () => {
+  it("one_time returns null", () => {
+    expect(predictCommitmentNextOccurrence("2026-10-04", "one_time")).toBeNull();
+  });
+
+  it("daily adds 1 day", () => {
+    expect(predictCommitmentNextOccurrence("2026-01-31", "daily")).toBe("2026-02-01");
+  });
+
+  it("every_2_months adds 2 months with clamping", () => {
+    expect(predictCommitmentNextOccurrence("2026-01-31", "every_2_months")).toBe("2026-03-31");
+    expect(predictCommitmentNextOccurrence("2025-12-31", "every_2_months")).toBe("2026-02-28");
+  });
+
+  it("every_6_months adds 6 months with clamping", () => {
+    expect(predictCommitmentNextOccurrence("2026-08-31", "every_6_months")).toBe("2027-02-28");
+  });
+
+  it("every_2_years adds 2 years with clamping", () => {
+    expect(predictCommitmentNextOccurrence("2024-02-29", "every_2_years")).toBe("2026-02-28");
+  });
+
+  it("every_3_years adds 3 years with clamping", () => {
+    expect(predictCommitmentNextOccurrence("2024-02-29", "every_3_years")).toBe("2027-02-28");
+  });
+
+  it("monthly delegates to bills predictNextOccurrence (clamping)", () => {
+    expect(predictCommitmentNextOccurrence("2026-01-31", "monthly")).toBe("2026-02-28");
+  });
+
+  it("quarterly adds 3 months", () => {
+    expect(predictCommitmentNextOccurrence("2026-10-04", "quarterly")).toBe("2027-01-04");
+  });
+});
+
+describe("projectOccurrenceDates", () => {
+  it("monthly: emits one date per month within window", () => {
+    const dates = projectOccurrenceDates("2026-10-04", "monthly", "2026-10-01", "2026-12-31");
+    expect(dates).toEqual(["2026-10-04", "2026-11-04", "2026-12-04"]);
+  });
+
+  it("quarterly: emits only the months that fall in the interval", () => {
+    const dates = projectOccurrenceDates("2026-10-04", "quarterly", "2026-10-01", "2027-06-30");
+    expect(dates).toEqual(["2026-10-04", "2027-01-04", "2027-04-04"]);
+  });
+
+  it("skips anchor dates before windowStart", () => {
+    // anchor is Sep 4; window starts Oct 1
+    const dates = projectOccurrenceDates("2026-09-04", "monthly", "2026-10-01", "2026-12-31");
+    expect(dates).toEqual(["2026-10-04", "2026-11-04", "2026-12-04"]);
+  });
+
+  it("anchor after windowEnd returns empty array", () => {
+    const dates = projectOccurrenceDates("2027-03-01", "monthly", "2026-10-01", "2026-12-31");
+    expect(dates).toEqual([]);
+  });
+
+  it("one_time emits single anchor date if in window", () => {
+    const dates = projectOccurrenceDates("2026-11-15", "one_time", "2026-10-01", "2026-12-31");
+    expect(dates).toEqual(["2026-11-15"]);
+  });
+
+  it("one_time returns empty if anchor outside window", () => {
+    const dates = projectOccurrenceDates("2027-02-01", "one_time", "2026-10-01", "2026-12-31");
+    expect(dates).toEqual([]);
+  });
+
+  it("month-end clamping: Jan 31 monthly generates Feb 28 then Mar 28 (cascading clamp)", () => {
+    // Chain: Jan 31 -> Feb 28 (clamped) -> Mar 28 (chained from Feb 28, not original 31).
+    // This is consistent with predictNextOccurrence in bills.ts.
+    // The payment_day_rule migration will fix non-cascading behavior in the future.
+    const dates = projectOccurrenceDates("2026-01-31", "monthly", "2026-01-01", "2026-03-31");
+    expect(dates).toEqual(["2026-01-31", "2026-02-28", "2026-03-28"]);
+  });
+
+  it("month-end clamping: Jan 31 monthly -> Feb 29 (leap) then Mar 29 (cascading clamp)", () => {
+    const dates = projectOccurrenceDates("2024-01-31", "monthly", "2024-01-01", "2024-03-31");
+    expect(dates).toEqual(["2024-01-31", "2024-02-29", "2024-03-29"]);
+  });
+
+  it("every_6_months: emits every 6 months", () => {
+    const dates = projectOccurrenceDates("2026-04-01", "every_6_months", "2026-01-01", "2027-06-30");
+    expect(dates).toEqual(["2026-04-01", "2026-10-01", "2027-04-01"]);
   });
 });

@@ -13,6 +13,7 @@ import {
   type RecurrenceInterval,
   getProfileForDisplay,
 } from "@spencare/domain-application";
+import { projectOccurrenceDates, type PaymentFrequency } from "@spencare/domain-core";
 
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
@@ -25,6 +26,13 @@ import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { UpcomingDashboard } from "./upcoming-dashboard";
 
 export type PrepEvent = {
+  commitment: PlannedCommitmentRow;
+  date: string;
+  amountMinor: number;
+};
+
+/** A future occurrence that has not yet been persisted in the DB. Computed on-the-fly from the recurrence rule. */
+export type ProjectedOccurrence = {
   commitment: PlannedCommitmentRow;
   date: string;
   amountMinor: number;
@@ -87,10 +95,11 @@ export default async function UpcomingPage() {
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
 
-  const windowEnd = new Date(Date.now() + 180 * 86_400_000).toISOString().slice(0, 10);
+  // 12-month window so every tab in the upcoming dashboard has data
+  const windowEnd = new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10);
   const [accounts, commitmentOccurrences, commitments, loans, billPredictions, profile, categories] = await Promise.all([
     listAccounts(ctx),
-    listUpcoming(ctx, { limit: 200, dueBefore: windowEnd }),
+    listUpcoming(ctx, { limit: 500, dueBefore: windowEnd }),
     listCommitments(ctx),
     listAllLoans(ctx),
     listBillPredictions(ctx, { status: ["open", "overdue"] }),
@@ -99,6 +108,37 @@ export default async function UpcomingPage() {
   ]);
 
   const prepEvents = generatePrepEvents(commitments, commitmentOccurrences, windowEnd);
+
+  // Project virtual occurrences for future months that have no persisted DB row yet.
+  // persistedMonths: "commitmentId:YYYY-MM" keys for months already covered by a DB occurrence.
+  const persistedMonths = new Set<string>();
+  for (const occ of commitmentOccurrences) {
+    persistedMonths.add(`${occ.commitment_id}:${occ.due_date.slice(0, 7)}`);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const projectedOccurrences: ProjectedOccurrence[] = [];
+
+  for (const c of commitments) {
+    if (c.status !== "active" || c.deleted_at || !c.next_payment_date) continue;
+    // "irregular" is not in PaymentFrequency; cast and skip if not a known value
+    const freq = c.payment_frequency as string;
+    if (freq === "irregular") continue;
+
+    const dates = projectOccurrenceDates(
+      c.next_payment_date,
+      freq as PaymentFrequency,
+      today,
+      windowEnd,
+    );
+
+    for (const date of dates) {
+      const monthKey = `${c.id}:${date.slice(0, 7)}`;
+      if (!persistedMonths.has(monthKey)) {
+        projectedOccurrences.push({ commitment: c, date, amountMinor: c.amount_minor });
+      }
+    }
+  }
 
   const _displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null =
@@ -132,6 +172,7 @@ export default async function UpcomingPage() {
           accounts={accounts}
           categories={categories}
           prepEvents={prepEvents}
+          projectedOccurrences={projectedOccurrences}
           masked={profile?.privacy_mode_enabled ?? false}
         />
       </div>

@@ -9,6 +9,125 @@
 
 import { predictNextOccurrence, type RecurrenceInterval } from "./bills.js";
 
+// ── Payment frequency ─────────────────────────────────────────────────────────
+
+/**
+ * Full set of payment frequencies for planned commitments.
+ * Superset of bills' RecurrenceInterval (which lacks one_time, daily, every_2_months, etc.).
+ */
+export type PaymentFrequency =
+  | "one_time"
+  | "daily"
+  | "weekly"
+  | "biweekly"
+  | "monthly"
+  | "every_2_months"
+  | "quarterly"
+  | "every_6_months"
+  | "yearly"
+  | "every_2_years"
+  | "every_3_years";
+
+// Intervals that map 1:1 to bills' RecurrenceInterval
+const BILLS_RECURRENCE_SET = new Set<string>(["weekly", "biweekly", "monthly", "quarterly", "yearly"]);
+
+// Pure date helpers (mirrors private helpers in bills.ts, re-declared here to avoid coupling)
+function _addDays(dateIso: string, days: number): string {
+  const [y, m, d] = dateIso.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+function _daysInMonth(year: number, month1: number): number {
+  return new Date(Date.UTC(year, month1, 0)).getUTCDate();
+}
+
+function _addMonthsClamped(dateIso: string, months: number): string {
+  const [y, m, d] = dateIso.split("-").map(Number) as [number, number, number];
+  const total = y * 12 + (m - 1) + months;
+  const ty = Math.floor(total / 12);
+  const tm = (total % 12) + 1;
+  const td = Math.min(d, _daysInMonth(ty, tm));
+  return `${ty}-${String(tm).padStart(2, "0")}-${String(td).padStart(2, "0")}`;
+}
+
+function _addYearsClamped(dateIso: string, years: number): string {
+  const [y, m, d] = dateIso.split("-").map(Number) as [number, number, number];
+  const ty = y + years;
+  const td = Math.min(d, _daysInMonth(ty, m));
+  return `${ty}-${String(m).padStart(2, "0")}-${String(td).padStart(2, "0")}`;
+}
+
+/**
+ * Computes the next occurrence date for a planned commitment given its payment frequency.
+ * Returns null for one_time (no recurrence).
+ * Uses the same month-end clamping as predictNextOccurrence in bills.ts.
+ */
+export function predictCommitmentNextOccurrence(dateIso: string, frequency: PaymentFrequency): string | null {
+  if (BILLS_RECURRENCE_SET.has(frequency)) {
+    return predictNextOccurrence(dateIso, frequency as RecurrenceInterval);
+  }
+  switch (frequency) {
+    case "one_time":
+      return null;
+    case "daily":
+      return _addDays(dateIso, 1);
+    case "every_2_months":
+      return _addMonthsClamped(dateIso, 2);
+    case "every_6_months":
+      return _addMonthsClamped(dateIso, 6);
+    case "every_2_years":
+      return _addYearsClamped(dateIso, 2);
+    case "every_3_years":
+      return _addYearsClamped(dateIso, 3);
+    default:
+      return null;
+  }
+}
+
+/**
+ * Projects all occurrence dates for a commitment within [windowStart, windowEnd].
+ *
+ * Starts from anchorDate (the commitment's next_payment_date -- the current upcoming
+ * occurrence's due date) and chains forward using the payment frequency.
+ * Dates before windowStart are skipped (not emitted).
+ * Capped at 120 iterations to prevent runaway loops for daily/weekly frequencies.
+ *
+ * @param anchorDate   Commitment's next_payment_date (YYYY-MM-DD)
+ * @param frequency    Payment frequency
+ * @param windowStart  Inclusive start of projection window (YYYY-MM-DD)
+ * @param windowEnd    Inclusive end of projection window (YYYY-MM-DD)
+ * @returns            Sorted ascending list of occurrence dates within the window
+ */
+export function projectOccurrenceDates(
+  anchorDate: string,
+  frequency: PaymentFrequency,
+  windowStart: string,
+  windowEnd: string,
+): string[] {
+  // Anchor is completely outside window -- no occurrences possible
+  if (anchorDate > windowEnd) return [];
+
+  const dates: string[] = [];
+  let cur = anchorDate;
+  let iterations = 0;
+  const MAX_ITERATIONS = 120;
+
+  while (cur <= windowEnd && iterations < MAX_ITERATIONS) {
+    iterations++;
+    if (cur >= windowStart) {
+      dates.push(cur);
+    }
+    if (frequency === "one_time") break;
+    const next = predictCommitmentNextOccurrence(cur, frequency);
+    if (!next || next <= cur) break;
+    cur = next;
+  }
+
+  return dates;
+}
+
 /**
  * Returns the saving dates that belong to a SPECIFIC payment occurrence,
  * filtered to those that have already occurred as of `today`.
