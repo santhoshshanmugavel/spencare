@@ -5,7 +5,7 @@
  */
 
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
-import { checkBudgetThreshold, checkBalanceThreshold, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkLoanReminder } from "./eventRules";
+import { checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkLoanReminder } from "./eventRules";
 
 interface CheckOutcome {
   userId: string;
@@ -117,7 +117,7 @@ async function runChecksForUser(
   // ---- Account balance checks ----
   const { data: accounts } = await serviceRoleSupabase
     .from("accounts")
-    .select("id, name, type, balance_minor, currency")
+    .select("id, name, type, balance_minor, credit_limit_minor, credit_used_minor, currency")
     .eq("user_id", userId)
     .eq("is_archived", false);
 
@@ -133,6 +133,27 @@ async function runChecksForUser(
           accountName: account.name,
           balanceMinor: account.balance_minor ?? 0,
           lowThresholdMinor: LOW_THRESHOLD,
+          currency: account.currency ?? "INR",
+        });
+        checksRun++;
+      } catch {
+        // Individual check failure must not stop other checks
+      }
+    }
+  }
+
+  // ---- Credit utilization checks ----
+  for (const account of accounts ?? []) {
+    if (account.type === "credit_card" && account.credit_limit_minor) {
+      try {
+        await checkCreditUtilization({
+          serviceRoleSupabase,
+          userId,
+          userEmail,
+          accountId: account.id,
+          accountName: account.name,
+          creditUsedMinor: account.credit_used_minor ?? 0,
+          creditLimitMinor: account.credit_limit_minor,
           currency: account.currency ?? "INR",
         });
         checksRun++;

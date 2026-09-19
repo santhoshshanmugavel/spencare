@@ -341,6 +341,69 @@ export async function checkCommitmentReminder(input: CommitmentRuleInput): Promi
   });
 }
 
+interface CreditRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  accountId: string;
+  accountName: string;
+  creditUsedMinor: number;
+  creditLimitMinor: number;
+  currency?: string;
+}
+
+const CREDIT_THRESHOLDS = [
+  { pct: 50, eventType: "CREDIT_50" as const, severity: "info" as const },
+  { pct: 80, eventType: "CREDIT_80" as const, severity: "warning" as const },
+  { pct: 90, eventType: "CREDIT_90" as const, severity: "warning" as const },
+  { pct: 100, eventType: "CREDIT_100" as const, severity: "critical" as const },
+];
+
+export async function checkCreditUtilization(input: CreditRuleInput): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, accountId, accountName, creditUsedMinor, creditLimitMinor } = input;
+  const currency = input.currency ?? "INR";
+
+  if (creditLimitMinor <= 0) return;
+
+  const utilizationPct = (creditUsedMinor / creditLimitMinor) * 100;
+
+  let highestCrossed: (typeof CREDIT_THRESHOLDS)[number] | null = null;
+  for (const t of CREDIT_THRESHOLDS) {
+    if (utilizationPct >= t.pct) highestCrossed = t;
+  }
+
+  const prevState = await getNotificationAlertState(serviceRoleSupabase, userId, "credit_account", accountId, "threshold");
+  const prevPct = prevState?.lastValue ?? 0;
+
+  if (!highestCrossed) {
+    if (prevPct > 0) {
+      await upsertNotificationAlertState(serviceRoleSupabase, userId, "credit_account", accountId, "threshold", null);
+    }
+    return;
+  }
+
+  if (highestCrossed.pct <= prevPct) return;
+
+  await upsertNotificationAlertState(serviceRoleSupabase, userId, "credit_account", accountId, "threshold", highestCrossed.pct);
+
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType: highestCrossed.eventType,
+    financialContext: {
+      accountName,
+      utilizationPct: Math.round(utilizationPct),
+      usedMinor: creditUsedMinor,
+      limitMinor: creditLimitMinor,
+      remainingMinor: creditLimitMinor - creditUsedMinor,
+      currency,
+    },
+    category: "account",
+    severity: highestCrossed.severity,
+    entityType: "account",
+    entityId: accountId,
+    actionUrl: `/accounts/${accountId}`,
+    dedupeKey: `credit_${highestCrossed.pct}_${accountId}_${new Date().toISOString().slice(0, 7)}`,
+  });
+}
+
 interface LoanRuleInput extends UserTarget {
   serviceRoleSupabase: TypedSupabaseClient;
   loanId: string;

@@ -85,10 +85,15 @@ export function isEventTypeEnabled(
   eventType: string,
 ): boolean {
   if (!isChannelEnabled(preferences, channel)) return false;
+  // An exact-match row takes precedence. A prefix row (e.g. event_type="BUDGET"
+  // matching "BUDGET_80") acts as a category-level toggle so a single preference
+  // row can silence an entire family of events.
   const specific = preferences.find(
-    (p) => p.channel === channel && p.event_type === eventType,
+    (p) =>
+      p.channel === channel &&
+      p.event_type !== null &&
+      (p.event_type === eventType || eventType.startsWith(p.event_type + "_")),
   );
-  // Default enabled if no specific preference
   return specific ? specific.enabled : true;
 }
 

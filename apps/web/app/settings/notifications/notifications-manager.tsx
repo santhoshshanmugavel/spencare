@@ -96,15 +96,6 @@ export function NotificationsManager({
     }, POLL_INTERVAL_MS);
   }, [stopPolling]);
 
-  const getChannelEnabled = useCallback(
-    (channel: string): boolean => {
-      const pref = prefs.find((p) => p.channel === channel && p.event_type === null);
-      if (!pref) return channel === "email" || channel === "in_app";
-      return pref.enabled;
-    },
-    [prefs],
-  );
-
   const setChannelEnabled = useCallback(async (channel: string, enabled: boolean) => {
     const res = await fetch("/api/notifications/preferences", {
       method: "POST",
@@ -463,36 +454,54 @@ const ALERT_CATEGORIES = [
     key: "budget",
     label: "Budget alerts",
     description: "When your spending approaches or passes a budget limit",
-    eventTypePrefix: "BUDGET_50",
+    eventTypePrefix: "BUDGET",
   },
   {
     key: "balance",
     label: "Balance warnings",
     description: "When an account balance drops low or goes negative",
-    eventTypePrefix: "BALANCE_LOW",
+    eventTypePrefix: "BALANCE",
+  },
+  {
+    key: "credit",
+    label: "Credit card alerts",
+    description: "When a credit card approaches or reaches its limit",
+    eventTypePrefix: "CREDIT",
+  },
+  {
+    key: "commitment",
+    label: "Commitment reminders",
+    description: "Upcoming and overdue planned commitment payment reminders",
+    eventTypePrefix: "COMMITMENT",
+  },
+  {
+    key: "loan",
+    label: "Loan reminders",
+    description: "Upcoming and overdue loan payment reminders",
+    eventTypePrefix: "LOAN",
   },
   {
     key: "bill",
     label: "Bill reminders",
     description: "Upcoming and overdue bill payment reminders",
-    eventTypePrefix: "BILL_7_DAYS",
+    eventTypePrefix: "BILL",
   },
   {
     key: "goal",
-    label: "Goal milestones",
-    description: "Progress updates when you hit key goal milestones",
-    eventTypePrefix: "GOAL_25",
+    label: "Goal alerts",
+    description: "Contribution reminders and milestone updates for your savings goals",
+    eventTypePrefix: "GOAL",
+  },
+  {
+    key: "daily_summary",
+    label: "Daily summary",
+    description: "A brief look at your day's spending and income, sent each evening",
+    eventTypePrefix: "DAILY_SUMMARY",
   },
   {
     key: "security",
     label: "Security alerts",
     description: "Password changes, new logins, and 2FA changes",
-    eventTypePrefix: "SECURITY_PASSWORD_CHANGED",
-  },
-  {
-    key: "reports",
-    label: "Weekly & monthly summaries",
-    description: "A quick look at your spending at the end of each period",
-    eventTypePrefix: "WEEKLY_SUMMARY",
+    eventTypePrefix: "SECURITY",
   },
 ] as const;
