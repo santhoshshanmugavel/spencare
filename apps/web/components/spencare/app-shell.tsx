@@ -27,7 +27,7 @@ export function AppShell({ rail, header, children, panel, className }: AppShellP
           <header className="shrink-0 border-b border-border px-6 py-4">{header}</header>
         ) : null}
         <div className="flex min-h-0 flex-1">
-          <main className="min-w-0 flex-1 overflow-y-auto px-6 py-4">{children}</main>
+          <main className="min-w-0 flex-1 overflow-y-auto px-8 py-6">{children}</main>
           {panel ? (
             <aside className="hidden w-[400px] shrink-0 overflow-y-auto border-l border-border md:block">
               {panel}
