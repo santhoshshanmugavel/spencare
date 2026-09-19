@@ -10,10 +10,7 @@ import {
   skipCommitmentOccurrence,
   reserveForOccurrence,
   markOccurrencePaidManually,
-  payOccurrence,
-  advanceCommitmentOccurrence,
   payCommitmentOccurrenceAtomic,
-  createTransaction,
   predictNextOccurrence,
   addLoan,
   editLoan,
@@ -183,7 +180,7 @@ export async function reserveOccurrenceAction(occurrenceId: string, additionalMi
   }
 }
 
-/** Mark a commitment occurrence as paid. Uses atomic RPC for bank/cash; credit-card marks paid without a transaction. */
+/** Mark a commitment occurrence as paid. Always creates an expense transaction (bank, cash, or credit_card). */
 export async function markOccurrencePaidAction(input: {
   occurrenceId: string;
   commitmentId: string;
@@ -201,7 +198,7 @@ export async function markOccurrencePaidAction(input: {
   if (!input.categoryId) return { ok: false as const, error: { message: "Category is required to record a payment." } };
   const ctx = await requireAuthContext();
   try {
-    // Look up account type to determine payment path
+    // Look up account type to determine which success toast to show
     const { data: account } = await ctx.supabase
       .from("accounts")
       .select("type")
@@ -217,21 +214,20 @@ export async function markOccurrencePaidAction(input: {
       nextDueDate = predictNextOccurrence(input.occurrenceDueDate, input.paymentFrequency as RecurrenceInterval);
     }
 
-    // Atomic RPC: creates transaction + marks occurrence paid + inserts next occurrence
+    // Atomic RPC: creates expense transaction (all account types) + marks occurrence paid + inserts next occurrence
     const result = await payCommitmentOccurrenceAtomic(ctx, {
       occurrenceId: input.occurrenceId,
       commitmentId: input.commitmentId,
-      accountId: isCreditCard ? null : input.accountId,
+      accountId: input.accountId,
       categoryId: input.categoryId,
       amountMinor: input.amountMinor,
       itemName: input.itemName,
       occurredAt: input.occurredAt,
       nextDueDate,
-      skipTransaction: isCreditCard,
     });
 
     revalidateAll();
-    if (result.transactionId) revalidatePath("/cash-flow/transactions");
+    revalidatePath("/cash-flow/transactions");
     return { ok: true as const, transactionId: result.transactionId, nextOccurrenceDate: result.nextDueDate, isCreditCard };
   } catch (e) {
     return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to mark paid." } };

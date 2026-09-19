@@ -430,16 +430,15 @@ export async function callPayCommitmentOccurrenceAtomic(
     userId: string;
     occurrenceId: string;
     commitmentId: string;
-    accountId: string | null;
+    accountId: string;
     categoryId: string;
     amountMinor: number;
     itemName: string;
     occurredAt: string; // ISO date string YYYY-MM-DD
     nextDueDate: string | null;
-    skipTransaction: boolean;
   },
-): Promise<{ transactionId: string | null; nextDueDate: string | null }> {
-  // Cast to any: generated types predate this function; avoid regenerating types mid-session.
+): Promise<{ transactionId: string; nextDueDate: string | null }> {
+  // Cast to any: generated types predate this function (migration 20260919000002).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (client as any).rpc("pay_commitment_occurrence_atomic", {
     p_user_id: params.userId,
@@ -451,10 +450,9 @@ export async function callPayCommitmentOccurrenceAtomic(
     p_item_name: params.itemName,
     p_occurred_at: params.occurredAt,
     p_next_due_date: params.nextDueDate,
-    p_skip_transaction: params.skipTransaction,
   });
   if (error) throw error;
-  const result = (data ?? {}) as { transaction_id: string | null; next_due_date: string | null };
+  const result = (data ?? {}) as { transaction_id: string; next_due_date: string | null };
   return { transactionId: result.transaction_id, nextDueDate: result.next_due_date };
 }
 

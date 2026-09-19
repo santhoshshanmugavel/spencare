@@ -113,7 +113,7 @@ export async function resumeCommitment(
 
 /**
  * Atomically pay a commitment occurrence via a SECURITY DEFINER RPC:
- *   1. Create the expense transaction (bank/cash only; credit-card skips this).
+ *   1. Create the expense transaction (bank, cash, or credit_card; Phase 28 handles all types).
  *   2. Mark the occurrence as paid.
  *   3. Insert the next occurrence if nextDueDate is provided.
  * Returns the transaction id and next due date.
@@ -123,15 +123,14 @@ export async function payCommitmentOccurrenceAtomic(
   params: {
     occurrenceId: string;
     commitmentId: string;
-    accountId: string | null;
+    accountId: string;
     categoryId: string;
     amountMinor: number;
     itemName: string;
     occurredAt: string; // ISO date or datetime; slice to YYYY-MM-DD
     nextDueDate: string | null;
-    skipTransaction: boolean;
   },
-): Promise<{ transactionId: string | null; nextDueDate: string | null }> {
+): Promise<{ transactionId: string; nextDueDate: string | null }> {
   return callPayCommitmentOccurrenceAtomic(ctx.supabase, {
     ...params,
     userId: ctx.userId,

@@ -124,17 +124,18 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
     });
     setLoading(false);
     if (!result.ok) { toastError(result.error.message); return; }
+    const amountDisplay = minorUnitsToDisplay(occ.amount_minor, CURRENCY);
     let msg = `${commitment.name} payment recorded.`;
     if (result.isCreditCard) {
-      msg += " Your card statement will capture this charge.";
-    } else if (result.transactionId) {
-      msg += " Transaction added.";
+      msg += ` ${amountDisplay} was added to your credit card transactions.`;
+    } else {
+      msg += ` ${amountDisplay} was added to your transactions.`;
     }
     if (result.nextOccurrenceDate) {
       const nextFormatted = new Date(result.nextOccurrenceDate + "T00:00:00Z").toLocaleDateString("en-IN", {
         day: "numeric", month: "short", timeZone: "UTC",
       });
-      msg += ` Next: ${nextFormatted}.`;
+      msg += ` Next payment: ${nextFormatted}.`;
     }
     toastConfirmed(msg);
     setMarkPaidOpen(false);
@@ -269,7 +270,7 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
               {paidAccount && (
                 <p className="text-xs text-muted-foreground">
                   {paidAccount.type === "credit_card"
-                    ? "No transaction is created for card payments. Your card statement or Gmail sync will capture this charge."
+                    ? "This will be recorded as a credit card expense. Your card's outstanding balance will increase."
                     : "Account balance will decrease by this amount."}
                 </p>
               )}
