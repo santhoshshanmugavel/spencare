@@ -1,7 +1,7 @@
 "use client";
 
 import { MoreHorizontal, Landmark, Banknote, CreditCard, TrendingUp, AlertTriangle } from "lucide-react";
-import { Money as DomainMoney } from "@spencare/domain-core";
+import { Money as DomainMoney, resolveRecurringDay } from "@spencare/domain-core";
 import type { AccountRow } from "@spencare/domain-application";
 import type { CardReserveDetail } from "@spencare/domain-infra";
 import { Card } from "@/components/ui/card";
@@ -146,6 +146,46 @@ export function AccountCard({
   );
 }
 
+function resolveDayForMonth(dayRule: number): string {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth() + 1;
+  return resolveRecurringDay({ year, month, paymentDayRule: dayRule });
+}
+
+function daysFromToday(dateIso: string): number {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const target = new Date(dateIso + "T00:00:00Z");
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+function CreditCardBillingRow({ account }: { account: AccountRow }) {
+  const stmtDay = account.statement_generated_day;
+  const payDay = account.payment_due_day;
+  if (stmtDay == null && payDay == null) return null;
+
+  const parts: string[] = [];
+  if (stmtDay != null) {
+    const stmtDate = resolveDayForMonth(stmtDay);
+    const d = daysFromToday(stmtDate);
+    if (d === 0) parts.push("Statement today");
+    else if (d > 0) parts.push(`Statement in ${d}d`);
+  }
+  if (payDay != null) {
+    const payDate = resolveDayForMonth(payDay);
+    const d = daysFromToday(payDate);
+    if (d === 0) parts.push("Payment due today");
+    else if (d > 0) parts.push(`Payment due in ${d}d`);
+    else parts.push(`Payment due ${Math.abs(d)}d ago`);
+  }
+  if (parts.length === 0) return null;
+
+  return (
+    <p className="mt-2 text-xs text-muted-foreground">{parts.join(" · ")}</p>
+  );
+}
+
 function AccountCardBody({
   account,
   masked,
@@ -193,6 +233,7 @@ function AccountCardBody({
             No payment account set. Configure one to reserve this balance from your bank.
           </p>
         ) : null}
+        <CreditCardBillingRow account={account} />
       </div>
     );
   }
