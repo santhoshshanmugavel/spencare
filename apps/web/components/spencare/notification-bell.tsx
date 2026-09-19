@@ -26,9 +26,9 @@ const SEVERITY_ICON: Record<string, React.ElementType> = {
 
 const SEVERITY_COLOR: Record<string, string> = {
   info: "text-blue-500",
-  warning: "text-amber-500",
-  critical: "text-red-500",
-  success: "text-emerald-500",
+  warning: "text-warning",
+  critical: "text-destructive",
+  success: "text-success",
 };
 
 export function NotificationBell({ initialUnreadCount = 0 }: { initialUnreadCount?: number }) {

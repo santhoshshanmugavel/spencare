@@ -93,8 +93,8 @@
   --destructive: oklch(0.58 0.22 27);
   --success: oklch(0.52 0.14 155);
   --success-foreground: oklch(1 0 0);
-  --warning: oklch(0.72 0.17 75);
-  --warning-foreground: oklch(0.2 0.05 75);
+  --warning: oklch(0.64 0.14 75);
+  --warning-foreground: oklch(1 0 0);
   --tinted: oklch(0.96 0.015 296);
   --tinted-foreground: oklch(0.3 0.1 296);
   --border: oklch(0.9 0 0);

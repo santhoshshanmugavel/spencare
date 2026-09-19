@@ -65,9 +65,9 @@ function DueDateLabel({ isoDate }: { isoDate: string }) {
   if (days < 0)
     return <span className="text-xs font-medium text-destructive">Overdue {formatDate(isoDate)}</span>;
   if (days === 0)
-    return <span className="text-xs font-medium text-amber-500">Due today</span>;
+    return <span className="text-xs font-medium text-warning">Due today</span>;
   if (days <= 7)
-    return <span className="text-xs font-medium text-amber-500">Due {formatDate(isoDate)}</span>;
+    return <span className="text-xs font-medium text-warning">Due {formatDate(isoDate)}</span>;
   return <span className="text-xs text-muted-foreground">{formatDate(isoDate)}</span>;
 }
 
@@ -75,13 +75,13 @@ function ReserveLabel({ reservedMinor, amountMinor }: { reservedMinor: number; a
   const shortfall = amountMinor - reservedMinor;
   if (shortfall <= 0)
     return (
-      <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+      <span className="text-xs font-medium text-success">
         Ready to pay
       </span>
     );
   if (reservedMinor > 0)
     return (
-      <span className="text-xs text-amber-600 dark:text-amber-400">
+      <span className="text-xs text-warning">
         {minorUnitsToDisplay(reservedMinor, CURRENCY)} / {minorUnitsToDisplay(amountMinor, CURRENCY)} protected
       </span>
     );
@@ -433,7 +433,7 @@ export function UpcomingDashboard({
                   value={DomainMoney.fromMinorUnits(BigInt(toProtect), CURRENCY)}
                   masked={masked}
                   size="numeric"
-                  className="text-sm font-semibold text-amber-600 dark:text-amber-400"
+                  className="text-sm font-semibold text-warning"
                 />
               </div>
             )}
@@ -487,7 +487,7 @@ export function UpcomingDashboard({
                             <span className="text-xs text-muted-foreground">via {paymentAccount.name}</span>
                           )}
                           {commitment?.auto_pay_enabled && occ.status === "upcoming" && (
-                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-success/10 text-success">
                               <Zap className="size-3 mr-0.5" />
                               Auto-pay
                             </span>

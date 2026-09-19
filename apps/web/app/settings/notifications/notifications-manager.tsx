@@ -261,7 +261,7 @@ export function NotificationsManager({
               <div className="shrink-0 flex items-center gap-2">
                 {telegramPhase === "connected" ? (
                   <>
-                    <CheckCircle2 className="size-4 text-emerald-500" aria-hidden="true" />
+                    <CheckCircle2 className="size-4 text-success" aria-hidden="true" />
                     {confirmDisconnect ? (
                       <>
                         <Button
@@ -340,7 +340,7 @@ export function NotificationsManager({
                   disabled={testMessageState === "sending"}
                   className={cn(
                     "h-8 text-xs",
-                    testMessageState === "sent" && "text-emerald-600",
+                    testMessageState === "sent" && "text-success",
                     testMessageState === "error" && "text-destructive",
                   )}
                 >

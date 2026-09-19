@@ -57,7 +57,7 @@ export function PrepProtectActions({
 
   if (isFullyProtected) {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
         <ShieldCheck className="size-3" />
         Protected
       </span>

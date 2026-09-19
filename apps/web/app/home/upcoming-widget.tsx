@@ -19,8 +19,8 @@ function daysUntil(isoDate: string): number {
 function DateChip({ isoDate }: { isoDate: string }) {
   const days = daysUntil(isoDate);
   if (days < 0) return <span className="text-xs font-medium text-destructive">Overdue</span>;
-  if (days === 0) return <span className="text-xs font-medium text-amber-500">Today</span>;
-  if (days <= 7) return <span className="text-xs text-amber-500">In {days}d</span>;
+  if (days === 0) return <span className="text-xs font-medium text-warning">Today</span>;
+  if (days <= 7) return <span className="text-xs text-warning">In {days}d</span>;
   const d = new Date(isoDate + "T00:00:00Z");
   return (
     <span className="text-xs text-muted-foreground">
@@ -98,7 +98,7 @@ export function UpcomingWidget({ items, masked, totalThisMonthMinor }: UpcomingW
                 size="numeric"
               />
               {item.shortfallMinor > 0 && (
-                <p className="text-xs text-amber-500">
+                <p className="text-xs text-warning">
                   <Money
                     value={DomainMoney.fromMinorUnits(BigInt(item.shortfallMinor), item.currency)}
                     masked={masked}

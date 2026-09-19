@@ -189,7 +189,7 @@ function AccountCardBody({
             Paid from <span className="font-medium text-foreground">{paymentAccountName}</span>
           </p>
         ) : used > 0 ? (
-          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+          <p className="mt-2 text-xs text-warning">
             No payment account set. Configure one to reserve this balance from your bank.
           </p>
         ) : null}
@@ -228,9 +228,9 @@ function AccountCardBody({
         <div className="mt-3 space-y-1.5">
           <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
             <div className="bg-primary/70 transition-all" style={{ width: `${availPct}%` }} title="Available" />
-            <div className="bg-amber-400 transition-all" style={{ width: `${goalPct}%` }} title="Goals" />
-            <div className="bg-violet-400 transition-all" style={{ width: `${commitmentPct}%` }} title="Commitments" />
-            <div className="bg-rose-400 transition-all" style={{ width: `${cardPct}%` }} title="Card payments" />
+            <div className="bg-warning transition-all" style={{ width: `${goalPct}%` }} title="Goals" />
+            <div className="bg-primary transition-all" style={{ width: `${commitmentPct}%` }} title="Commitments" />
+            <div className="bg-expense transition-all" style={{ width: `${cardPct}%` }} title="Card payments" />
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
             <span className="flex items-center gap-1">
@@ -245,7 +245,7 @@ function AccountCardBody({
             </span>
             {goalReserveMinor > 0 ? (
               <span className="flex items-center gap-1">
-                <span className="inline-block size-1.5 rounded-full bg-amber-400" />
+                <span className="inline-block size-1.5 rounded-full bg-warning" />
                 <Money
                   value={DomainMoney.fromMinorUnits(BigInt(goalReserveMinor), account.currency as never)}
                   masked={masked}
@@ -257,7 +257,7 @@ function AccountCardBody({
             ) : null}
             {commitmentReserveMinor > 0 ? (
               <span className="flex items-center gap-1">
-                <span className="inline-block size-1.5 rounded-full bg-violet-400" />
+                <span className="inline-block size-1.5 rounded-full bg-primary" />
                 <Money
                   value={DomainMoney.fromMinorUnits(BigInt(commitmentReserveMinor), account.currency as never)}
                   masked={masked}
@@ -269,7 +269,7 @@ function AccountCardBody({
             ) : null}
             {cardReserveMinor > 0 ? (
               <span className="flex items-center gap-1">
-                <span className="inline-block size-1.5 rounded-full bg-rose-400" />
+                <span className="inline-block size-1.5 rounded-full bg-expense" />
                 <Money
                   value={DomainMoney.fromMinorUnits(BigInt(cardReserveMinor), account.currency as never)}
                   masked={masked}
@@ -298,7 +298,7 @@ function AccountCardBody({
         </div>
       ) : null}
       {isOverReserved ? (
-        <div className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-400">
+        <div className="mt-2 flex items-start gap-1.5 rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning">
           <AlertTriangle className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
           <span>Your card balance reserve exceeds the cash available in this account.</span>
         </div>
