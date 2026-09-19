@@ -49,6 +49,17 @@ const DAY_RULE_OPTIONS: { value: number; label: string }[] = [
   { value: PAYMENT_DAY_LAST_OF_MONTH, label: "Last day of month" },
 ];
 
+// ISO 8601: 1=Mon … 7=Sun
+const DAY_OF_WEEK_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+  { value: 7, label: "Sunday" },
+];
+
 function nextPaymentDateFromDayRule(dayRule: number): string {
   const today = new Date();
   const y = today.getFullYear();
@@ -64,6 +75,50 @@ function nextPaymentDateFromDayRule(dayRule: number): string {
   const daysInN = new Date(ny, nm, 0).getDate();
   const nd = dayRule >= PAYMENT_DAY_LAST_OF_MONTH ? daysInN : Math.min(dayRule, daysInN);
   return `${ny}-${pad(nm)}-${pad(nd)}`;
+}
+
+// Compute first_saving_date from a day-of-month rule (1-31 or 32 = last)
+function firstSavingDateFromMonthlyRule(dayRule: number): string {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = today.getMonth() + 1;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const daysInM = new Date(y, m, 0).getDate();
+  const day = dayRule >= PAYMENT_DAY_LAST_OF_MONTH ? daysInM : Math.min(dayRule, daysInM);
+  const candidate = `${y}-${pad(m)}-${pad(day)}`;
+  const todayIso = today.toISOString().slice(0, 10);
+  if (candidate >= todayIso) return candidate;
+  const nm = m === 12 ? 1 : m + 1;
+  const ny = m === 12 ? y + 1 : y;
+  const daysInN = new Date(ny, nm, 0).getDate();
+  const nd = dayRule >= PAYMENT_DAY_LAST_OF_MONTH ? daysInN : Math.min(dayRule, daysInN);
+  return `${ny}-${pad(nm)}-${pad(nd)}`;
+}
+
+// Compute first_saving_date from a day-of-week rule (1=Mon … 7=Sun ISO 8601)
+function firstSavingDateFromWeeklyRule(isoDay: number): string {
+  const cur = new Date();
+  // JS getDay(): 0=Sun, 1=Mon … 6=Sat. Convert ISO: 7=Sun->0, else same.
+  const jsTarget = isoDay === 7 ? 0 : isoDay;
+  const curDay = cur.getDay();
+  let daysAhead = jsTarget - curDay;
+  if (daysAhead < 0) daysAhead += 7;
+  cur.setDate(cur.getDate() + daysAhead);
+  return cur.toISOString().slice(0, 10);
+}
+
+// Reverse-engineer saving day rule from an existing first_saving_date + cadence (for edit mode)
+function savingDayRuleFromDate(cadence: string, date: string): number | null {
+  if (cadence === "monthly") {
+    const day = parseInt(date.slice(8, 10), 10);
+    return day > 0 ? day : null;
+  }
+  if (cadence === "weekly" || cadence === "biweekly") {
+    const dt = new Date(date + "T00:00:00Z");
+    const jsDay = dt.getUTCDay(); // 0=Sun … 6=Sat
+    return jsDay === 0 ? 7 : jsDay; // ISO 1=Mon … 7=Sun
+  }
+  return null;
 }
 
 function useMoneyField(initialMinor?: number) {
@@ -97,6 +152,18 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
   const amountField = useMoneyField(existing?.amount_minor);
   const savingAmountField = useMoneyField(existing?.saving_amount_minor ?? undefined);
   const alreadyReservedField = useMoneyField(undefined);
+
+  // Whether the user wants preparation tracking
+  const [preparationEnabled, setPreparationEnabled] = useState<boolean>(
+    !!(existing?.saving_cadence || existing?.reserve_account_id)
+  );
+
+  // Day rule for the saving schedule: day-of-month (1-32) or day-of-week (1-7 ISO) or null
+  const initialSavingDayRule =
+    existing?.saving_cadence && existing?.first_saving_date
+      ? savingDayRuleFromDate(existing.saving_cadence, existing.first_saving_date)
+      : null;
+  const [savingDayRule, setSavingDayRule] = useState<number | null>(initialSavingDayRule);
 
   const {
     control,
@@ -135,29 +202,50 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
 
   const tenureType = watch("tenureType");
   const savingCadence = watch("savingCadence");
-  const paymentAccountId = watch("paymentAccountId");
-  const reserveAccountId = watch("reserveAccountId");
   const paymentFrequency = watch("paymentFrequency");
-  const paymentDayRule = watch("paymentDayRule");
+  const reserveAccountId = watch("reserveAccountId");
+  const autoPayEnabled = watch("autoPayEnabled");
 
-  const paymentAccount = accounts.find((a) => a.id === paymentAccountId);
-  const isCreditCard = paymentAccount?.type === "credit_card";
   const hasSavingSchedule = !!savingCadence;
   const hasReserveAccount = !!reserveAccountId;
   const isRecurring = paymentFrequency !== "one_time" && paymentFrequency !== "irregular";
 
-  function handlePaymentAccountChange(accountId: string | null, fieldOnChange: (v: string | null) => void) {
-    fieldOnChange(accountId || null);
-    const account = accounts.find((a) => a.id === accountId);
-    if (account?.type === "credit_card") {
-      setValue("reserveAccountId", null);
+  // Saving day rule needs a day-of-month picker for monthly, day-of-week for weekly/biweekly, or date for daily
+  const savingNeedsMonthDay = savingCadence === "monthly";
+  const savingNeedsWeekDay = savingCadence === "weekly" || savingCadence === "biweekly";
+  const savingNeedsDate = savingCadence === "daily";
+
+  function handlePreparationToggle(enabled: boolean) {
+    setPreparationEnabled(enabled);
+    if (!enabled) {
       setValue("savingCadence", null);
       setValue("savingAmountMinor", null);
       setValue("firstSavingDate", null);
+      setValue("reserveAccountId", null);
       setValue("alreadyReservedMinor", null);
-      alreadyReservedField.setDisplay("");
+      setValue("autoProtectEnabled", false);
+      setSavingDayRule(null);
       savingAmountField.setDisplay("");
+      alreadyReservedField.setDisplay("");
     }
+  }
+
+  function handleSavingCadenceChange(cadence: string | null, fieldOnChange: (v: string | null) => void) {
+    fieldOnChange(cadence || null);
+    // Reset day rule when cadence changes since the type of rule changes
+    setSavingDayRule(null);
+    setValue("firstSavingDate", null);
+  }
+
+  function handleSavingDayRuleChange(rule: number, cadence: string) {
+    setSavingDayRule(rule);
+    let date: string;
+    if (cadence === "monthly") {
+      date = firstSavingDateFromMonthlyRule(rule);
+    } else {
+      date = firstSavingDateFromWeeklyRule(rule);
+    }
+    setValue("firstSavingDate", date);
   }
 
   async function onSubmit(data: CreateCommitmentInput) {
@@ -193,6 +281,8 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
     toastConfirmed(isEdit ? "Commitment updated." : "Commitment added.");
     if (!isEdit) {
       reset();
+      setPreparationEnabled(false);
+      setSavingDayRule(null);
       amountField.setDisplay("");
       savingAmountField.setDisplay("");
       alreadyReservedField.setDisplay("");
@@ -211,7 +301,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
           <SheetDescription>
             {isEdit
               ? "Update this planned commitment."
-              : "Plan a future payment and optionally protect money ahead of time."}
+              : "Plan a future payment and optionally prepare for it ahead of time."}
           </SheetDescription>
         </SheetHeader>
 
@@ -240,20 +330,13 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
             />
           </FormField>
 
-          {/* Category - required */}
+          {/* Category */}
           <Controller
             control={control}
             name="categoryId"
             render={({ field }) => (
-              <FormField
-                id="c-category"
-                label="Category"
-                error={msg(errors.categoryId)}
-              >
-                <Select
-                  value={field.value ?? ""}
-                  onValueChange={(v) => field.onChange(v || "")}
-                >
+              <FormField id="c-category" label="Category" error={msg(errors.categoryId)}>
+                <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || "")}>
                   <SelectTrigger id="c-category" aria-invalid={!!errors.categoryId}>
                     <SelectValue placeholder="Choose a category" />
                   </SelectTrigger>
@@ -317,7 +400,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
               render={({ field }) => (
                 <FormField
                   id="c-day-rule"
-                  label="Which day of the month do you pay?"
+                  label="Which day do you pay?"
                   hint="Spencare will schedule future payments on this day each period."
                   error={msg(errors.paymentDayRule)}
                 >
@@ -355,103 +438,194 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
             </FormField>
           )}
 
-          {/* Payment account */}
-          <Controller
-            control={control}
-            name="paymentAccountId"
-            render={({ field }) => (
-              <FormField
-                id="c-payment-account"
-                label="Which account will you pay from?"
-                hint="Bank, cash, or credit card."
-                error={msg(errors.paymentAccountId)}
+          {/* Prepare for this payment? */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-foreground">Prepare for this payment?</p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={preparationEnabled ? "default" : "outline"}
+                size="sm"
+                onClick={() => handlePreparationToggle(true)}
               >
-                <Select
-                  value={field.value ?? ""}
-                  onValueChange={(v) => handlePaymentAccountChange(v || null, field.onChange)}
-                >
-                  <SelectTrigger id="c-payment-account">
-                    <SelectValue placeholder="Choose payment account" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">No specific account</SelectItem>
-                    {paymentAccounts.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormField>
-            )}
-          />
+                Yes, help me prepare
+              </Button>
+              <Button
+                type="button"
+                variant={!preparationEnabled ? "default" : "outline"}
+                size="sm"
+                onClick={() => handlePreparationToggle(false)}
+              >
+                No, I&apos;ll handle it when due
+              </Button>
+            </div>
 
-          {/* Reserve account - bank/cash only, hidden when credit card */}
-          {!isCreditCard && (
-            <Controller
-              control={control}
-              name="reserveAccountId"
-              render={({ field }) => (
-                <FormField
-                  id="c-reserve-account"
-                  label="Where do you want to protect money for this?"
-                  hint="Choose a bank or cash account to set money aside. Leave empty if you want to track without protecting money."
-                  error={msg(errors.reserveAccountId)}
-                >
-                  <Select
-                    value={field.value ?? ""}
-                    onValueChange={(v) => {
-                      field.onChange(v || null);
-                      if (!v) {
-                        setValue("savingCadence", null);
-                        setValue("savingAmountMinor", null);
-                        setValue("firstSavingDate", null);
-                        setValue("alreadyReservedMinor", null);
-                        alreadyReservedField.setDisplay("");
-                        savingAmountField.setDisplay("");
-                      }
-                    }}
+            {preparationEnabled && (
+              <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
+                {/* Saving cadence */}
+                <Controller
+                  control={control}
+                  name="savingCadence"
+                  render={({ field }) => (
+                    <FormField id="c-saving-cadence" label="How often should you set money aside?" error={msg(errors.savingCadence)}>
+                      <Select
+                        value={field.value ?? ""}
+                        onValueChange={(v) => handleSavingCadenceChange(v || null, field.onChange)}
+                      >
+                        <SelectTrigger id="c-saving-cadence">
+                          <SelectValue placeholder="Choose frequency" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SAVING_CADENCES.map((c) => (
+                            <SelectItem key={c} value={c}>{SAVING_CADENCE_LABELS[c]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+                  )}
+                />
+
+                {hasSavingSchedule && (
+                  <>
+                    {/* Saving amount */}
+                    <FormField id="c-saving-amt" label="How much should you set aside each time? (INR)" error={msg(errors.savingAmountMinor)}>
+                      <Input
+                        id="c-saving-amt"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={savingAmountField.display}
+                        aria-invalid={!!errors.savingAmountMinor}
+                        aria-describedby={errors.savingAmountMinor ? errorId("c-saving-amt") : undefined}
+                        onChange={(e) =>
+                          savingAmountField.onChange(e.target.value, (v) => setValue("savingAmountMinor", v))
+                        }
+                      />
+                    </FormField>
+
+                    {/* When to set it aside - day rule or start date */}
+                    {savingNeedsMonthDay && (
+                      <FormField
+                        id="c-saving-day-month"
+                        label="When should you set it aside?"
+                        hint="Spencare will remind you on this day each month."
+                        error={msg(errors.firstSavingDate)}
+                      >
+                        <Select
+                          value={savingDayRule != null ? String(savingDayRule) : ""}
+                          onValueChange={(v) => {
+                            if (v) handleSavingDayRuleChange(parseInt(v, 10), savingCadence!);
+                          }}
+                        >
+                          <SelectTrigger id="c-saving-day-month">
+                            <SelectValue placeholder="Choose day of month" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DAY_RULE_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormField>
+                    )}
+
+                    {savingNeedsWeekDay && (
+                      <FormField
+                        id="c-saving-day-week"
+                        label="When should you set it aside?"
+                        hint="Spencare will remind you on this day each week."
+                        error={msg(errors.firstSavingDate)}
+                      >
+                        <Select
+                          value={savingDayRule != null ? String(savingDayRule) : ""}
+                          onValueChange={(v) => {
+                            if (v) handleSavingDayRuleChange(parseInt(v, 10), savingCadence!);
+                          }}
+                        >
+                          <SelectTrigger id="c-saving-day-week">
+                            <SelectValue placeholder="Choose day of week" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DAY_OF_WEEK_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormField>
+                    )}
+
+                    {savingNeedsDate && (
+                      <FormField id="c-first-save" label="When should you start?" error={msg(errors.firstSavingDate)}>
+                        <Input
+                          id="c-first-save"
+                          type="date"
+                          aria-invalid={!!errors.firstSavingDate}
+                          aria-describedby={errors.firstSavingDate ? errorId("c-first-save") : undefined}
+                          {...register("firstSavingDate")}
+                        />
+                      </FormField>
+                    )}
+                  </>
+                )}
+
+                {/* Protection account */}
+                <Controller
+                  control={control}
+                  name="reserveAccountId"
+                  render={({ field }) => (
+                    <FormField
+                      id="c-reserve-account"
+                      label="Where do you want to set money aside?"
+                      hint="Choose a bank or cash account to hold this money. Credit cards are not allowed."
+                      error={msg(errors.reserveAccountId)}
+                    >
+                      <Select
+                        value={field.value ?? ""}
+                        onValueChange={(v) => {
+                          field.onChange(v || null);
+                          if (!v) {
+                            setValue("alreadyReservedMinor", null);
+                            alreadyReservedField.setDisplay("");
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="c-reserve-account">
+                          <SelectValue placeholder="I&apos;ll decide later" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">I&apos;ll decide later</SelectItem>
+                          {reserveAccounts.map((a) => (
+                            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+                  )}
+                />
+
+                {/* Already protected - only when a protection account is selected */}
+                {hasReserveAccount && (
+                  <FormField
+                    id="c-already-reserved"
+                    label="How much is already protected? (INR)"
+                    hint="Enter money you have already set aside for this commitment. No transaction will be created."
+                    error={msg(errors.alreadyReservedMinor)}
                   >
-                    <SelectTrigger id="c-reserve-account">
-                      <SelectValue placeholder="No cash protection" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">No cash protection</SelectItem>
-                      {reserveAccounts.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-              )}
-            />
-          )}
-
-          {isCreditCard && (
-            <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border px-3 py-2">
-              Credit card payments are tracked but no cash is set aside. Spencare will not reserve money from any bank account for this commitment.
-            </p>
-          )}
-
-          {/* Already protected - only when reserve account is set */}
-          {hasReserveAccount && !isCreditCard && (
-            <FormField
-              id="c-already-reserved"
-              label="Do you already have money set aside? (INR)"
-              hint="If you already saved part of this amount, enter it here. No transaction will be created."
-              error={msg(errors.alreadyReservedMinor)}
-            >
-              <Input
-                id="c-already-reserved"
-                inputMode="decimal"
-                placeholder="0"
-                value={alreadyReservedField.display}
-                aria-invalid={!!errors.alreadyReservedMinor}
-                aria-describedby={errors.alreadyReservedMinor ? errorId("c-already-reserved") : undefined}
-                onChange={(e) =>
-                  alreadyReservedField.onChange(e.target.value, (v) => setValue("alreadyReservedMinor", v))
-                }
-              />
-            </FormField>
-          )}
+                    <Input
+                      id="c-already-reserved"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={alreadyReservedField.display}
+                      aria-invalid={!!errors.alreadyReservedMinor}
+                      aria-describedby={errors.alreadyReservedMinor ? errorId("c-already-reserved") : undefined}
+                      onChange={(e) =>
+                        alreadyReservedField.onChange(e.target.value, (v) => setValue("alreadyReservedMinor", v))
+                      }
+                    />
+                  </FormField>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Duration */}
           <Controller
@@ -497,95 +671,61 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
             </FormField>
           )}
 
-          {/* Saving schedule - only when reserve account is set */}
-          {hasReserveAccount && !isCreditCard && (
-            <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
-              <p className="text-sm font-medium text-foreground">Set money aside ahead of time (optional)</p>
-              <p className="text-xs text-muted-foreground">
-                Spencare will remind you to set aside money each period so the full amount is ready by the payment date.
-              </p>
-
+          {/* Automatically track payments */}
+          <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
+            <div className="flex items-start gap-3">
               <Controller
                 control={control}
-                name="savingCadence"
+                name="autoPayEnabled"
                 render={({ field }) => (
-                  <FormField id="c-saving-cadence" label="How often do you want to set money aside?" error={msg(errors.savingCadence)}>
+                  <Switch
+                    id="c-autopay"
+                    checked={!!field.value}
+                    onCheckedChange={field.onChange}
+                    className="mt-0.5 shrink-0"
+                  />
+                )}
+              />
+              <div>
+                <Label htmlFor="c-autopay" className="text-sm font-medium">Automatically track payments</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Spencare will look for a matching transaction and automatically record this payment in your account on the scheduled date. It does not make a real bank payment.
+                </p>
+              </div>
+            </div>
+
+            {autoPayEnabled && (
+              <Controller
+                control={control}
+                name="paymentAccountId"
+                render={({ field }) => (
+                  <FormField
+                    id="c-payment-account"
+                    label="Which account will you pay from?"
+                    hint="Bank, cash, or credit card."
+                    error={msg(errors.paymentAccountId)}
+                  >
                     <Select
                       value={field.value ?? ""}
                       onValueChange={(v) => field.onChange(v || null)}
                     >
-                      <SelectTrigger id="c-saving-cadence">
-                        <SelectValue placeholder="Choose frequency" />
+                      <SelectTrigger id="c-payment-account">
+                        <SelectValue placeholder="Choose payment account" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">No saving schedule</SelectItem>
-                        {SAVING_CADENCES.map((c) => (
-                          <SelectItem key={c} value={c}>{SAVING_CADENCE_LABELS[c]}</SelectItem>
+                        {paymentAccounts.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </FormField>
                 )}
               />
+            )}
+          </div>
 
-              {hasSavingSchedule && (
-                <>
-                  <FormField id="c-saving-amt" label="How much to set aside each time? (INR)" error={msg(errors.savingAmountMinor)}>
-                    <Input
-                      id="c-saving-amt"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={savingAmountField.display}
-                      aria-invalid={!!errors.savingAmountMinor}
-                      aria-describedby={errors.savingAmountMinor ? errorId("c-saving-amt") : undefined}
-                      onChange={(e) =>
-                        savingAmountField.onChange(e.target.value, (v) => setValue("savingAmountMinor", v))
-                      }
-                    />
-                  </FormField>
-
-                  <FormField id="c-first-save" label="When do you start?" error={msg(errors.firstSavingDate)}>
-                    <Input
-                      id="c-first-save"
-                      type="date"
-                      aria-invalid={!!errors.firstSavingDate}
-                      aria-describedby={errors.firstSavingDate ? errorId("c-first-save") : undefined}
-                      {...register("firstSavingDate")}
-                    />
-                  </FormField>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Auto-pay toggle - only when a payment account is selected */}
-          {paymentAccountId && (
-            <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
-              <div className="flex items-start gap-3">
-                <Controller
-                  control={control}
-                  name="autoPayEnabled"
-                  render={({ field }) => (
-                    <Switch
-                      id="c-autopay"
-                      checked={!!field.value}
-                      onCheckedChange={field.onChange}
-                      className="mt-0.5 shrink-0"
-                    />
-                  )}
-                />
-                <div>
-                  <Label htmlFor="c-autopay" className="text-sm font-medium">Enable Auto-pay</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Spencare will automatically record this payment in your Spencare account on the scheduled date using the selected payment account.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Auto-protect toggle - only when saving schedule is configured */}
-          {hasSavingSchedule && !isCreditCard && (
+          {/* Automatically set aside money - only when preparation is enabled with a schedule */}
+          {preparationEnabled && hasSavingSchedule && (
             <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <Controller
@@ -601,9 +741,9 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                   )}
                 />
                 <div>
-                  <Label htmlFor="c-autoprotect" className="text-sm font-medium">Enable Auto-protect</Label>
+                  <Label htmlFor="c-autoprotect" className="text-sm font-medium">Automatically set aside money on schedule</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Spencare will automatically protect the planned amount in your reserve account on each preparation date.
+                    Spencare will automatically move the planned amount to your protection account on each preparation date.
                   </p>
                 </div>
               </div>
