@@ -63,6 +63,9 @@ export const createCommitmentSchema = z
     currency: z.string().length(3).default("INR"),
     paymentFrequency: z.enum(PAYMENT_FREQUENCIES),
     nextPaymentDate: dateSchema,
+    // Canonical recurring day: 1-31 (calendar day, clamped per month) or 32 (last day of month).
+    // Required for recurring commitments; derived on the server from nextPaymentDate as a fallback.
+    paymentDayRule: z.number().int().min(1).max(32).nullable().optional(),
     // paymentAccountId: the account used for the actual payment (bank, cash, or credit card).
     paymentAccountId: z.string().uuid("Invalid account.").nullable().optional(),
     // reserveAccountId: the bank/cash account where money is logically protected.
@@ -146,6 +149,7 @@ export const updateCommitmentSchema = z.object({
   amountIsEstimate: z.boolean().optional(),
   paymentFrequency: z.enum(PAYMENT_FREQUENCIES).optional(),
   nextPaymentDate: dateSchema.optional(),
+  paymentDayRule: z.number().int().min(1).max(32).nullable().optional(),
   paymentAccountId: z.string().uuid().nullable().optional(),
   reserveAccountId: z.string().uuid().nullable().optional(),
   savingCadence: z.enum(SAVING_CADENCES).nullable().optional(),

@@ -131,6 +131,8 @@ export {
 export { generateMcpToken, hashMcpToken } from "./mcpToken.js";
 
 export {
+  PAYMENT_DAY_LAST_OF_MONTH,
+  resolveRecurringDay,
   savingDatesForOccurrence,
   expectedReservedMinor,
   predictCommitmentNextOccurrence,

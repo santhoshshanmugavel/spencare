@@ -9,6 +9,54 @@
 
 import { predictNextOccurrence, type RecurrenceInterval } from "./bills.js";
 
+// ── Payment day rule ──────────────────────────────────────────────────────────
+
+/**
+ * Sentinel value for payment_day_rule meaning "last calendar day of the month."
+ * Stored as 32 in the DB (since 31 is not the last day of every month).
+ */
+export const PAYMENT_DAY_LAST_OF_MONTH = 32;
+
+/**
+ * Resolves the canonical payment day for a given year+month using a day rule.
+ *
+ * @param year          Full year (e.g. 2026)
+ * @param month         1-indexed month (1 = January, 12 = December)
+ * @param paymentDayRule  1-31 (calendar day, clamped if month is shorter) or
+ *                        32 (PAYMENT_DAY_LAST_OF_MONTH) for the last calendar day.
+ * @returns YYYY-MM-DD date string for that month
+ *
+ * Examples:
+ *   resolveRecurringDay({year:2026, month:2, paymentDayRule:31}) = "2026-02-28"
+ *   resolveRecurringDay({year:2024, month:2, paymentDayRule:32}) = "2024-02-29"  (leap year)
+ *   resolveRecurringDay({year:2026, month:3, paymentDayRule:31}) = "2026-03-31"  (non-cascading!)
+ */
+export function resolveRecurringDay({
+  year,
+  month,
+  paymentDayRule,
+}: {
+  year: number;
+  month: number;
+  paymentDayRule: number;
+}): string {
+  const daysInMo = _daysInMonth(year, month);
+  const day = paymentDayRule >= PAYMENT_DAY_LAST_OF_MONTH ? daysInMo : Math.min(paymentDayRule, daysInMo);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+// Months-per-interval for month-based payment frequencies.
+// Weekly, biweekly, daily, and one_time are not in this map (no month-end clamp risk).
+const MONTHS_PER_INTERVAL: Partial<Record<PaymentFrequency, number>> = {
+  monthly: 1,
+  every_2_months: 2,
+  quarterly: 3,
+  every_6_months: 6,
+  yearly: 12,
+  every_2_years: 24,
+  every_3_years: 36,
+};
+
 // ── Payment frequency ─────────────────────────────────────────────────────────
 
 /**
@@ -89,26 +137,58 @@ export function predictCommitmentNextOccurrence(dateIso: string, frequency: Paym
 /**
  * Projects all occurrence dates for a commitment within [windowStart, windowEnd].
  *
- * Starts from anchorDate (the commitment's next_payment_date -- the current upcoming
- * occurrence's due date) and chains forward using the payment frequency.
- * Dates before windowStart are skipped (not emitted).
- * Capped at 120 iterations to prevent runaway loops for daily/weekly frequencies.
+ * For month-based frequencies (monthly, every_2_months, quarterly, every_6_months,
+ * yearly, every_2_years, every_3_years), each occurrence is computed independently
+ * via resolveRecurringDay using the paymentDayRule. This eliminates the cascading
+ * clamp bug where Jan 31 -> Feb 28 -> Mar 28 (wrong); the fix gives Mar 31.
  *
- * @param anchorDate   Commitment's next_payment_date (YYYY-MM-DD)
- * @param frequency    Payment frequency
- * @param windowStart  Inclusive start of projection window (YYYY-MM-DD)
- * @param windowEnd    Inclusive end of projection window (YYYY-MM-DD)
- * @returns            Sorted ascending list of occurrence dates within the window
+ * For day-based frequencies (daily, weekly, biweekly), chaining is used since
+ * there is no month-end clamping concern.
+ *
+ * @param anchorDate      Commitment's next_payment_date (YYYY-MM-DD)
+ * @param frequency       Payment frequency
+ * @param windowStart     Inclusive start of projection window (YYYY-MM-DD)
+ * @param windowEnd       Inclusive end of projection window (YYYY-MM-DD)
+ * @param paymentDayRule  The canonical day rule (1-31 or 32=last day of month).
+ *                        When omitted, the day is extracted from anchorDate as a
+ *                        backward-compatible fallback for rows without payment_day_rule.
+ * @returns               Sorted ascending list of occurrence dates within the window
  */
 export function projectOccurrenceDates(
   anchorDate: string,
   frequency: PaymentFrequency,
   windowStart: string,
   windowEnd: string,
+  paymentDayRule?: number,
 ): string[] {
-  // Anchor is completely outside window -- no occurrences possible
   if (anchorDate > windowEnd) return [];
 
+  const monthStep = MONTHS_PER_INTERVAL[frequency];
+
+  if (monthStep !== undefined) {
+    // Month-based frequency: compute each occurrence independently from the day rule.
+    const [ay, am, ad] = anchorDate.split("-").map(Number) as [number, number, number];
+    const dayRule = paymentDayRule ?? ad;
+    const anchorTotalMonths = ay * 12 + (am - 1);
+    const dates: string[] = [];
+    let step = 0;
+    const MAX_STEPS = 400;
+
+    while (step < MAX_STEPS) {
+      const targetTotal = anchorTotalMonths + step * monthStep;
+      const ty = Math.floor(targetTotal / 12);
+      const tm = (targetTotal % 12) + 1;
+      const date = resolveRecurringDay({ year: ty, month: tm, paymentDayRule: dayRule });
+
+      if (date > windowEnd) break;
+      if (date >= windowStart) dates.push(date);
+      step++;
+    }
+
+    return dates;
+  }
+
+  // Day-based and one_time: use chaining (no month-end clamp concern).
   const dates: string[] = [];
   let cur = anchorDate;
   let iterations = 0;
@@ -116,9 +196,7 @@ export function projectOccurrenceDates(
 
   while (cur <= windowEnd && iterations < MAX_ITERATIONS) {
     iterations++;
-    if (cur >= windowStart) {
-      dates.push(cur);
-    }
+    if (cur >= windowStart) dates.push(cur);
     if (frequency === "one_time") break;
     const next = predictCommitmentNextOccurrence(cur, frequency);
     if (!next || next <= cur) break;

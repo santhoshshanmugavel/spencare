@@ -130,6 +130,7 @@ export default async function UpcomingPage() {
       freq as PaymentFrequency,
       today,
       windowEnd,
+      c.payment_day_rule ?? undefined,
     );
 
     for (const date of dates) {

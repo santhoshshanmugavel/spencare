@@ -35,6 +35,37 @@ import type { PlannedCommitmentRow } from "@spencare/domain-application";
 
 const CURRENCY = "INR";
 
+const PAYMENT_DAY_LAST_OF_MONTH = 32;
+
+function ordinalLabel(n: number): string {
+  if (n === PAYMENT_DAY_LAST_OF_MONTH) return "Last day of month";
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+}
+
+const DAY_RULE_OPTIONS: { value: number; label: string }[] = [
+  ...Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: ordinalLabel(i + 1) })),
+  { value: PAYMENT_DAY_LAST_OF_MONTH, label: "Last day of month" },
+];
+
+function nextPaymentDateFromDayRule(dayRule: number): string {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = today.getMonth() + 1;
+  const daysInM = new Date(y, m, 0).getDate();
+  const day = dayRule >= PAYMENT_DAY_LAST_OF_MONTH ? daysInM : Math.min(dayRule, daysInM);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const candidate = `${y}-${pad(m)}-${pad(day)}`;
+  const todayIso = today.toISOString().slice(0, 10);
+  if (candidate >= todayIso) return candidate;
+  const nm = m === 12 ? 1 : m + 1;
+  const ny = m === 12 ? y + 1 : y;
+  const daysInN = new Date(ny, nm, 0).getDate();
+  const nd = dayRule >= PAYMENT_DAY_LAST_OF_MONTH ? daysInN : Math.min(dayRule, daysInN);
+  return `${ny}-${pad(nm)}-${pad(nd)}`;
+}
+
 function useMoneyField(initialMinor?: number) {
   const [display, setDisplay] = useState(initialMinor ? minorUnitsToDisplay(initialMinor, CURRENCY) : "");
   function onChange(raw: string, set: (minor: number | null) => void) {
@@ -86,6 +117,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
       currency: CURRENCY,
       paymentFrequency: (existing?.payment_frequency ?? "monthly") as CreateCommitmentInput["paymentFrequency"],
       nextPaymentDate: existing?.next_payment_date ?? "",
+      paymentDayRule: existing?.payment_day_rule ?? null,
       paymentAccountId: existing?.payment_account_id ?? null,
       reserveAccountId: existing?.reserve_account_id ?? null,
       alreadyReservedMinor: null,
@@ -105,11 +137,14 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
   const savingCadence = watch("savingCadence");
   const paymentAccountId = watch("paymentAccountId");
   const reserveAccountId = watch("reserveAccountId");
+  const paymentFrequency = watch("paymentFrequency");
+  const paymentDayRule = watch("paymentDayRule");
 
   const paymentAccount = accounts.find((a) => a.id === paymentAccountId);
   const isCreditCard = paymentAccount?.type === "credit_card";
   const hasSavingSchedule = !!savingCadence;
   const hasReserveAccount = !!reserveAccountId;
+  const isRecurring = paymentFrequency !== "one_time" && paymentFrequency !== "irregular";
 
   function handlePaymentAccountChange(accountId: string | null, fieldOnChange: (v: string | null) => void) {
     fieldOnChange(accountId || null);
@@ -135,6 +170,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
         amountIsEstimate: data.amountIsEstimate,
         paymentFrequency: data.paymentFrequency,
         nextPaymentDate: data.nextPaymentDate,
+        paymentDayRule: data.paymentDayRule ?? undefined,
         paymentAccountId: data.paymentAccountId,
         reserveAccountId: data.reserveAccountId,
         savingCadence: data.savingCadence,
@@ -273,16 +309,51 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
             )}
           />
 
-          {/* Next payment date */}
-          <FormField id="c-next-pay" label="Next payment date" error={msg(errors.nextPaymentDate)}>
-            <Input
-              id="c-next-pay"
-              type="date"
-              aria-invalid={!!errors.nextPaymentDate}
-              aria-describedby={errors.nextPaymentDate ? errorId("c-next-pay") : undefined}
-              {...register("nextPaymentDate")}
+          {/* Payment day (recurring) or exact date (one-time) */}
+          {isRecurring ? (
+            <Controller
+              control={control}
+              name="paymentDayRule"
+              render={({ field }) => (
+                <FormField
+                  id="c-day-rule"
+                  label="Which day of the month do you pay?"
+                  hint="Spencare will schedule future payments on this day each period."
+                  error={msg(errors.paymentDayRule)}
+                >
+                  <Select
+                    value={field.value != null ? String(field.value) : ""}
+                    onValueChange={(v) => {
+                      const rule = v ? parseInt(v, 10) : null;
+                      field.onChange(rule);
+                      if (rule != null) {
+                        setValue("nextPaymentDate", nextPaymentDateFromDayRule(rule));
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="c-day-rule">
+                      <SelectValue placeholder="Choose payment day" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DAY_RULE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              )}
             />
-          </FormField>
+          ) : (
+            <FormField id="c-next-pay" label="Payment date" error={msg(errors.nextPaymentDate)}>
+              <Input
+                id="c-next-pay"
+                type="date"
+                aria-invalid={!!errors.nextPaymentDate}
+                aria-describedby={errors.nextPaymentDate ? errorId("c-next-pay") : undefined}
+                {...register("nextPaymentDate")}
+              />
+            </FormField>
+          )}
 
           {/* Payment account */}
           <Controller

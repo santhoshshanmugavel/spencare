@@ -63,6 +63,10 @@ export async function createCommitmentAction(input: CreateCommitmentInput) {
   const ctx = await requireAuthContext();
   try {
     const data = parse.data;
+    // Derive paymentDayRule from nextPaymentDate day when not explicitly provided by the UI.
+    const derivedDayRule = data.paymentDayRule ?? (
+      data.nextPaymentDate ? parseInt(data.nextPaymentDate.slice(8, 10), 10) : null
+    );
     const commitment = await addCommitment(ctx, {
       name: data.name,
       categoryId: data.categoryId ?? null,
@@ -84,6 +88,7 @@ export async function createCommitmentAction(input: CreateCommitmentInput) {
       autoPayEnabled: data.autoPayEnabled ?? false,
       autoProtectEnabled: data.autoProtectEnabled ?? false,
       initialOccurrenceDate: data.nextPaymentDate,
+      paymentDayRule: derivedDayRule,
     });
     revalidateAll();
     return { ok: true as const, data: commitment };
@@ -117,6 +122,12 @@ export async function updateCommitmentAction(commitmentId: string, input: Update
       ...(data.notes !== undefined ? { notes: data.notes } : {}),
       ...(data.autoPayEnabled !== undefined ? { autoPayEnabled: data.autoPayEnabled } : {}),
       ...(data.autoProtectEnabled !== undefined ? { autoProtectEnabled: data.autoProtectEnabled } : {}),
+      ...(data.paymentDayRule !== undefined ? { paymentDayRule: data.paymentDayRule } : (
+        // When nextPaymentDate is updated without an explicit paymentDayRule, derive it.
+        data.nextPaymentDate !== undefined
+          ? { paymentDayRule: parseInt(data.nextPaymentDate.slice(8, 10), 10) }
+          : {}
+      )),
     });
     revalidateAll();
     return { ok: true as const, data: commitment };

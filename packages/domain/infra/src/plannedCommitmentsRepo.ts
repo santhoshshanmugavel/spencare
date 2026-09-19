@@ -42,6 +42,12 @@ export interface PlannedCommitmentRow {
    * No transaction is created -- logical reservation only.
    */
   auto_protect_enabled: boolean;
+  /**
+   * Canonical recurring day of month: 1-31 (clamped per month) or 32 (last day of month).
+   * Null for one_time and irregular commitments.
+   * Used by projectOccurrenceDates to avoid cascading month-end clamping.
+   */
+  payment_day_rule: number | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -93,6 +99,8 @@ export interface CreatePlannedCommitmentPatch {
   autoPayEnabled?: boolean;
   /** Spencare will automatically protect the preparation amount on each saving cadence date. Defaults to false. Requires saving_cadence to be set. */
   autoProtectEnabled?: boolean;
+  /** Canonical day rule (1-31 or 32=last day of month). Null for one_time/irregular. */
+  paymentDayRule?: number | null;
 }
 
 export interface UpdatePlannedCommitmentPatch {
@@ -114,10 +122,12 @@ export interface UpdatePlannedCommitmentPatch {
   notes?: string | null;
   autoPayEnabled?: boolean;
   autoProtectEnabled?: boolean;
+  /** Canonical day rule (1-31 or 32=last day of month). */
+  paymentDayRule?: number | null;
 }
 
 const COMMITMENT_COLUMNS =
-  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, first_saving_date, funding_account_id, payment_account_id, reserve_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, auto_pay_enabled, auto_protect_enabled, created_at, updated_at, deleted_at";
+  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, first_saving_date, funding_account_id, payment_account_id, reserve_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, auto_pay_enabled, auto_protect_enabled, payment_day_rule, created_at, updated_at, deleted_at";
 
 const OCCURRENCE_COLUMNS =
   "id, commitment_id, user_id, due_date, amount_minor, reserved_minor, status, matched_transaction_id, paid_at, created_at, updated_at";
@@ -130,8 +140,8 @@ export async function createPlannedCommitment(
   userId: string,
   patch: CreatePlannedCommitmentPatch,
 ): Promise<PlannedCommitmentRow> {
-  const { data: commitment, error: commitmentError } = await client
-    .from("planned_commitments")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: commitment, error: commitmentError } = await (client.from("planned_commitments") as any)
     .insert({
       user_id: userId,
       name: patch.name,
@@ -154,6 +164,7 @@ export async function createPlannedCommitment(
       notes: patch.notes,
       auto_pay_enabled: patch.autoPayEnabled ?? false,
       auto_protect_enabled: patch.autoProtectEnabled ?? false,
+      payment_day_rule: patch.paymentDayRule ?? null,
     })
     .select(COMMITMENT_COLUMNS)
     .single();
@@ -186,7 +197,7 @@ export async function createPlannedCommitment(
     if (occError) throw occError;
   }
 
-  return commitment as PlannedCommitmentRow;
+  return commitment as unknown as PlannedCommitmentRow;
 }
 
 export async function updatePlannedCommitment(
@@ -195,8 +206,8 @@ export async function updatePlannedCommitment(
   commitmentId: string,
   patch: UpdatePlannedCommitmentPatch,
 ): Promise<PlannedCommitmentRow> {
-  const { data, error } = await client
-    .from("planned_commitments")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (client.from("planned_commitments") as any)
     .update({
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.categoryId !== undefined ? { category_id: patch.categoryId } : {}),
@@ -219,6 +230,7 @@ export async function updatePlannedCommitment(
       ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
       ...(patch.autoPayEnabled !== undefined ? { auto_pay_enabled: patch.autoPayEnabled } : {}),
       ...(patch.autoProtectEnabled !== undefined ? { auto_protect_enabled: patch.autoProtectEnabled } : {}),
+      ...(patch.paymentDayRule !== undefined ? { payment_day_rule: patch.paymentDayRule } : {}),
     })
     .eq("id", commitmentId)
     .eq("user_id", userId)
@@ -226,7 +238,7 @@ export async function updatePlannedCommitment(
     .select(COMMITMENT_COLUMNS)
     .single();
   if (error) throw error;
-  return data as PlannedCommitmentRow;
+  return data as unknown as PlannedCommitmentRow;
 }
 
 export async function deletePlannedCommitment(
@@ -256,7 +268,7 @@ export async function getPlannedCommitment(
     .is("deleted_at", null)
     .maybeSingle();
   if (error) throw error;
-  return data as PlannedCommitmentRow | null;
+  return data as unknown as PlannedCommitmentRow | null;
 }
 
 export async function listPlannedCommitments(
@@ -271,7 +283,7 @@ export async function listPlannedCommitments(
     .in("status", ["active", "paused"])
     .order("next_payment_date", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as PlannedCommitmentRow[];
+  return (data ?? []) as unknown as PlannedCommitmentRow[];
 }
 
 /** Lists upcoming occurrences (status = 'upcoming') sorted by due_date ascending, joined with their parent commitment's identity fields. Excludes occurrences for deleted commitments. */
@@ -427,7 +439,7 @@ export async function setCommitmentStatus(
     .select(COMMITMENT_COLUMNS)
     .single();
   if (error) throw error;
-  return data as PlannedCommitmentRow;
+  return data as unknown as PlannedCommitmentRow;
 }
 
 export async function getOccurrence(

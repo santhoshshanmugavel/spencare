@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { savingDatesForOccurrence, predictCommitmentNextOccurrence, projectOccurrenceDates } from "./commitments.js";
+import {
+  savingDatesForOccurrence,
+  predictCommitmentNextOccurrence,
+  projectOccurrenceDates,
+  resolveRecurringDay,
+  PAYMENT_DAY_LAST_OF_MONTH,
+} from "./commitments.js";
 
 describe("savingDatesForOccurrence", () => {
   // ── Star Health golden case ───────────────────────────────────────────────
@@ -187,21 +193,94 @@ describe("projectOccurrenceDates", () => {
     expect(dates).toEqual([]);
   });
 
-  it("month-end clamping: Jan 31 monthly generates Feb 28 then Mar 28 (cascading clamp)", () => {
-    // Chain: Jan 31 -> Feb 28 (clamped) -> Mar 28 (chained from Feb 28, not original 31).
-    // This is consistent with predictNextOccurrence in bills.ts.
-    // The payment_day_rule migration will fix non-cascading behavior in the future.
+  // Mandatory regression tests for the cascading clamp bug (acceptance criterion A).
+  // Prior to payment_day_rule: Jan 31 -> Feb 28 (clamped) -> Mar 28 (chained, WRONG).
+  // With canonical day rule: each month is resolved independently -> Mar 31 (CORRECT).
+
+  it("month-end: Jan 31 monthly does not cascade -- Mar recovers to 31", () => {
     const dates = projectOccurrenceDates("2026-01-31", "monthly", "2026-01-01", "2026-03-31");
-    expect(dates).toEqual(["2026-01-31", "2026-02-28", "2026-03-28"]);
+    expect(dates).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
   });
 
-  it("month-end clamping: Jan 31 monthly -> Feb 29 (leap) then Mar 29 (cascading clamp)", () => {
+  it("month-end: Jan 31 monthly leap year -- Feb 29, Mar 31 (non-cascading)", () => {
     const dates = projectOccurrenceDates("2024-01-31", "monthly", "2024-01-01", "2024-03-31");
-    expect(dates).toEqual(["2024-01-31", "2024-02-29", "2024-03-29"]);
+    expect(dates).toEqual(["2024-01-31", "2024-02-29", "2024-03-31"]);
+  });
+
+  it("month-end: explicit paymentDayRule=31 overrides anchor day for projection", () => {
+    // Anchor is Feb 28 (already clamped in DB), but day rule is 31: Mar should be 31.
+    const dates = projectOccurrenceDates("2026-02-28", "monthly", "2026-02-01", "2026-04-30", 31);
+    expect(dates).toEqual(["2026-02-28", "2026-03-31", "2026-04-30"]);
   });
 
   it("every_6_months: emits every 6 months", () => {
     const dates = projectOccurrenceDates("2026-04-01", "every_6_months", "2026-01-01", "2027-06-30");
     expect(dates).toEqual(["2026-04-01", "2026-10-01", "2027-04-01"]);
+  });
+
+  it("quarterly on 31st: April clamps to 30, July recovers to 31 (non-cascading)", () => {
+    // Quarterly on the 31st: Jan 31, Apr 30 (clamp), Jul 31 (recover), Oct 31
+    const dates = projectOccurrenceDates("2026-01-31", "quarterly", "2026-01-01", "2026-12-31");
+    expect(dates).toEqual(["2026-01-31", "2026-04-30", "2026-07-31", "2026-10-31"]);
+  });
+
+  it("last day of month with paymentDayRule=32: always uses last calendar day", () => {
+    const dates = projectOccurrenceDates("2026-01-31", "monthly", "2026-01-01", "2026-04-30", PAYMENT_DAY_LAST_OF_MONTH);
+    // Jan=31, Feb=28, Mar=31, Apr=30
+    expect(dates).toEqual(["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]);
+  });
+
+  it("last day of month in leap year: Feb 29", () => {
+    const dates = projectOccurrenceDates("2024-01-31", "monthly", "2024-01-01", "2024-03-31", PAYMENT_DAY_LAST_OF_MONTH);
+    expect(dates).toEqual(["2024-01-31", "2024-02-29", "2024-03-31"]);
+  });
+
+  it("Netflix-style: 20th monthly stays on the 20th regardless of month length", () => {
+    const dates = projectOccurrenceDates("2026-01-20", "monthly", "2026-01-01", "2026-05-31");
+    expect(dates).toEqual(["2026-01-20", "2026-02-20", "2026-03-20", "2026-04-20", "2026-05-20"]);
+  });
+
+  it("Star Health 30th quarterly: Feb clamps to 28, May recovers to 30", () => {
+    // Quarterly from Nov 30: Nov 30, Feb 28 (clamp), May 30 (recover), Aug 30
+    const dates = projectOccurrenceDates("2025-11-30", "quarterly", "2025-11-01", "2026-09-30");
+    expect(dates).toEqual(["2025-11-30", "2026-02-28", "2026-05-30", "2026-08-30"]);
+  });
+
+  it("yearly on Jan 31 across multiple years", () => {
+    const dates = projectOccurrenceDates("2026-01-31", "yearly", "2026-01-01", "2028-12-31");
+    expect(dates).toEqual(["2026-01-31", "2027-01-31", "2028-01-31"]);
+  });
+});
+
+describe("resolveRecurringDay", () => {
+  it("normal day in a month returns that day", () => {
+    expect(resolveRecurringDay({ year: 2026, month: 3, paymentDayRule: 15 })).toBe("2026-03-15");
+  });
+
+  it("day 31 in February clamps to 28", () => {
+    expect(resolveRecurringDay({ year: 2026, month: 2, paymentDayRule: 31 })).toBe("2026-02-28");
+  });
+
+  it("day 31 in February clamps to 29 in a leap year", () => {
+    expect(resolveRecurringDay({ year: 2024, month: 2, paymentDayRule: 31 })).toBe("2024-02-29");
+  });
+
+  it("day 31 in March returns 31", () => {
+    expect(resolveRecurringDay({ year: 2026, month: 3, paymentDayRule: 31 })).toBe("2026-03-31");
+  });
+
+  it("day 31 in April clamps to 30", () => {
+    expect(resolveRecurringDay({ year: 2026, month: 4, paymentDayRule: 31 })).toBe("2026-04-30");
+  });
+
+  it("PAYMENT_DAY_LAST_OF_MONTH (32) always returns last calendar day", () => {
+    expect(resolveRecurringDay({ year: 2026, month: 1, paymentDayRule: 32 })).toBe("2026-01-31");
+    expect(resolveRecurringDay({ year: 2026, month: 2, paymentDayRule: 32 })).toBe("2026-02-28");
+    expect(resolveRecurringDay({ year: 2024, month: 2, paymentDayRule: 32 })).toBe("2024-02-29");
+    expect(resolveRecurringDay({ year: 2026, month: 4, paymentDayRule: 32 })).toBe("2026-04-30");
+  });
+
+  it("day 1 is always day 1", () => {
+    expect(resolveRecurringDay({ year: 2026, month: 2, paymentDayRule: 1 })).toBe("2026-02-01");
   });
 });
