@@ -45,12 +45,24 @@ export const createCashAccountSchema = z.object({
   currency: currencySchema,
   balanceMinor: nonNegativeMinorUnitsSchema,
 });
+// Billing-day fields share the payment_day_rule sentinel: 1-28 = literal day,
+// 29 = 29th, 30 = 30th, 31 = 31st, 32 = last day of month.
+const billingDaySchema = z
+  .number()
+  .int()
+  .min(1, "Must be between 1 and 32.")
+  .max(32, "Must be between 1 and 32.")
+  .nullable()
+  .optional();
+
 export const createCreditCardAccountSchema = z.object({
   type: z.literal("credit_card"),
   name: nameSchema,
   currency: currencySchema,
   creditLimitMinor: nonNegativeMinorUnitsSchema,
   creditUsedMinor: nonNegativeMinorUnitsSchema,
+  statementGeneratedDay: billingDaySchema,
+  paymentDueDay: billingDaySchema,
 });
 export const createInvestmentAccountSchema = z.object({
   type: z.literal("investment"),
@@ -89,5 +101,7 @@ export const updateAccountSchema = z.object({
   creditLimitMinor: nonNegativeMinorUnitsSchema.optional(),
   creditUsedMinor: nonNegativeMinorUnitsSchema.optional(),
   marketValueMinor: nonNegativeMinorUnitsSchema.optional(),
+  statementGeneratedDay: billingDaySchema,
+  paymentDueDay: billingDaySchema,
 });
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;

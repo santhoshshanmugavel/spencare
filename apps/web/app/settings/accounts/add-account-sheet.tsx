@@ -39,10 +39,11 @@ const CURRENCIES = ["INR", "USD", "EUR", "GBP"];
  * RHF against one discriminated-union resolver).
  *
  * Fields deliberately NOT included, documented as scope limitations
- * (Phase 7 reconnaissance): bank "Account type" (Savings/Current) and
- * credit-card billing-date/due-day -- neither has a database column.
+ * (Phase 7 reconnaissance): bank "Account type" (Savings/Current).
  * Investment "Investment Type" (Mutual Funds/Stocks/…) -- DD-10 is
  * unresolved, no schema column exists.
+ * Credit card billing/due days are now supported (statement_generated_day,
+ * payment_due_day columns added in migration 20260920000002).
  */
 
 function useMoneyField(initial = "", currency = "INR") {
@@ -175,6 +176,8 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
       currency: "INR",
       creditLimitMinor: 0,
       creditUsedMinor: 0,
+      statementGeneratedDay: null,
+      paymentDueDay: null,
     },
   });
   const [currencyDialogOpen, setCurrencyDialogOpen] = useState(false);
@@ -225,6 +228,42 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
           name="creditUsedMinor"
           render={({ field }) => (
             <Input id="cc-used" inputMode="decimal" placeholder="20000" value={usedMoney.display} onChange={(e) => usedMoney.onChange(e.target.value, field.onChange)} />
+          )}
+        />
+      </FormField>
+      <FormField id="cc-statement-day" label="Statement generated on" error={errors.statementGeneratedDay?.message} hint="Day of month your statement is cut (1-28 = literal day, 32 = last day). Leave blank if unknown.">
+        <Controller
+          control={control}
+          name="statementGeneratedDay"
+          render={({ field }) => (
+            <Input
+              id="cc-statement-day"
+              inputMode="numeric"
+              placeholder="Eg: 25"
+              value={field.value ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, "");
+                field.onChange(raw === "" ? null : Number(raw));
+              }}
+            />
+          )}
+        />
+      </FormField>
+      <FormField id="cc-payment-day" label="Payment due on" error={errors.paymentDueDay?.message} hint="Day of month your bill payment is due (32 = last day). Leave blank if unknown.">
+        <Controller
+          control={control}
+          name="paymentDueDay"
+          render={({ field }) => (
+            <Input
+              id="cc-payment-day"
+              inputMode="numeric"
+              placeholder="Eg: 10"
+              value={field.value ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, "");
+                field.onChange(raw === "" ? null : Number(raw));
+              }}
+            />
           )}
         />
       </FormField>

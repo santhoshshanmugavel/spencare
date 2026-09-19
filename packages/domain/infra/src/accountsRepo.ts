@@ -23,10 +23,14 @@ export interface AccountRow {
   is_archived: boolean;
   created_at: string;
   updated_at: string;
+  /** Day of month the credit card statement is generated (1-32, 32=last day). Null = not configured. */
+  statement_generated_day: number | null;
+  /** Day of month the credit card payment is due (1-32, 32=last day). Null = not configured. */
+  payment_due_day: number | null;
 }
 
 const ACCOUNT_COLUMNS =
-  "id, user_id, type, name, currency, balance_minor, credit_limit_minor, credit_used_minor, market_value_minor, is_archived, created_at, updated_at";
+  "id, user_id, type, name, currency, balance_minor, credit_limit_minor, credit_used_minor, market_value_minor, is_archived, created_at, updated_at, statement_generated_day, payment_due_day";
 
 export interface CreateAccountPatch {
   type: "bank" | "cash" | "credit_card" | "investment";
@@ -36,6 +40,8 @@ export interface CreateAccountPatch {
   creditLimitMinor?: number;
   creditUsedMinor?: number;
   marketValueMinor?: number;
+  statementGeneratedDay?: number | null;
+  paymentDueDay?: number | null;
 }
 
 export async function createAccount(
@@ -54,6 +60,8 @@ export async function createAccount(
       credit_limit_minor: patch.creditLimitMinor ?? null,
       credit_used_minor: patch.creditUsedMinor ?? null,
       market_value_minor: patch.marketValueMinor ?? null,
+      statement_generated_day: patch.statementGeneratedDay ?? null,
+      payment_due_day: patch.paymentDueDay ?? null,
     })
     .select(ACCOUNT_COLUMNS)
     .single();
@@ -67,6 +75,8 @@ export interface UpdateAccountPatch {
   creditLimitMinor?: number;
   creditUsedMinor?: number;
   marketValueMinor?: number;
+  statementGeneratedDay?: number | null;
+  paymentDueDay?: number | null;
 }
 
 export async function updateAccount(
@@ -83,6 +93,8 @@ export async function updateAccount(
       ...(patch.creditLimitMinor !== undefined ? { credit_limit_minor: patch.creditLimitMinor } : {}),
       ...(patch.creditUsedMinor !== undefined ? { credit_used_minor: patch.creditUsedMinor } : {}),
       ...(patch.marketValueMinor !== undefined ? { market_value_minor: patch.marketValueMinor } : {}),
+      ...(patch.statementGeneratedDay !== undefined ? { statement_generated_day: patch.statementGeneratedDay } : {}),
+      ...(patch.paymentDueDay !== undefined ? { payment_due_day: patch.paymentDueDay } : {}),
     })
     .eq("id", accountId)
     .eq("user_id", userId)
@@ -131,5 +143,5 @@ export async function callArchiveAccount(
     p_actor: "web",
   });
   if (error) throw error;
-  return data as AccountRow;
+  return data as unknown as AccountRow;
 }

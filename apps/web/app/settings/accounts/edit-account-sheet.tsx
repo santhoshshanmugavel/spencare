@@ -71,7 +71,16 @@ export function EditAccountSheet({
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(updateAccountSchema),
-    defaultValues: { name: account.name, [valueField.key]: valueField.initial },
+    defaultValues: {
+      name: account.name,
+      [valueField.key]: valueField.initial,
+      ...(account.type === "credit_card"
+        ? {
+            statementGeneratedDay: account.statement_generated_day ?? null,
+            paymentDueDay: account.payment_due_day ?? null,
+          }
+        : {}),
+    },
   });
 
   async function onSubmit(data: UpdateAccountInput) {
@@ -143,6 +152,46 @@ export function EditAccountSheet({
               )}
             />
           </FormField>
+          {account.type === "credit_card" ? (
+            <>
+              <FormField id="edit-statement-day" label="Statement generated on" error={errors.statementGeneratedDay?.message} hint="Day of month your statement is cut (32 = last day). Leave blank if unknown.">
+                <Controller
+                  control={control}
+                  name="statementGeneratedDay"
+                  render={({ field }) => (
+                    <Input
+                      id="edit-statement-day"
+                      inputMode="numeric"
+                      placeholder="Eg: 25"
+                      value={field.value ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9]/g, "");
+                        field.onChange(raw === "" ? null : Number(raw));
+                      }}
+                    />
+                  )}
+                />
+              </FormField>
+              <FormField id="edit-payment-day" label="Payment due on" error={errors.paymentDueDay?.message} hint="Day of month your bill payment is due (32 = last day). Leave blank if unknown.">
+                <Controller
+                  control={control}
+                  name="paymentDueDay"
+                  render={({ field }) => (
+                    <Input
+                      id="edit-payment-day"
+                      inputMode="numeric"
+                      placeholder="Eg: 10"
+                      value={field.value ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9]/g, "");
+                        field.onChange(raw === "" ? null : Number(raw));
+                      }}
+                    />
+                  )}
+                />
+              </FormField>
+            </>
+          ) : null}
           {account.type === "credit_card" && bankAccounts.length > 0 ? (
             <FormField
               id="edit-payment-source"

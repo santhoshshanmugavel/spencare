@@ -39,6 +39,8 @@ const accounts: AccountRow[] = [
     is_archived: false,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    statement_generated_day: null,
+    payment_due_day: null,
   },
   {
     id: "cc-1",
@@ -53,6 +55,8 @@ const accounts: AccountRow[] = [
     is_archived: false,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    statement_generated_day: null,
+    payment_due_day: null,
   },
 ];
 

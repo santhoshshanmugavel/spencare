@@ -30,6 +30,8 @@ function bank(overrides: Partial<AccountRow> = {}): AccountRow {
     is_archived: false,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    statement_generated_day: null,
+    payment_due_day: null,
     ...overrides,
   };
 }
@@ -47,6 +49,8 @@ const creditCard: AccountRow = {
   is_archived: false,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
+  statement_generated_day: null,
+  payment_due_day: null,
 };
 
 const investment: AccountRow = {
@@ -62,6 +66,8 @@ const investment: AccountRow = {
   is_archived: false,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
+  statement_generated_day: null,
+  payment_due_day: null,
 };
 
 describe("<AccountList> — empty state", () => {

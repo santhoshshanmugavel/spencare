@@ -40,7 +40,12 @@ export const createAccount: Command<CreateAccountInput, AccountRow> = {
         currency: data.currency,
         ...(data.type === "bank" || data.type === "cash" ? { balanceMinor: data.balanceMinor } : {}),
         ...(data.type === "credit_card"
-          ? { creditLimitMinor: data.creditLimitMinor, creditUsedMinor: data.creditUsedMinor }
+          ? {
+              creditLimitMinor: data.creditLimitMinor,
+              creditUsedMinor: data.creditUsedMinor,
+              statementGeneratedDay: data.statementGeneratedDay ?? null,
+              paymentDueDay: data.paymentDueDay ?? null,
+            }
           : {}),
         ...(data.type === "investment" ? { marketValueMinor: data.marketValueMinor } : {}),
       });

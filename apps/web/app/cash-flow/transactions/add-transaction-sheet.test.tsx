@@ -48,6 +48,8 @@ const accounts: AccountRow[] = [
     is_archived: false,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    statement_generated_day: null,
+    payment_due_day: null,
   },
   {
     id: "97126e31-f576-4e29-8036-eafe20d4dc5e",
@@ -62,6 +64,8 @@ const accounts: AccountRow[] = [
     is_archived: false,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    statement_generated_day: null,
+    payment_due_day: null,
   },
   {
     id: "8cad1f12-3b01-4a55-9aa9-3ce1fef58491",
@@ -76,6 +80,8 @@ const accounts: AccountRow[] = [
     is_archived: false,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    statement_generated_day: null,
+    payment_due_day: null,
   },
   {
     id: "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
@@ -90,6 +96,8 @@ const accounts: AccountRow[] = [
     is_archived: false,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    statement_generated_day: null,
+    payment_due_day: null,
   },
 ];
 
