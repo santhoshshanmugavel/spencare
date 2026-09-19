@@ -61,6 +61,7 @@ function ReserveLabel({ reservedMinor, amountMinor }: { reservedMinor: number; a
   const shortfall = amountMinor - reservedMinor;
   if (shortfall <= 0)
     return <span className="text-xs text-emerald-600 dark:text-emerald-400">Fully reserved</span>;
+  if (reservedMinor === 0) return null;
   return (
     <span className="text-xs text-amber-600 dark:text-amber-400">
       <Money
@@ -74,41 +75,31 @@ function ReserveLabel({ reservedMinor, amountMinor }: { reservedMinor: number; a
   );
 }
 
-function SectionHeader({ title, count }: { title: string; count: number }) {
-  return (
-    <div className="flex items-center justify-between px-1">
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      {count > 0 && (
-        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{count}</span>
-      )}
-    </div>
-  );
+// ── Month navigation ──────────────────────────────────────────────────────────
+
+interface MonthKey {
+  key: string; // "YYYY-MM"
+  label: string; // "Sep 2026"
+  shortLabel: string; // "Sep"
 }
 
-type Group = "overdue" | "today" | "week" | "month" | "later";
-
-function groupLabel(g: Group): string {
-  switch (g) {
-    case "overdue": return "Overdue";
-    case "today": return "Today";
-    case "week": return "Next 7 days";
-    case "month": return "This month";
-    case "later": return "Later";
+function buildMonths(fromDate: Date, count: number): MonthKey[] {
+  const months: MonthKey[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(fromDate.getFullYear(), fromDate.getMonth() + i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+    const shortLabel = d.toLocaleDateString("en-IN", { month: "short" });
+    months.push({ key, label, shortLabel });
   }
+  return months;
 }
 
-function dateGroup(isoDate: string): Group {
-  const days = daysUntil(isoDate);
-  if (days < 0) return "overdue";
-  if (days === 0) return "today";
-  if (days <= 7) return "week";
-  const today = new Date();
-  const remaining = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - today.getDate();
-  if (days <= remaining) return "month";
-  return "later";
+function isoToMonthKey(iso: string): string {
+  return iso.slice(0, 7);
 }
 
-const GROUP_ORDER: Group[] = ["overdue", "today", "week", "month", "later"];
+// ── Loan actions ──────────────────────────────────────────────────────────────
 
 function LoanActions({
   loan,
@@ -152,6 +143,8 @@ function LoanActions({
   );
 }
 
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
 export function UpcomingDashboard({
   commitmentOccurrences,
   commitments,
@@ -189,25 +182,38 @@ export function UpcomingDashboard({
     | { kind: "loan"; loan: LoanRow }
     | { kind: "prediction"; pred: BillPredictionWithDefinition };
 
-  const allItems: Item[] = [
-    ...commitmentOccurrences.map((occ) => ({ kind: "commitment" as const, occ })),
-    ...activeLoans.map((loan) => ({ kind: "loan" as const, loan })),
-    ...(showPredictions ? upcomingBills.map((pred) => ({ kind: "prediction" as const, pred })) : []),
-  ];
-
   function itemDate(item: Item): string {
     if (item.kind === "commitment") return item.occ.due_date;
     if (item.kind === "loan") return item.loan.next_payment_date!;
     return item.pred.expected_date;
   }
 
-  const grouped = GROUP_ORDER.map((g) => ({
-    group: g,
-    items: allItems.filter((i) => dateGroup(itemDate(i)) === g),
-  })).filter((g) => g.items.length > 0);
+  const allItems: Item[] = [
+    ...commitmentOccurrences.map((occ) => ({ kind: "commitment" as const, occ })),
+    ...activeLoans.map((loan) => ({ kind: "loan" as const, loan })),
+    ...(showPredictions ? upcomingBills.map((pred) => ({ kind: "prediction" as const, pred })) : []),
+  ];
 
-  const hasAnything = allItems.length > 0;
+  // Month navigation: current month + next 5 months
+  const today = new Date();
+  const months = buildMonths(today, 6);
+  const currentMonthKey = months[0].key;
+  const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
+
+  // Count items per month for the tab badges
+  const countByMonth = new Map<string, number>();
+  for (const item of allItems) {
+    const mk = isoToMonthKey(itemDate(item));
+    countByMonth.set(mk, (countByMonth.get(mk) ?? 0) + 1);
+  }
+
+  // Items for the selected month, sorted by date
+  const selectedItems = allItems
+    .filter((i) => isoToMonthKey(itemDate(i)) === selectedMonthKey)
+    .sort((a, b) => itemDate(a).localeCompare(itemDate(b)));
+
   const predictionCount = upcomingBills.length;
+  const hasAnything = allItems.length > 0;
 
   return (
     <div className="space-y-6">
@@ -228,134 +234,180 @@ export function UpcomingDashboard({
         </div>
       </div>
 
-      {!hasAnything && predictionCount === 0 ? (
+      {/* Month tabs */}
+      <div
+        className="flex gap-1 overflow-x-auto pb-1 scrollbar-none"
+        role="tablist"
+        aria-label="Select month"
+      >
+        {months.map((m) => {
+          const count = countByMonth.get(m.key) ?? 0;
+          const isSelected = m.key === selectedMonthKey;
+          return (
+            <button
+              key={m.key}
+              role="tab"
+              aria-selected={isSelected}
+              onClick={() => setSelectedMonthKey(m.key)}
+              className={[
+                "relative shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                isSelected
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              ].join(" ")}
+            >
+              {m.shortLabel}
+              {count > 0 && (
+                <span
+                  className={[
+                    "ml-1.5 rounded-full px-1.5 py-0.5 text-xs",
+                    isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground",
+                  ].join(" ")}
+                >
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {!hasAnything ? (
         <EmptyState
           icon={<CalendarClock className="size-10 text-muted-foreground" />}
           title="Nothing upcoming"
           description="Add a planned commitment or loan to track what is coming and protect money in Safe to Spend."
         />
+      ) : selectedItems.length === 0 ? (
+        <div className="py-12 text-center">
+          <p className="text-sm text-muted-foreground">Nothing due in {months.find((m) => m.key === selectedMonthKey)?.label ?? selectedMonthKey}.</p>
+        </div>
       ) : (
-        <div className="space-y-8">
-          {grouped.map(({ group, items }) => (
-            <section key={group} className="space-y-3">
-              <SectionHeader title={groupLabel(group)} count={items.length} />
-              <Card>
-                <CardContent className="p-0">
-                  {items.map((item) => {
-                    if (item.kind === "commitment") {
-                      const occ = item.occ;
-                      const commitment = commitmentById.get(occ.commitment_id);
-                      const fundingAccount = occ.planned_commitments.funding_account_id
-                        ? accountById.get(occ.planned_commitments.funding_account_id)
-                        : null;
-                      return (
-                        <ListRow
-                          key={`c-${occ.id}`}
-                          icon={<CreditCard className="size-4 text-muted-foreground" />}
-                          title={occ.planned_commitments.name}
-                          subtitle={
-                            <span className="flex flex-wrap items-center gap-2">
-                              <DueDateLabel isoDate={occ.due_date} />
-                              <ReserveLabel reservedMinor={occ.reserved_minor} amountMinor={occ.amount_minor} />
-                              {fundingAccount && (
-                                <span className="text-xs text-muted-foreground">via {fundingAccount.name}</span>
-                              )}
-                            </span>
-                          }
-                          trailing={
-                            <div className="flex items-center gap-1">
-                              <Money
-                                value={DomainMoney.fromMinorUnits(BigInt(occ.amount_minor), CURRENCY)}
-                                masked={masked}
-                                size="numeric"
-                              />
-                              {commitment && (
-                                <CommitmentActions
-                                  occ={occ}
-                                  commitment={commitment}
-                                  accounts={accounts}
-                                  onChanged={refresh}
-                                />
-                              )}
-                            </div>
-                          }
-                        />
-                      );
-                    }
-
-                    if (item.kind === "loan") {
-                      const loan = item.loan;
-                      const paymentAccount = loan.payment_account_id
-                        ? accountById.get(loan.payment_account_id)
-                        : null;
-                      return (
-                        <ListRow
-                          key={`l-${loan.id}`}
-                          icon={<Landmark className="size-4 text-muted-foreground" />}
-                          title={loan.name}
-                          subtitle={
-                            <span className="flex items-center gap-2">
-                              <DueDateLabel isoDate={loan.next_payment_date!} />
-                              {loan.lender_name && (
-                                <span className="text-xs text-muted-foreground">{loan.lender_name}</span>
-                              )}
-                              {paymentAccount && (
-                                <span className="text-xs text-muted-foreground">via {paymentAccount.name}</span>
-                              )}
-                            </span>
-                          }
-                          trailing={
-                            <div className="flex items-center gap-1">
-                              <Money
-                                value={DomainMoney.fromMinorUnits(
-                                  BigInt(loan.installment_amount_minor),
-                                  loan.currency,
-                                )}
-                                masked={masked}
-                                size="numeric"
-                              />
-                              <LoanActions
-                                loan={loan}
-                                accounts={accounts}
-                                onChanged={refresh}
-                                onEdit={(l) => { setEditingLoan(l); setLoanSheetOpen(true); }}
-                              />
-                            </div>
-                          }
-                        />
-                      );
-                    }
-
-                    const pred = item.pred;
-                    return (
-                      <ListRow
-                        key={`p-${pred.id}`}
-                        icon={<CalendarClock className="size-4 text-muted-foreground" />}
-                        title={pred.bill_definitions.merchant_pattern}
-                        subtitle={
-                          <span className="flex items-center gap-2">
-                            <DueDateLabel isoDate={pred.expected_date} />
-                            <span className="text-xs text-muted-foreground italic">Spensa prediction</span>
-                          </span>
-                        }
-                        trailing={
-                          pred.expected_amount_minor != null ? (
-                            <Money
-                              value={DomainMoney.fromMinorUnits(BigInt(pred.expected_amount_minor), CURRENCY)}
-                              masked={masked}
-                              size="numeric"
+        <div className="space-y-3">
+          <Card>
+            <CardContent className="p-0">
+              {selectedItems.map((item) => {
+                if (item.kind === "commitment") {
+                  const occ = item.occ;
+                  const commitment = commitmentById.get(occ.commitment_id);
+                  const paymentAccount = occ.planned_commitments.payment_account_id
+                    ? accountById.get(occ.planned_commitments.payment_account_id)
+                    : null;
+                  const isCredit = paymentAccount?.type === "credit_card";
+                  return (
+                    <ListRow
+                      key={`c-${occ.id}`}
+                      icon={
+                        isCredit
+                          ? <CreditCard className="size-4 text-muted-foreground" />
+                          : <CalendarClock className="size-4 text-muted-foreground" />
+                      }
+                      title={occ.planned_commitments.name}
+                      subtitle={
+                        <span className="flex flex-wrap items-center gap-2">
+                          <DueDateLabel isoDate={occ.due_date} />
+                          {occ.planned_commitments.reserve_account_id ? (
+                            <ReserveLabel reservedMinor={occ.reserved_minor} amountMinor={occ.amount_minor} />
+                          ) : isCredit ? (
+                            <span className="text-xs text-muted-foreground">Credit card</span>
+                          ) : null}
+                          {paymentAccount && (
+                            <span className="text-xs text-muted-foreground">via {paymentAccount.name}</span>
+                          )}
+                        </span>
+                      }
+                      trailing={
+                        <div className="flex items-center gap-1">
+                          <Money
+                            value={DomainMoney.fromMinorUnits(BigInt(occ.amount_minor), CURRENCY)}
+                            masked={masked}
+                            size="numeric"
+                          />
+                          {commitment && (
+                            <CommitmentActions
+                              occ={occ}
+                              commitment={commitment}
+                              accounts={accounts}
+                              onChanged={refresh}
                             />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Amount varies</span>
-                          )
-                        }
-                      />
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            </section>
-          ))}
+                          )}
+                        </div>
+                      }
+                    />
+                  );
+                }
+
+                if (item.kind === "loan") {
+                  const loan = item.loan;
+                  const paymentAccount = loan.payment_account_id
+                    ? accountById.get(loan.payment_account_id)
+                    : null;
+                  return (
+                    <ListRow
+                      key={`l-${loan.id}`}
+                      icon={<Landmark className="size-4 text-muted-foreground" />}
+                      title={loan.name}
+                      subtitle={
+                        <span className="flex items-center gap-2">
+                          <DueDateLabel isoDate={loan.next_payment_date!} />
+                          {loan.lender_name && (
+                            <span className="text-xs text-muted-foreground">{loan.lender_name}</span>
+                          )}
+                          {paymentAccount && (
+                            <span className="text-xs text-muted-foreground">via {paymentAccount.name}</span>
+                          )}
+                        </span>
+                      }
+                      trailing={
+                        <div className="flex items-center gap-1">
+                          <Money
+                            value={DomainMoney.fromMinorUnits(
+                              BigInt(loan.installment_amount_minor),
+                              loan.currency,
+                            )}
+                            masked={masked}
+                            size="numeric"
+                          />
+                          <LoanActions
+                            loan={loan}
+                            accounts={accounts}
+                            onChanged={refresh}
+                            onEdit={(l) => { setEditingLoan(l); setLoanSheetOpen(true); }}
+                          />
+                        </div>
+                      }
+                    />
+                  );
+                }
+
+                const pred = item.pred;
+                return (
+                  <ListRow
+                    key={`p-${pred.id}`}
+                    icon={<CalendarClock className="size-4 text-muted-foreground" />}
+                    title={pred.bill_definitions.merchant_pattern}
+                    subtitle={
+                      <span className="flex items-center gap-2">
+                        <DueDateLabel isoDate={pred.expected_date} />
+                        <span className="text-xs text-muted-foreground italic">Spensa prediction</span>
+                      </span>
+                    }
+                    trailing={
+                      pred.expected_amount_minor != null ? (
+                        <Money
+                          value={DomainMoney.fromMinorUnits(BigInt(pred.expected_amount_minor), CURRENCY)}
+                          masked={masked}
+                          size="numeric"
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Amount varies</span>
+                      )
+                    }
+                  />
+                );
+              })}
+            </CardContent>
+          </Card>
 
           {predictionCount > 0 && (
             <div className="px-1">

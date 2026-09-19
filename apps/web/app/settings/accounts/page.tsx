@@ -54,12 +54,14 @@ export default async function AccountsSettingsPage() {
   }
 
   // Per bank/cash account: sum of reserved_minor from upcoming commitment occurrences.
+  // Group by reserve_account_id (the bank/cash account where money is logically protected).
+  // Credit card commitments have reserve_account_id = null and are excluded here.
   const commitmentReservePerAccount: Record<string, number> = {};
   for (const occ of commitmentOccurrences) {
-    const fundingId = occ.planned_commitments?.funding_account_id;
-    if (fundingId && occ.reserved_minor > 0) {
-      commitmentReservePerAccount[fundingId] =
-        (commitmentReservePerAccount[fundingId] ?? 0) + occ.reserved_minor;
+    const reserveId = occ.planned_commitments?.reserve_account_id;
+    if (reserveId && occ.reserved_minor > 0) {
+      commitmentReservePerAccount[reserveId] =
+        (commitmentReservePerAccount[reserveId] ?? 0) + occ.reserved_minor;
     }
   }
 

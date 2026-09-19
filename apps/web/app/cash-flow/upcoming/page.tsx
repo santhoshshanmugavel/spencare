@@ -36,7 +36,7 @@ export default async function UpcomingPage() {
 
   const [accounts, commitmentOccurrences, commitments, loans, billPredictions, profile] = await Promise.all([
     listAccounts(ctx),
-    listUpcoming(ctx, { limit: 50 }),
+    listUpcoming(ctx, { limit: 200, dueBefore: new Date(Date.now() + 180 * 86_400_000).toISOString().slice(0, 10) }),
     listCommitments(ctx),
     listAllLoans(ctx),
     listBillPredictions(ctx, { status: ["open", "overdue"] }),
