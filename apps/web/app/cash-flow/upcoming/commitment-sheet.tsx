@@ -107,19 +107,6 @@ function firstSavingDateFromWeeklyRule(isoDay: number): string {
   return cur.toISOString().slice(0, 10);
 }
 
-// Reverse-engineer saving day rule from an existing first_saving_date + cadence (for edit mode)
-function savingDayRuleFromDate(cadence: string, date: string): number | null {
-  if (cadence === "monthly") {
-    const day = parseInt(date.slice(8, 10), 10);
-    return day > 0 ? day : null;
-  }
-  if (cadence === "weekly" || cadence === "biweekly") {
-    const dt = new Date(date + "T00:00:00Z");
-    const jsDay = dt.getUTCDay(); // 0=Sun … 6=Sat
-    return jsDay === 0 ? 7 : jsDay; // ISO 1=Mon … 7=Sun
-  }
-  return null;
-}
 
 function useMoneyField(initialMinor?: number) {
   const [display, setDisplay] = useState(initialMinor ? minorUnitsToDisplay(initialMinor, CURRENCY) : "");
@@ -159,10 +146,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
   );
 
   // Day rule for the saving schedule: day-of-month (1-32) or day-of-week (1-7 ISO) or null
-  const initialSavingDayRule =
-    existing?.saving_cadence && existing?.first_saving_date
-      ? savingDayRuleFromDate(existing.saving_cadence, existing.first_saving_date)
-      : null;
+  const initialSavingDayRule = existing?.saving_day_rule ?? null;
   const [savingDayRule, setSavingDayRule] = useState<number | null>(initialSavingDayRule);
 
   const {
@@ -185,6 +169,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
       paymentFrequency: (existing?.payment_frequency ?? "monthly") as CreateCommitmentInput["paymentFrequency"],
       nextPaymentDate: existing?.next_payment_date ?? "",
       paymentDayRule: existing?.payment_day_rule ?? null,
+      savingDayRule: initialSavingDayRule,
       paymentAccountId: existing?.payment_account_id ?? null,
       reserveAccountId: existing?.reserve_account_id ?? null,
       alreadyReservedMinor: null,
@@ -221,6 +206,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
       setValue("savingCadence", null);
       setValue("savingAmountMinor", null);
       setValue("firstSavingDate", null);
+      setValue("savingDayRule", null);
       setValue("reserveAccountId", null);
       setValue("alreadyReservedMinor", null);
       setValue("autoProtectEnabled", false);
@@ -234,11 +220,13 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
     fieldOnChange(cadence || null);
     // Reset day rule when cadence changes since the type of rule changes
     setSavingDayRule(null);
+    setValue("savingDayRule", null);
     setValue("firstSavingDate", null);
   }
 
   function handleSavingDayRuleChange(rule: number, cadence: string) {
     setSavingDayRule(rule);
+    setValue("savingDayRule", rule);
     let date: string;
     if (cadence === "monthly") {
       date = firstSavingDateFromMonthlyRule(rule);
@@ -259,6 +247,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
         paymentFrequency: data.paymentFrequency,
         nextPaymentDate: data.nextPaymentDate,
         paymentDayRule: data.paymentDayRule ?? undefined,
+        savingDayRule: (data as { savingDayRule?: number | null }).savingDayRule ?? undefined,
         paymentAccountId: data.paymentAccountId,
         reserveAccountId: data.reserveAccountId,
         savingCadence: data.savingCadence,
@@ -283,6 +272,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
       reset();
       setPreparationEnabled(false);
       setSavingDayRule(null);
+      setValue("savingDayRule", null);
       amountField.setDisplay("");
       savingAmountField.setDisplay("");
       alreadyReservedField.setDisplay("");

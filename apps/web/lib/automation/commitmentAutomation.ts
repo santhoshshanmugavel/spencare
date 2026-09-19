@@ -333,7 +333,7 @@ export async function runAutoProtectForUser(
 
   const { data: commitmentRows, error } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
     .from("planned_commitments")
-    .select("id, name, saving_cadence, saving_amount_minor, first_saving_date, reserve_account_id, amount_minor")
+    .select("id, name, saving_cadence, saving_amount_minor, first_saving_date, reserve_account_id, amount_minor, saving_day_rule")
     .eq("user_id", userId)
     .eq("status", "active")
     .eq("auto_protect_enabled", true)
@@ -412,6 +412,7 @@ export async function runAutoProtectForUser(
     const savingDates = savingDatesForOccurrence({
       firstSavingDate,
       savingCadence,
+      savingDayRule: c.saving_day_rule as number | null,
       prevOccurrenceDueDate,
       thisOccurrenceDueDate: dueDate,
       today,

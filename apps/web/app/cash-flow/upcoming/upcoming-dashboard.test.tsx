@@ -85,6 +85,7 @@ function makeCommitment(overrides: Partial<PlannedCommitmentRow> = {}): PlannedC
     auto_pay_enabled: false,
     auto_protect_enabled: false,
     payment_day_rule: 2,
+    saving_day_rule: null,
     created_at: "2026-09-19T02:46:00Z",
     updated_at: "2026-09-19T02:46:00Z",
     deleted_at: null,

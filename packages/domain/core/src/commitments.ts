@@ -232,11 +232,13 @@ export function projectOccurrenceDates(
 export function savingDatesForOccurrence(opts: {
   firstSavingDate: string;
   savingCadence: RecurrenceInterval;
+  /** Canonical day rule: 1-32 for monthly (32 = last day), 1-7 ISO for weekly/biweekly. */
+  savingDayRule?: number | null;
   prevOccurrenceDueDate: string | null;
   thisOccurrenceDueDate: string;
   today: string;
 }): string[] {
-  const { firstSavingDate, savingCadence, prevOccurrenceDueDate, thisOccurrenceDueDate, today } = opts;
+  const { firstSavingDate, savingCadence, savingDayRule, prevOccurrenceDueDate, thisOccurrenceDueDate, today } = opts;
 
   // Upper bound: the earlier of today and the occurrence due date.
   // We never count a saving date that hasn't happened yet.
@@ -246,14 +248,36 @@ export function savingDatesForOccurrence(opts: {
 
   if (firstSavingDate > cutoff) return [];
 
-  // Generate all saving dates from firstSavingDate up to and including cutoff
   const allDates: string[] = [];
-  let cur = firstSavingDate;
-  while (cur <= cutoff) {
-    allDates.push(cur);
-    const next = predictNextOccurrence(cur, savingCadence);
-    if (!next || next <= cur) break;
-    cur = next;
+
+  if (savingCadence === "monthly" && savingDayRule != null) {
+    // Non-cascading: compute each month independently from the canonical day rule.
+    // Prevents Jan 31 -> Feb 28 -> Mar 28 (wrong via chaining); gives Mar 31 (correct).
+    const [fy, fm] = firstSavingDate.split("-").map(Number) as [number, number];
+    let step = 0;
+    const MAX_STEPS = 400;
+    while (step < MAX_STEPS) {
+      const targetTotal = fy * 12 + (fm - 1) + step;
+      const ty = Math.floor(targetTotal / 12);
+      const tm = (targetTotal % 12) + 1;
+      const date = resolveRecurringDay({ year: ty, month: tm, paymentDayRule: savingDayRule });
+      if (date > cutoff) break;
+      allDates.push(date);
+      step++;
+    }
+  } else {
+    // Weekly, biweekly, daily, and monthly without a day rule: use chaining.
+    // Weekly/biweekly don't have a month-end clamping issue.
+    let cur = firstSavingDate;
+    let iterations = 0;
+    const MAX_ITERATIONS = 120;
+    while (cur <= cutoff && iterations < MAX_ITERATIONS) {
+      iterations++;
+      allDates.push(cur);
+      const next = predictNextOccurrence(cur, savingCadence);
+      if (!next || next <= cur) break;
+      cur = next;
+    }
   }
 
   // Filter: discard saving dates that fall on or before the PREVIOUS occurrence's

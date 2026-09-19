@@ -111,6 +111,102 @@ describe("savingDatesForOccurrence", () => {
     expect(dates).toEqual(["2025-01-01", "2025-01-08", "2025-01-15", "2025-01-22"]);
   });
 
+  // ── savingDayRule: non-cascading monthly saving ───────────────────────────────
+  // With savingDayRule provided, each month's date is resolved independently
+  // from the canonical day (no chaining). Prevents the cascading clamp bug.
+
+  it("savingDayRule=31: Jan 31 -> Feb 28 -> Mar 31 (non-cascading)", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2025-01-31",
+      savingCadence: "monthly",
+      savingDayRule: 31,
+      prevOccurrenceDueDate: null,
+      thisOccurrenceDueDate: "2025-04-30",
+      today: "2025-04-01",
+    });
+    // Jan 31, Feb 28 (clamped), Mar 31 (recovers -- not Mar 28 as chaining would give)
+    expect(dates).toEqual(["2025-01-31", "2025-02-28", "2025-03-31"]);
+  });
+
+  it("savingDayRule=31 leap year: Jan 31 -> Feb 29 -> Mar 31 (non-cascading)", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2024-01-31",
+      savingCadence: "monthly",
+      savingDayRule: 31,
+      prevOccurrenceDueDate: null,
+      thisOccurrenceDueDate: "2024-04-30",
+      today: "2024-04-01",
+    });
+    // 2024 is a leap year: Feb 29, then Mar 31 (recovers)
+    expect(dates).toEqual(["2024-01-31", "2024-02-29", "2024-03-31"]);
+  });
+
+  it("savingDayRule=32 (last day): always uses last calendar day each month", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2025-01-31",
+      savingCadence: "monthly",
+      savingDayRule: 32,
+      prevOccurrenceDueDate: null,
+      thisOccurrenceDueDate: "2025-05-31",
+      today: "2025-05-01",
+    });
+    // Jan=31, Feb=28, Mar=31, Apr=30
+    expect(dates).toEqual(["2025-01-31", "2025-02-28", "2025-03-31", "2025-04-30"]);
+  });
+
+  it("savingDayRule=28: stays on the 28th even in months with 31 days", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2025-01-28",
+      savingCadence: "monthly",
+      savingDayRule: 28,
+      prevOccurrenceDueDate: null,
+      thisOccurrenceDueDate: "2025-05-31",
+      today: "2025-05-01",
+    });
+    // Always 28th -- no clamping needed, no drift possible
+    expect(dates).toEqual(["2025-01-28", "2025-02-28", "2025-03-28", "2025-04-28"]);
+  });
+
+  it("savingDayRule=31: prevOccurrenceDueDate correctly filters earlier months", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2025-01-31",
+      savingCadence: "monthly",
+      savingDayRule: 31,
+      prevOccurrenceDueDate: "2025-02-28",
+      thisOccurrenceDueDate: "2025-05-31",
+      today: "2025-05-01",
+    });
+    // Jan 31 and Feb 28 are <= prevDueDate (Feb 28), so excluded
+    // Mar 31 is CORRECT (not Mar 28 as chaining would give)
+    expect(dates).toEqual(["2025-03-31", "2025-04-30"]);
+  });
+
+  it("savingDayRule: anchor year-month derived from firstSavingDate, not earliest possible", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2025-03-31",
+      savingCadence: "monthly",
+      savingDayRule: 31,
+      prevOccurrenceDueDate: null,
+      thisOccurrenceDueDate: "2025-07-31",
+      today: "2025-07-01",
+    });
+    // Mar 31, Apr 30, May 31, Jun 30
+    expect(dates).toEqual(["2025-03-31", "2025-04-30", "2025-05-31", "2025-06-30"]);
+  });
+
+  it("savingDayRule for weekly cadence is ignored (chaining used, no month-end issue)", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2025-01-01",
+      savingCadence: "weekly",
+      savingDayRule: 3,
+      prevOccurrenceDueDate: null,
+      thisOccurrenceDueDate: "2025-02-01",
+      today: "2025-01-22",
+    });
+    // Jan 1, 8, 15, 22 (same result as without savingDayRule)
+    expect(dates).toEqual(["2025-01-01", "2025-01-08", "2025-01-15", "2025-01-22"]);
+  });
+
   // ── Due date as cutoff ────────────────────────────────────────────────────
 
   it("uses dueDate as cutoff when today > dueDate (past-due occurrence)", () => {

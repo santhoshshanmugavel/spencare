@@ -48,6 +48,12 @@ export interface PlannedCommitmentRow {
    * Used by projectOccurrenceDates to avoid cascading month-end clamping.
    */
   payment_day_rule: number | null;
+  /**
+   * Canonical saving day rule: 1-32 for monthly (32=last day of month), 1-7 ISO for weekly/biweekly.
+   * Null when no saving cadence is set or for daily cadence.
+   * Used by savingDatesForOccurrence to avoid cascading month-end clamping.
+   */
+  saving_day_rule: number | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -101,6 +107,8 @@ export interface CreatePlannedCommitmentPatch {
   autoProtectEnabled?: boolean;
   /** Canonical day rule (1-31 or 32=last day of month). Null for one_time/irregular. */
   paymentDayRule?: number | null;
+  /** Canonical saving day rule: 1-32 for monthly (32=last day), 1-7 ISO for weekly/biweekly. */
+  savingDayRule?: number | null;
 }
 
 export interface UpdatePlannedCommitmentPatch {
@@ -124,10 +132,12 @@ export interface UpdatePlannedCommitmentPatch {
   autoProtectEnabled?: boolean;
   /** Canonical day rule (1-31 or 32=last day of month). */
   paymentDayRule?: number | null;
+  /** Canonical saving day rule: 1-32 for monthly (32=last day), 1-7 ISO for weekly/biweekly. */
+  savingDayRule?: number | null;
 }
 
 const COMMITMENT_COLUMNS =
-  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, first_saving_date, funding_account_id, payment_account_id, reserve_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, auto_pay_enabled, auto_protect_enabled, payment_day_rule, created_at, updated_at, deleted_at";
+  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, first_saving_date, funding_account_id, payment_account_id, reserve_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, auto_pay_enabled, auto_protect_enabled, payment_day_rule, saving_day_rule, created_at, updated_at, deleted_at";
 
 const OCCURRENCE_COLUMNS =
   "id, commitment_id, user_id, due_date, amount_minor, reserved_minor, status, matched_transaction_id, paid_at, created_at, updated_at";
@@ -165,6 +175,7 @@ export async function createPlannedCommitment(
       auto_pay_enabled: patch.autoPayEnabled ?? false,
       auto_protect_enabled: patch.autoProtectEnabled ?? false,
       payment_day_rule: patch.paymentDayRule ?? null,
+      saving_day_rule: patch.savingDayRule ?? null,
     })
     .select(COMMITMENT_COLUMNS)
     .single();
@@ -231,6 +242,7 @@ export async function updatePlannedCommitment(
       ...(patch.autoPayEnabled !== undefined ? { auto_pay_enabled: patch.autoPayEnabled } : {}),
       ...(patch.autoProtectEnabled !== undefined ? { auto_protect_enabled: patch.autoProtectEnabled } : {}),
       ...(patch.paymentDayRule !== undefined ? { payment_day_rule: patch.paymentDayRule } : {}),
+      ...(patch.savingDayRule !== undefined ? { saving_day_rule: patch.savingDayRule } : {}),
     })
     .eq("id", commitmentId)
     .eq("user_id", userId)
