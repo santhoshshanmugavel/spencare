@@ -128,7 +128,7 @@ export function NotificationBell({ initialUnreadCount = 0 }: { initialUnreadCoun
       </Tooltip>
 
       {open ? (
-        <div className="absolute bottom-full left-full mb-0 ml-2 z-50 w-96 rounded-xl border border-border bg-background shadow-lg overflow-hidden">
+        <div className="absolute bottom-full left-full mb-0 ml-2 z-50 w-96 rounded-[var(--radius-lg)] border border-border bg-background shadow-popover overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold text-foreground">Notifications</h2>

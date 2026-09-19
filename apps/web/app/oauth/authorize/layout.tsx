@@ -10,7 +10,7 @@ export default function OAuthAuthorizeLayout({ children }: { children: ReactNode
     <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4 py-12 sm:px-6">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <span className="bg-gradient-to-r from-primary to-[oklch(0.62_0.2_330)] bg-clip-text text-2xl font-bold text-transparent">
+          <span className="text-2xl font-bold text-primary">
             Spencare
           </span>
         </div>
