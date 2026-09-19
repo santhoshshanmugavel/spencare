@@ -63,13 +63,18 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
   const [reserveMinor, setReserveMinor] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Mark-as-paid form state
-  const now = new Date();
-  const { date: todayDate, time: nowTime } = toLocalDateTimeInputs(now);
-  const [paidDate, setPaidDate] = useState(todayDate);
-  const [paidTime, setPaidTime] = useState(nowTime);
-  const defaultAccount = commitment.payment_account_id ?? "";
-  const [paidAccountId, setPaidAccountId] = useState(defaultAccount);
+  // Mark-as-paid form state -- reset each time dialog opens
+  const [paidDate, setPaidDate] = useState(() => toLocalDateTimeInputs(new Date()).date);
+  const [paidTime, setPaidTime] = useState(() => toLocalDateTimeInputs(new Date()).time);
+  const [paidAccountId, setPaidAccountId] = useState(commitment.payment_account_id ?? "");
+
+  function openMarkPaid() {
+    const now = toLocalDateTimeInputs(new Date());
+    setPaidDate(now.date);
+    setPaidTime(now.time);
+    setPaidAccountId(commitment.payment_account_id ?? "");
+    setMarkPaidOpen(true);
+  }
 
   const shortfall = occ.amount_minor - occ.reserved_minor;
   const isPaused = commitment.status === "paused";
@@ -104,10 +109,12 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
   async function handleMarkPaidConfirm() {
     if (!paidAccountId) { toastError("Select the payment account."); return; }
     setLoading(true);
-    // Build ISO timestamp from local date + time inputs
+    // Build ISO timestamp from local date + time inputs (no timezone suffix = local time, correct behavior)
     const occurredAt = new Date(`${paidDate}T${paidTime}`).toISOString();
     const result = await markOccurrencePaidAction({
       occurrenceId: occ.id,
+      commitmentId: commitment.id,
+      occurrenceDueDate: occ.due_date,
       amountMinor: occ.amount_minor,
       accountId: paidAccountId || null,
       categoryId: commitment.category_id ?? null,
@@ -159,7 +166,7 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
               Reserve money
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={() => setMarkPaidOpen(true)}>
+          <DropdownMenuItem onSelect={openMarkPaid}>
             <CircleCheck className="size-4 mr-2" />
             Mark as paid
           </DropdownMenuItem>
@@ -193,7 +200,14 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
           <DialogHeader>
             <DialogTitle>Mark {commitment.name} as paid?</DialogTitle>
             <DialogDescription>
-              This will record the payment, create a transaction, and remove it from Upcoming.
+              This will record the{" "}
+              <Money
+                value={DomainMoney.fromMinorUnits(BigInt(occ.amount_minor), CURRENCY)}
+                masked={false}
+                size="body"
+                className="inline font-medium text-foreground"
+              />{" "}
+              payment, mark the {new Date(occ.due_date + "T00:00:00Z").toLocaleDateString("en-IN", { month: "long", timeZone: "UTC" })} payment as completed, and add it to your transactions.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">

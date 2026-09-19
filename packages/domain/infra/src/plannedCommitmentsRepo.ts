@@ -423,3 +423,28 @@ export async function getOccurrence(
   if (error) throw error;
   return data as PlannedCommitmentOccurrenceRow | null;
 }
+
+export async function insertPlannedCommitmentOccurrence(
+  client: TypedSupabaseClient,
+  userId: string,
+  patch: {
+    commitmentId: string;
+    dueDate: string;
+    amountMinor: number;
+  },
+): Promise<PlannedCommitmentOccurrenceRow> {
+  const { data, error } = await client
+    .from("planned_commitment_occurrences")
+    .insert({
+      commitment_id: patch.commitmentId,
+      user_id: userId,
+      due_date: patch.dueDate,
+      amount_minor: patch.amountMinor,
+      reserved_minor: 0,
+      status: "upcoming",
+    })
+    .select(OCCURRENCE_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as PlannedCommitmentOccurrenceRow;
+}

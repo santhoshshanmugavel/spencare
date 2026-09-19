@@ -400,6 +400,7 @@ export {
   resumeCommitment,
   getPlannedCommitmentById,
   getCommitmentOccurrence,
+  advanceCommitmentOccurrence,
   type PlannedCommitmentRow,
   type PlannedCommitmentOccurrenceRow,
   type PlannedCommitmentOccurrenceWithCommitment,

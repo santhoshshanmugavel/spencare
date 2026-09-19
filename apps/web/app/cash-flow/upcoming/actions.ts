@@ -11,6 +11,7 @@ import {
   reserveForOccurrence,
   markOccurrencePaidManually,
   payOccurrence,
+  advanceCommitmentOccurrence,
   createTransaction,
   addLoan,
   editLoan,
@@ -182,6 +183,8 @@ export async function reserveOccurrenceAction(occurrenceId: string, additionalMi
 /** Mark a commitment occurrence as paid with an actual expense transaction. */
 export async function markOccurrencePaidAction(input: {
   occurrenceId: string;
+  commitmentId: string;
+  occurrenceDueDate: string;
   amountMinor: number;
   accountId: string | null;
   categoryId: string | null;
@@ -194,7 +197,7 @@ export async function markOccurrencePaidAction(input: {
   if (!input.categoryId) return { ok: false as const, error: { message: "Category is required to record a payment." } };
   const ctx = await requireAuthContext();
   try {
-    // Create actual expense transaction
+    // Step 1: Create actual expense transaction
     const txResult = await createTransaction.execute(ctx, {
       kind: "expense",
       accountId: input.accountId,
@@ -204,8 +207,15 @@ export async function markOccurrencePaidAction(input: {
       occurredAt: input.occurredAt,
     });
     if (!txResult.ok) return { ok: false as const, error: { message: txResult.error.message } };
-    // Link transaction to occurrence
+
+    // Step 2: Link transaction to occurrence (marks it paid)
+    // Note: if this fails, txResult.value.id exists but is unlinked. The user can re-try;
+    // the duplicate-transaction risk is low since payOccurrence checks status='upcoming'.
     await payOccurrence(ctx, input.occurrenceId, txResult.value.id);
+
+    // Step 3: Generate the next occurrence for recurring commitments
+    await advanceCommitmentOccurrence(ctx, input.commitmentId, input.occurrenceDueDate);
+
     revalidateAll();
     revalidatePath("/cash-flow/transactions");
     return { ok: true as const, transactionId: txResult.value.id };

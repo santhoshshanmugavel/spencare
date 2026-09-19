@@ -43,6 +43,7 @@ export {
   updateOccurrenceReserve,
   setCommitmentStatus,
   getOccurrence,
+  insertPlannedCommitmentOccurrence,
   type CommitmentStatus,
   type CommitmentTenureType,
   type CommitmentOccurrenceStatus,
