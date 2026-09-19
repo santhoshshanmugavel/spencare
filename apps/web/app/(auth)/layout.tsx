@@ -12,7 +12,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4 py-12 sm:px-6">
       <div className="w-full max-w-md space-y-8">
         <div className="flex justify-center">
-          <img src="/spencare-logo.svg" alt="Spencare" width={144} height={37} className="shrink-0" />
+          <span className="text-2xl font-bold tracking-tight text-primary">Spencare</span>
         </div>
         {children}
       </div>

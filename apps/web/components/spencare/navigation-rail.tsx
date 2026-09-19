@@ -83,8 +83,8 @@ function ProfileButton({ profile }: { profile: NavigationRailUserProfile }) {
             className={cn(
               "flex size-9 items-center justify-center rounded-full text-xs font-semibold transition-colors overflow-hidden",
               profile.avatarUrl
-                ? "border-2 border-border hover:border-primary/40"
-                : "bg-primary/10 text-primary hover:bg-primary/20",
+                ? "border-2 border-sidebar-border hover:border-sidebar-primary/60"
+                : "bg-sidebar-accent text-sidebar-primary hover:bg-sidebar-accent/80",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
@@ -137,7 +137,7 @@ export function NavigationRail({
     <nav
       aria-label="Primary"
       className={cn(
-        "flex h-full w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-sidebar py-4",
+        "flex h-full w-16 shrink-0 flex-col items-center gap-1 border-r border-sidebar-border bg-sidebar py-4",
         className,
       )}
     >
@@ -163,8 +163,8 @@ export function NavigationRail({
                       "flex size-11 items-center justify-center rounded-full transition-colors",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       active
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                        ? "bg-sidebar-primary/20 text-sidebar-primary"
+                        : "text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                     )}
                   >
                     <span aria-hidden="true">{item.icon}</span>
