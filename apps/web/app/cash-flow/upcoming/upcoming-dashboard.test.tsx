@@ -76,7 +76,7 @@ function makeCommitment(overrides: Partial<PlannedCommitmentRow> = {}): PlannedC
     funding_account_id: null,
     payment_account_id: "acc-1",
     reserve_account_id: null,
-    tenure_type: "ongoing",
+    tenure_type: "none",
     tenure_payments: null,
     tenure_end_date: null,
     status: "active",
