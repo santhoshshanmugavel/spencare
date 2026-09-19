@@ -45,6 +45,7 @@ import { listCommitments, listUpcoming } from "./plannedCommitments.js";
 import { listAllLoans } from "./loans.js";
 import { listGoalContributionPlans } from "./goalContributionPlans.js";
 import { listGoals } from "./goals.js";
+import { listAccounts } from "./accounts.js";
 import type { PlannedCommitmentRow, GoalRow, LoanRow, GoalContributionPlanRow } from "@spencare/domain-infra";
 import type { AuthContext } from "../types.js";
 
@@ -54,7 +55,9 @@ export type UpcomingEventKind =
   | "commitment_payment"
   | "commitment_preparation"
   | "goal_contribution"
-  | "loan";
+  | "loan"
+  | "credit_card_statement"
+  | "credit_card_payment";
 
 export interface UpcomingEvent {
   /** Stable ID: deterministic for projected events, occurrence.id for persisted. */
@@ -113,6 +116,8 @@ export interface UpcomingProjection {
   goalContributionMinor: number;
   /** Loan installments in the window. */
   loanInstallmentMinor: number;
+  /** Sum of credit_used_minor for cards with payment due events in the window. */
+  creditCardPaymentDueMinor: number;
   currency: string;
 }
 
@@ -271,12 +276,13 @@ export async function getUpcomingProjection(
   const CURRENCY = "INR";
 
   // Fetch all required data in parallel
-  const [commitments, persistedOccurrences, loans, goalPlans, goals] = await Promise.all([
+  const [commitments, persistedOccurrences, loans, goalPlans, goals, accounts] = await Promise.all([
     listCommitments(ctx),
     listUpcoming(ctx, { limit: 500, dueBefore: endDate }),
     listAllLoans(ctx),
     listGoalContributionPlans(ctx),
     listGoals(ctx),
+    listAccounts(ctx),
   ]);
 
   const goalById = new Map<string, GoalRow>(goals.map((g) => [g.id, g]));
@@ -553,17 +559,88 @@ export async function getUpcomingProjection(
     });
   }
 
+  // ── Credit card statement and payment events ──────────────────────────────
+  //
+  // For each active credit card with statement_generated_day or payment_due_day,
+  // project one event per month in the window using resolveRecurringDay (same
+  // 1-32 sentinel as payment_day_rule). Credit card "payments" carry the card's
+  // current outstanding balance as the amount.
+
+  const creditCardPaymentDueMinor_acc: number[] = [];
+
+  for (const account of accounts) {
+    if (account.type !== "credit_card" || account.is_archived) continue;
+
+    const { statement_generated_day: stmtDay, payment_due_day: dueDay } = account;
+    const outstanding = account.credit_used_minor ?? 0;
+
+    // Iterate over all months that overlap with [startDate, endDate]
+    const startParts = startDate.split("-").map(Number);
+    const endParts = endDate.split("-").map(Number);
+    const sy = startParts[0]!;
+    const sm = startParts[1]!;
+    const ey = endParts[0]!;
+    const em = endParts[1]!;
+
+    const totalStartMonth = sy * 12 + sm - 1;
+    const totalEndMonth = ey * 12 + em - 1;
+
+    for (let monthOffset = totalStartMonth; monthOffset <= totalEndMonth; monthOffset++) {
+      const year = Math.floor(monthOffset / 12);
+      const month = (monthOffset % 12) + 1;
+
+      if (stmtDay != null) {
+        const stmtDate = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
+        if (stmtDate >= startDate && stmtDate <= endDate) {
+          allEvents.push({
+            id: projectedId("cc_statement", account.id, stmtDate),
+            kind: "credit_card_statement",
+            date: stmtDate,
+            title: `${account.name} statement`,
+            subtitle: "Statement date",
+            amountMinor: 0,
+            currency: account.currency,
+            sourceId: account.id,
+            projected: true,
+          });
+        }
+      }
+
+      if (dueDay != null) {
+        const dueDate = resolveRecurringDay({ year, month, paymentDayRule: dueDay });
+        if (dueDate >= startDate && dueDate <= endDate) {
+          allEvents.push({
+            id: projectedId("cc_payment", account.id, dueDate),
+            kind: "credit_card_payment",
+            date: dueDate,
+            title: `${account.name} payment due`,
+            subtitle: "Credit card payment",
+            amountMinor: outstanding,
+            currency: account.currency,
+            sourceId: account.id,
+            projected: true,
+          });
+          if (outstanding > 0) creditCardPaymentDueMinor_acc.push(outstanding);
+        }
+      }
+    }
+  }
+
+  const creditCardPaymentDueMinor = creditCardPaymentDueMinor_acc.reduce((s, v) => s + v, 0);
+
   // ── Sort and aggregate ────────────────────────────────────────────────────
 
   allEvents.sort((a, b) => {
     const dc = a.date.localeCompare(b.date);
     if (dc !== 0) return dc;
-    // Within same date: payments first, then preparation, then goals, then loans
+    // Within same date: payments first, then preparation, then goals, then loans, then CC events
     const kindOrder: Record<UpcomingEventKind, number> = {
       commitment_payment: 0,
       loan: 1,
-      goal_contribution: 2,
-      commitment_preparation: 3,
+      credit_card_payment: 2,
+      goal_contribution: 3,
+      commitment_preparation: 4,
+      credit_card_statement: 5,
     };
     return kindOrder[a.kind] - kindOrder[b.kind];
   });
@@ -587,6 +664,7 @@ export async function getUpcomingProjection(
     preparationMinor,
     goalContributionMinor,
     loanInstallmentMinor,
+    creditCardPaymentDueMinor,
     currency: CURRENCY,
   };
 }

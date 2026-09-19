@@ -84,6 +84,7 @@ const baseProps = {
     preparationMinor: 0,
     goalContributionMinor: 0,
     loanInstallmentMinor: 0,
+    creditCardPaymentDueMinor: 0,
     currency: "INR",
   } as UpcomingProjection,
   budgetUsages: [] as BudgetWithUsage[],
@@ -250,6 +251,7 @@ describe("<CashFlowOverview> — in-page tab switcher (Recent Transactions / Upc
           preparationMinor: 0,
           goalContributionMinor: 0,
           loanInstallmentMinor: 0,
+          creditCardPaymentDueMinor: 0,
           currency: "INR",
         }}
       />,
@@ -282,11 +284,12 @@ describe("<CashFlowOverview> — in-page tab switcher (Recent Transactions / Upc
           preparationMinor: 0,
           goalContributionMinor: 0,
           loanInstallmentMinor: 0,
+          creditCardPaymentDueMinor: 0,
           currency: "INR",
         }}
       />,
     );
-    expect(screen.getByRole("tab", { name: "Upcoming (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Upcoming in \w+ \(1\)/ })).toBeInTheDocument();
   });
 });
 

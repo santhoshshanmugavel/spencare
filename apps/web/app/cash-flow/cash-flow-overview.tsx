@@ -359,7 +359,7 @@ export function CashFlowOverview({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <TabsList>
                 <TabsTrigger value="transactions">Recent transactions</TabsTrigger>
-                <TabsTrigger value="upcoming">Upcoming{upcomingProjection.events.length > 0 ? ` (${upcomingProjection.events.length})` : ""}</TabsTrigger>
+                <TabsTrigger value="upcoming">Upcoming in {new Date(periodStart + "T00:00:00Z").toLocaleDateString("en-IN", { month: "long", timeZone: "UTC" })}{upcomingProjection.events.length > 0 ? ` (${upcomingProjection.events.length})` : ""}</TabsTrigger>
               </TabsList>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
