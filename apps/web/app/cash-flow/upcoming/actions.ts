@@ -31,6 +31,7 @@ import {
   type CreateLoanInput,
   type UpdateLoanInput,
 } from "@spencare/validation";
+import { projectOccurrenceDates, type PaymentFrequency } from "@spencare/domain-core";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 
@@ -282,6 +283,8 @@ export async function markOccurrencePaidAction(input: {
   itemName: string;
   occurredAt: string;
   paymentFrequency: string;
+  /** Canonical day rule (1-32) for non-cascading monthly/quarterly/yearly next occurrence. */
+  paymentDayRule?: number | null;
 }) {
   const parse = markCommitmentPaidSchema.safeParse({ occurrenceId: input.occurrenceId });
   if (!parse.success) return { ok: false as const, error: { message: "Invalid occurrence." } };
@@ -299,10 +302,27 @@ export async function markOccurrencePaidAction(input: {
 
     const isCreditCard = account?.type === "credit_card";
 
-    // Pre-compute next occurrence date in TypeScript (date-boundary-safe)
+    // Pre-compute next occurrence date using canonical paymentDayRule (non-cascading for month-based frequencies).
+    // Prevents Jan 31 -> Feb 28 -> Mar 28 (chaining bug) for quarterly/monthly/yearly commitments.
     let nextDueDate: string | null = null;
-    if ((input.paymentFrequency as string) !== "one_time") {
-      nextDueDate = predictNextOccurrence(input.occurrenceDueDate, input.paymentFrequency as RecurrenceInterval);
+    if ((input.paymentFrequency as string) !== "one_time" && (input.paymentFrequency as string) !== "irregular") {
+      const dayAfterPaid = (() => {
+        const d = new Date(input.occurrenceDueDate + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + 1);
+        return d.toISOString().slice(0, 10);
+      })();
+      const nextDates = projectOccurrenceDates(
+        input.occurrenceDueDate,
+        input.paymentFrequency as PaymentFrequency,
+        dayAfterPaid,
+        "2100-01-01",
+        input.paymentDayRule ?? undefined,
+      );
+      nextDueDate = nextDates[0] ?? null;
+      // Fallback for frequencies projectOccurrenceDates doesn't handle (daily, weekly, biweekly)
+      if (nextDueDate == null) {
+        nextDueDate = predictNextOccurrence(input.occurrenceDueDate, input.paymentFrequency as RecurrenceInterval);
+      }
     }
 
     // Atomic RPC: creates expense transaction (all account types) + marks occurrence paid + inserts next occurrence

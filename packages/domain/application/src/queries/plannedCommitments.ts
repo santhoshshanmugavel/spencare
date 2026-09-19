@@ -19,7 +19,7 @@ import {
   type CreatePlannedCommitmentPatch,
   type UpdatePlannedCommitmentPatch,
 } from "@spencare/domain-infra";
-import { predictNextOccurrence, type RecurrenceInterval } from "@spencare/domain-core";
+import { predictNextOccurrence, projectOccurrenceDates, type RecurrenceInterval, type PaymentFrequency } from "@spencare/domain-core";
 import type { AuthContext } from "../types.js";
 
 export type {
@@ -152,7 +152,8 @@ export async function getCommitmentOccurrence(
 
 /**
  * After an occurrence is marked as paid, generate the next upcoming occurrence.
- * Uses predictNextOccurrence from domain-core for month-boundary/leap-year safe date math.
+ * Uses projectOccurrenceDates with the canonical payment_day_rule for non-cascading
+ * month-boundary safe date math. Prevents Jan 31 -> Feb 28 -> Mar 28 (chaining bug).
  * Respects tenure_type=end_date; n_payments tenure is not automatically tracked here.
  * Returns the newly created occurrence, or null if the commitment is complete/one-time.
  */
@@ -167,7 +168,21 @@ export async function advanceCommitmentOccurrence(
   // one_time commitments have no next occurrence
   if ((commitment.payment_frequency as string) === "one_time") return null;
 
-  const nextDate = predictNextOccurrence(paidDueDate, commitment.payment_frequency as RecurrenceInterval);
+  // Compute next date using canonical payment_day_rule (non-cascading for month-based frequencies).
+  const dayAfterPaid = (() => {
+    const d = new Date(paidDueDate + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  const nextDates = projectOccurrenceDates(
+    paidDueDate,
+    commitment.payment_frequency as PaymentFrequency,
+    dayAfterPaid,
+    "2100-01-01",
+    (commitment as { payment_day_rule?: number | null }).payment_day_rule ?? undefined,
+  );
+  // Fallback to chaining for non-month-based frequencies (daily, weekly, biweekly)
+  const nextDate = nextDates[0] ?? predictNextOccurrence(paidDueDate, commitment.payment_frequency as RecurrenceInterval);
   if (!nextDate) return null;
 
   // Respect end_date tenure

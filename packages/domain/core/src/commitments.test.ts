@@ -380,3 +380,112 @@ describe("resolveRecurringDay", () => {
     expect(resolveRecurringDay({ year: 2026, month: 2, paymentDayRule: 1 })).toBe("2026-02-01");
   });
 });
+
+// ── Acceptance scenarios (spec audit) ────────────────────────────────────────
+
+describe("Jio Recharge scenario -- quarterly, 900 INR, anchor Oct 15", () => {
+  // Jio Recharge: quarterly payment on the 15th. No short-month issue since 15
+  // fits every month, but cascade behavior must still be non-cascading.
+  it("projects Oct 15, Jan 15, Apr 15, Jul 15 from anchor Oct 15", () => {
+    const dates = projectOccurrenceDates(
+      "2025-10-15",
+      "quarterly",
+      "2025-10-01",
+      "2026-10-01",
+      15, // paymentDayRule
+    );
+    expect(dates.slice(0, 4)).toEqual(["2025-10-15", "2026-01-15", "2026-04-15", "2026-07-15"]);
+  });
+
+  it("saving dates for Jio: monthly saving starting Oct 1, due Jan 15", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2025-10-01",
+      savingCadence: "monthly",
+      savingDayRule: 1,
+      prevOccurrenceDueDate: "2025-10-15",
+      thisOccurrenceDueDate: "2026-01-15",
+      today: "2026-01-15",
+    });
+    expect(dates).toEqual(["2025-11-01", "2025-12-01", "2026-01-01"]);
+  });
+});
+
+describe("Star Health scenario -- quarterly 30th, anchor Nov 30, 15000 INR", () => {
+  it("projects Nov 30, Feb 28, May 30, Aug 30 NON-CASCADING from anchor Nov 30", () => {
+    const dates = projectOccurrenceDates(
+      "2025-11-30",
+      "quarterly",
+      "2025-11-01",
+      "2026-09-01",
+      30, // paymentDayRule = 30
+    );
+    expect(dates).toEqual(["2025-11-30", "2026-02-28", "2026-05-30", "2026-08-30"]);
+  });
+
+  it("non-cascading: after Feb 28 the NEXT quarter is May 30, not May 28", () => {
+    // If we mistakenly anchored on Feb 28 (clamped result) and chained from there,
+    // we would get May 28. The canonical paymentDayRule=30 gives May 30.
+    const dates = projectOccurrenceDates(
+      "2026-02-28",
+      "quarterly",
+      "2026-02-28",
+      "2026-09-01",
+      30,
+    );
+    expect(dates[0]).toBe("2026-02-28");
+    expect(dates[1]).toBe("2026-05-30"); // NOT May 28
+    expect(dates[2]).toBe("2026-08-30"); // NOT Aug 28
+  });
+
+  it("monthly saving for Star Health: 30th saving day, Jan 30 -> Feb 28 -> Mar 30 (non-cascading)", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2025-12-30",
+      savingCadence: "monthly",
+      savingDayRule: 30,
+      prevOccurrenceDueDate: "2025-11-30",
+      thisOccurrenceDueDate: "2026-02-28",
+      today: "2026-02-28",
+    });
+    // Dec 30, Jan 30, Feb 28 (clamped from 30)
+    expect(dates).toEqual(["2025-12-30", "2026-01-30", "2026-02-28"]);
+  });
+});
+
+describe("Term Insurance scenario -- quarterly 31st, anchor Jan 31, 30000 INR", () => {
+  it("projects Jan 31, Apr 30, Jul 31, Oct 31 NON-CASCADING from anchor Jan 31", () => {
+    const dates = projectOccurrenceDates(
+      "2026-01-31",
+      "quarterly",
+      "2026-01-01",
+      "2026-12-01",
+      31,
+    );
+    expect(dates).toEqual(["2026-01-31", "2026-04-30", "2026-07-31", "2026-10-31"]);
+  });
+
+  it("non-cascading: after Apr 30 the NEXT quarter is Jul 31, not Jul 30", () => {
+    const dates = projectOccurrenceDates(
+      "2026-04-30",
+      "quarterly",
+      "2026-04-30",
+      "2027-01-01",
+      31,
+    );
+    expect(dates[0]).toBe("2026-04-30");
+    expect(dates[1]).toBe("2026-07-31"); // NOT Jul 30
+    expect(dates[2]).toBe("2026-10-31");
+  });
+
+  it("monthly saving for Term Insurance: 31st saving day non-cascading", () => {
+    const dates = savingDatesForOccurrence({
+      firstSavingDate: "2025-11-30", // Nov has no 31st, so first_saving_date was Nov 30
+      savingCadence: "monthly",
+      savingDayRule: 31,
+      prevOccurrenceDueDate: "2025-10-31",
+      thisOccurrenceDueDate: "2026-01-31",
+      today: "2026-01-31",
+    });
+    // Nov 30 (31 clamped), Dec 31, Jan 31
+    expect(dates).toEqual(["2025-11-30", "2025-12-31", "2026-01-31"]);
+  });
+});

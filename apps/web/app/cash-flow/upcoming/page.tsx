@@ -13,7 +13,7 @@ import {
   type RecurrenceInterval,
   getProfileForDisplay,
 } from "@spencare/domain-application";
-import { projectOccurrenceDates, type PaymentFrequency } from "@spencare/domain-core";
+import { projectOccurrenceDates, resolveRecurringDay, type PaymentFrequency } from "@spencare/domain-core";
 
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
@@ -55,25 +55,45 @@ function generatePrepEvents(
     if (occ.reserved_minor >= occ.amount_minor) continue;
 
     const paymentCutoff = occ.due_date < windowEnd ? occ.due_date : windowEnd;
+    const savingDayRule = (c as { saving_day_rule?: number | null }).saving_day_rule ?? null;
 
-    // Fast-forward from first_saving_date to the first future saving date
-    let cur = c.first_saving_date;
-    while (cur < today) {
-      const next = predictNextOccurrence(cur, c.saving_cadence as RecurrenceInterval);
-      if (!next || next <= cur) break;
-      cur = next;
-    }
-
-    // Emit saving events that fall within [today, paymentCutoff)
-    let iter = 0;
-    while (cur < paymentCutoff && iter < 60) {
-      iter++;
-      if (cur >= today) {
-        events.push({ commitment: c, date: cur, amountMinor: c.saving_amount_minor });
+    if (c.saving_cadence === "monthly" && savingDayRule != null) {
+      // Non-cascading: compute each month from the canonical saving_day_rule.
+      // Prevents Jan 31 -> Feb 28 -> Mar 28 (chaining bug); gives Mar 31.
+      const parts = c.first_saving_date.split("-").map(Number);
+      const fy = parts[0]!;
+      const fm = parts[1]!;
+      let step = 0;
+      const MAX = 400;
+      while (step < MAX) {
+        const totalMonths = fy * 12 + (fm - 1) + step;
+        const ty = Math.floor(totalMonths / 12);
+        const tm = (totalMonths % 12) + 1;
+        const date = resolveRecurringDay({ year: ty, month: tm, paymentDayRule: savingDayRule });
+        if (date >= paymentCutoff) break;
+        if (date >= today) {
+          events.push({ commitment: c, date, amountMinor: c.saving_amount_minor });
+        }
+        step++;
       }
-      const next = predictNextOccurrence(cur, c.saving_cadence as RecurrenceInterval);
-      if (!next || next <= cur) break;
-      cur = next;
+    } else {
+      // Weekly, biweekly, daily: chaining is safe (no month-end clamping issue).
+      let cur = c.first_saving_date;
+      while (cur < today) {
+        const next = predictNextOccurrence(cur, c.saving_cadence as RecurrenceInterval);
+        if (!next || next <= cur) break;
+        cur = next;
+      }
+      let iter = 0;
+      while (cur < paymentCutoff && iter < 60) {
+        iter++;
+        if (cur >= today) {
+          events.push({ commitment: c, date: cur, amountMinor: c.saving_amount_minor });
+        }
+        const next = predictNextOccurrence(cur, c.saving_cadence as RecurrenceInterval);
+        if (!next || next <= cur) break;
+        cur = next;
+      }
     }
   }
 

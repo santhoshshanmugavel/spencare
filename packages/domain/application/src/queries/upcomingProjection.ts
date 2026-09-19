@@ -36,6 +36,7 @@ import {
   projectOccurrenceDates,
   calculateNextOccurrence,
   predictNextOccurrence,
+  resolveRecurringDay,
   type PaymentFrequency,
   type GoalContributionFrequency,
   type RecurrenceInterval,
@@ -164,35 +165,60 @@ function generatePrepEventsForPayment(
 
   if (effectiveEmitFrom > prepEnd) return [];
 
+  const savingDayRule = (commitment as { saving_day_rule?: number | null }).saving_day_rule ?? null;
+  // savingAmountMinor is guaranteed non-null by the guard above; cast for TypeScript
+  const savingAmountMinorNum = savingAmountMinor as number;
   const events: UpcomingEvent[] = [];
-  let cur = firstSavingDate;
-  let iters = 0;
-  const MAX = 240;
 
-  while (cur <= prepEnd && iters < MAX) {
-    iters++;
-    if (cur >= effectiveEmitFrom && cur <= prepEnd) {
-      events.push({
-        id: projectedId("prep", commitment.id, cur),
-        kind: "commitment_preparation",
-        date: cur,
-        title: `Prepare for ${commitment.name}`,
-        subtitle: commitment.name,
-        amountMinor: savingAmountMinor,
-        currency: "INR",
-        sourceId: commitment.id,
-        projected: true,
-        preparationForDate: paymentDate,
-        preparationForOccurrenceId: paymentOccurrenceId,
-        savingCadence: commitment.saving_cadence,
-        savingAmountMinor: commitment.saving_amount_minor,
-        autoProtectEnabled: commitment.auto_protect_enabled ?? false,
-        reserveAccountId: commitment.reserve_account_id,
-      });
+  function pushPrepEvent(date: string) {
+    events.push({
+      id: projectedId("prep", commitment.id, date),
+      kind: "commitment_preparation",
+      date,
+      title: `Prepare for ${commitment.name}`,
+      subtitle: commitment.name,
+      amountMinor: savingAmountMinorNum,
+      currency: "INR",
+      sourceId: commitment.id,
+      projected: true,
+      preparationForDate: paymentDate,
+      preparationForOccurrenceId: paymentOccurrenceId,
+      savingCadence: commitment.saving_cadence,
+      savingAmountMinor: commitment.saving_amount_minor,
+      autoProtectEnabled: commitment.auto_protect_enabled ?? false,
+      reserveAccountId: commitment.reserve_account_id,
+    });
+  }
+
+  if (savingCadence === "monthly" && savingDayRule != null) {
+    // Non-cascading: compute each month independently from the canonical day rule.
+    // Prevents Jan 31 -> Feb 28 -> Mar 28 (chaining bug); gives Mar 31 (correct).
+    const parts = firstSavingDate.split("-").map(Number);
+    const fy = parts[0]!;
+    const fm = parts[1]!;
+    let step = 0;
+    const MAX = 400;
+    while (step < MAX) {
+      const totalMonths = fy * 12 + (fm - 1) + step;
+      const ty = Math.floor(totalMonths / 12);
+      const tm = (totalMonths % 12) + 1;
+      const date = resolveRecurringDay({ year: ty, month: tm, paymentDayRule: savingDayRule });
+      if (date > prepEnd) break;
+      if (date >= effectiveEmitFrom) pushPrepEvent(date);
+      step++;
     }
-    const next = predictNextOccurrence(cur, savingCadence);
-    if (!next || next <= cur) break;
-    cur = next;
+  } else {
+    // Weekly, biweekly, daily: chaining is safe (no month-end clamping issue).
+    let cur = firstSavingDate;
+    let iters = 0;
+    const MAX = 240;
+    while (cur <= prepEnd && iters < MAX) {
+      iters++;
+      if (cur >= effectiveEmitFrom) pushPrepEvent(cur);
+      const next = predictNextOccurrence(cur, savingCadence);
+      if (!next || next <= cur) break;
+      cur = next;
+    }
   }
 
   return events;

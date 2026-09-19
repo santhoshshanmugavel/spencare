@@ -121,6 +121,7 @@ export function CommitmentActions({ occ, commitment, accounts, categories, onCha
       itemName: commitment.name,
       occurredAt,
       paymentFrequency: commitment.payment_frequency,
+      paymentDayRule: commitment.payment_day_rule ?? null,
     });
     setLoading(false);
     if (!result.ok) { toastError(result.error.message); return; }

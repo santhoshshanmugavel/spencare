@@ -10,6 +10,7 @@ vi.mock("../queries/accounts.js", () => ({ listAccounts: vi.fn(async () => [{ id
 vi.mock("../queries/transactions.js", () => ({ listTransactions: vi.fn(async () => [{ id: "txn-1" }]) }));
 vi.mock("../queries/budgets.js", () => ({ listBudgets: vi.fn(async () => [{ id: "bud-1" }]) }));
 vi.mock("../queries/goals.js", () => ({ listGoals: vi.fn(async () => [{ id: "goal-1" }]) }));
+vi.mock("../queries/goalContributionPlans.js", () => ({ listGoalContributionPlans: vi.fn(async () => [{ id: "gcp-1" }]) }));
 vi.mock("../queries/bills.js", () => ({ listBillPredictions: vi.fn(async () => [{ id: "bill-1" }]) }));
 
 function ctx(): AuthContext {
@@ -28,6 +29,7 @@ describe("exportUserData", () => {
     expect(bundle.transactions).toEqual([{ id: "txn-1" }]);
     expect(bundle.budgets).toEqual([{ id: "bud-1" }]);
     expect(bundle.goals).toEqual([{ id: "goal-1" }]);
+    expect(bundle.goalContributionPlans).toEqual([{ id: "gcp-1" }]);
     expect(bundle.bills).toEqual([{ id: "bill-1" }]);
     expect(bundle.aiConversations).toEqual([
       { conversation: { id: "conv-1", user_id: "user-1", title: "Chat", created_at: "t", updated_at: "t", archived_at: null }, messages: [{ id: "msg-1", conversation_id: "conv-1", role: "user", content: { kind: "text", text: "hi" }, created_at: "t" }] },
