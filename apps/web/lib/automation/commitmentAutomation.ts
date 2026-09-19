@@ -12,9 +12,15 @@
  *
  * Idempotency:
  *   Auto-pay: The RPC uses status='upcoming' guard; double-execution returns
- *     no rows and the result is ignored rather than treating it as success.
- *   Auto-protect: reserved_minor is capped at amount_minor; a second run on
- *     the same day is a mathematical no-op.
+ *     no rows and is ignored rather than treating it as success.
+ *   Auto-protect: The RPC uses GREATEST(reserved_minor, p_new_reserved_minor),
+ *     so re-running with the same or lower value is a database-level no-op.
+ *
+ * Timezone:
+ *   "Today" is always resolved in the user's local timezone via
+ *   getLocalDate(timezone) from the dailySummary library.  Running at 02:30 UTC
+ *   (the cron schedule) means this is still "yesterday" for UTC+5:30 users, so
+ *   the timezone-aware date correctly reflects local reality.
  *
  * Security:
  *   All DB access uses the service-role client.
@@ -25,9 +31,14 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { predictNextOccurrence, type RecurrenceInterval } from "@spencare/domain-core";
+import {
+  savingDatesForOccurrence,
+  predictNextOccurrence,
+  type RecurrenceInterval,
+} from "@spencare/domain-core";
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
 import { deliverNotification } from "@/lib/notifications/engine";
+import { getLocalDate } from "@/lib/notifications/dailySummary";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -51,58 +62,26 @@ interface AutoProtectResult {
   error?: string;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-/** Returns number of full preparation periods from first_saving_date up to and including today. */
-function countPastSavingPeriods(firstSavingDate: string, savingCadence: string, todayIso: string): number {
-  let count = 0;
-  let cur = firstSavingDate;
-  while (cur <= todayIso) {
-    count++;
-    const next = predictNextOccurrence(cur, savingCadence as RecurrenceInterval);
-    if (!next || next <= cur) break;
-    cur = next;
-  }
-  return count;
-}
-
-/** Returns the saving dates from first_saving_date up to and including today. */
-function savingDatesUpToToday(firstSavingDate: string, savingCadence: string, todayIso: string): string[] {
-  const dates: string[] = [];
-  let cur = firstSavingDate;
-  while (cur <= todayIso) {
-    dates.push(cur);
-    const next = predictNextOccurrence(cur, savingCadence as RecurrenceInterval);
-    if (!next || next <= cur) break;
-    cur = next;
-  }
-  return dates;
-}
-
 // ── Auto-pay ──────────────────────────────────────────────────────────────────
 
 /**
  * Runs auto-pay for all due occurrences for a single user.
- * Due means: occurrence.due_date <= today AND occurrence.status = 'upcoming'
- *            AND commitment.auto_pay_enabled = true AND commitment.status = 'active'.
+ * "Due" means: occurrence.due_date <= today (local) AND occurrence.status = 'upcoming'
+ *              AND commitment.auto_pay_enabled = true AND commitment.status = 'active'.
  */
 export async function runAutoPayForUser(
   userId: string,
   userEmail: string,
+  timezone: string,
   serviceRoleSupabase: TypedSupabaseClient,
 ): Promise<AutoPayResult[]> {
-  const today = todayUtc();
+  const today = getLocalDate(timezone);
   const results: AutoPayResult[] = [];
 
-  // Fetch active auto-pay commitments with their due occurrences
   const { data: rows, error } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
     .from("planned_commitment_occurrences")
     .select(`
-      id, commitment_id, due_date, amount_minor, reserved_minor, status, matched_transaction_id,
+      id, commitment_id, due_date, amount_minor, reserved_minor, status,
       planned_commitments!inner(
         id, name, status, deleted_at,
         auto_pay_enabled, payment_account_id, category_id, payment_frequency,
@@ -132,14 +111,9 @@ export async function runAutoPayForUser(
     const paymentFrequency = commitment.payment_frequency as string;
     const dueDate = row.due_date as string;
 
-    // Validate payment account
     if (!paymentAccountId) {
-      results.push({
-        commitmentId, commitmentName, occurrenceId,
-        status: "failed",
-        error: "No payment account configured.",
-      });
-      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, "No payment account configured.");
+      results.push({ commitmentId, commitmentName, occurrenceId, status: "failed", error: "No payment account configured." });
+      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, today, "No payment account configured.");
       continue;
     }
 
@@ -152,22 +126,20 @@ export async function runAutoPayForUser(
 
     if (accountError || !accountRow) {
       results.push({ commitmentId, commitmentName, occurrenceId, status: "failed", error: "Payment account not found." });
-      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, "Payment account not found.");
+      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, today, "Payment account not found.");
       continue;
     }
 
     if ((accountRow as Record<string, unknown>).is_archived) {
       results.push({ commitmentId, commitmentName, occurrenceId, status: "failed", error: "Payment account is archived." });
-      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, "Payment account is archived.");
+      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, today, "Payment account is archived.");
       continue;
     }
 
-    // Compute next due date
     const nextDueDate = paymentFrequency === "one_time"
       ? null
       : predictNextOccurrence(dueDate, paymentFrequency as RecurrenceInterval);
 
-    // Tenure check: if n_payments, count paid and check limit before paying
     if ((commitment.tenure_type as string) === "n_payments" && commitment.tenure_payments != null) {
       const { count } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
         .from("planned_commitment_occurrences")
@@ -180,7 +152,6 @@ export async function runAutoPayForUser(
       }
     }
 
-    // End date tenure check
     if ((commitment.tenure_type as string) === "end_date" && commitment.tenure_end_date) {
       if (dueDate > (commitment.tenure_end_date as string)) {
         results.push({ commitmentId, commitmentName, occurrenceId, status: "skipped" });
@@ -188,7 +159,6 @@ export async function runAutoPayForUser(
       }
     }
 
-    // Execute the atomic RPC -- creates transaction, marks paid, inserts next occurrence
     const adjustedNextDueDate = computeAllowedNextDate(nextDueDate, commitment);
 
     try {
@@ -207,13 +177,12 @@ export async function runAutoPayForUser(
 
       if (rpcError) {
         results.push({ commitmentId, commitmentName, occurrenceId, status: "failed", error: rpcError.message });
-        await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, rpcError.message);
+        await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, today, rpcError.message);
         continue;
       }
 
       const result = (rpcData ?? {}) as { transaction_id: string; next_due_date: string | null };
 
-      // Update commitment.next_payment_date to match the new occurrence
       if (adjustedNextDueDate) {
         await serviceRoleSupabase
           .from("planned_commitments")
@@ -229,7 +198,6 @@ export async function runAutoPayForUser(
         nextDueDate: result.next_due_date,
       });
 
-      // Notify
       await deliverNotification(serviceRoleSupabase, {
         userId,
         userEmail,
@@ -250,7 +218,7 @@ export async function runAutoPayForUser(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       results.push({ commitmentId, commitmentName, occurrenceId, status: "failed", error: msg });
-      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, msg);
+      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, today, msg);
     }
   }
 
@@ -274,6 +242,7 @@ async function sendAutoPayFailedNotification(
   userEmail: string,
   commitmentName: string,
   amountMinor: number,
+  today: string,
   reason: string,
 ): Promise<void> {
   try {
@@ -285,7 +254,7 @@ async function sendAutoPayFailedNotification(
       category: "commitment",
       severity: "warning",
       actionUrl: "/cash-flow/upcoming",
-      dedupeKey: `autopay-failed:${userId}:${commitmentName}:${todayUtc()}`,
+      dedupeKey: `autopay-failed:${userId}:${commitmentName}:${today}`,
     });
   } catch {
     // Notification failure must not block the automation report
@@ -296,21 +265,27 @@ async function sendAutoPayFailedNotification(
 
 /**
  * Runs auto-protect for all due saving periods for a single user.
- * A saving period is "due" when today is on or after a computed saving date
- * derived from first_saving_date + saving_cadence.
  *
- * Idempotency: reserved_minor is capped at amount_minor. If protection for
- * this period already happened (reserved_minor >= expected), the update is a no-op.
+ * A saving period is "due" when today (user's local date) is on or after a
+ * computed saving date derived from first_saving_date + saving_cadence.
+ *
+ * Occurrence-awareness: saving dates are filtered to only those that fall
+ * within the preparation window for THIS occurrence -- i.e. strictly after
+ * the previous paid occurrence's due date and on or before this occurrence's
+ * due date (or today, whichever is earlier).
+ *
+ * Idempotency: The auto_protect_occurrence_atomic RPC uses GREATEST() so
+ * running with the same expected value on the same day is a no-op.
  */
 export async function runAutoProtectForUser(
   userId: string,
   userEmail: string,
+  timezone: string,
   serviceRoleSupabase: TypedSupabaseClient,
 ): Promise<AutoProtectResult[]> {
-  const today = todayUtc();
+  const today = getLocalDate(timezone);
   const results: AutoProtectResult[] = [];
 
-  // Fetch active auto-protect commitments with saving cadence and upcoming occurrences
   const { data: commitmentRows, error } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
     .from("planned_commitments")
     .select("id, name, saving_cadence, saving_amount_minor, first_saving_date, reserve_account_id, amount_minor")
@@ -330,14 +305,27 @@ export async function runAutoProtectForUser(
   for (const c of (commitmentRows ?? []) as Record<string, unknown>[]) {
     const commitmentId = c.id as string;
     const commitmentName = c.name as string;
-    const savingCadence = c.saving_cadence as string;
+    const savingCadence = c.saving_cadence as RecurrenceInterval;
     const savingAmountMinor = c.saving_amount_minor as number;
     const firstSavingDate = c.first_saving_date as string;
     const reserveAccountId = c.reserve_account_id as string | null;
 
     if (!reserveAccountId) continue;
 
-    // Find the upcoming occurrence for this commitment
+    // Validate the reserve account (bank/cash only, not archived)
+    const { data: reserveAccount, error: reserveErr } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
+      .from("accounts")
+      .select("id, type, is_archived")
+      .eq("id", reserveAccountId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (reserveErr || !reserveAccount) continue;
+    const ra = reserveAccount as Record<string, unknown>;
+    if (ra.is_archived) continue;
+    if (ra.type !== "bank" && ra.type !== "cash") continue;
+
+    // Find the next upcoming occurrence
     const { data: occRows, error: occError } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
       .from("planned_commitment_occurrences")
       .select("id, amount_minor, reserved_minor, due_date")
@@ -360,21 +348,38 @@ export async function runAutoProtectForUser(
       continue;
     }
 
-    // Only consider saving dates before the occurrence due date
-    const effectiveCutoff = dueDate < today ? dueDate : today;
-    const dates = savingDatesUpToToday(firstSavingDate, savingCadence, effectiveCutoff);
-    const periodsCount = dates.length;
+    // Find the most recently PAID occurrence for this commitment.
+    // Its due_date is the lower bound of the current occurrence's preparation window.
+    const { data: prevOccRows } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
+      .from("planned_commitment_occurrences")
+      .select("due_date")
+      .eq("commitment_id", commitmentId)
+      .eq("user_id", userId)
+      .eq("status", "paid")
+      .order("due_date", { ascending: false })
+      .limit(1);
 
-    if (periodsCount === 0) {
+    const prevOccurrenceDueDate = prevOccRows && prevOccRows.length > 0
+      ? (prevOccRows[0] as Record<string, unknown>).due_date as string
+      : null;
+
+    // Occurrence-aware saving dates: only dates in THIS occurrence's window
+    const savingDates = savingDatesForOccurrence({
+      firstSavingDate,
+      savingCadence,
+      prevOccurrenceDueDate,
+      thisOccurrenceDueDate: dueDate,
+      today,
+    });
+
+    if (savingDates.length === 0) {
       results.push({ commitmentId, commitmentName, occurrenceId, status: "skipped" });
       continue;
     }
 
-    // Expected total reserved after all periods up to today
-    const expectedReserved = Math.min(amountMinor, periodsCount * savingAmountMinor);
+    const expectedReserved = Math.min(amountMinor, savingDates.length * savingAmountMinor);
 
     if (currentReserved >= expectedReserved) {
-      // Already at or above what we'd set today -- idempotent no-op
       results.push({ commitmentId, commitmentName, occurrenceId, status: "skipped" });
       continue;
     }
@@ -382,23 +387,31 @@ export async function runAutoProtectForUser(
     const additionalToProtect = expectedReserved - currentReserved;
 
     try {
-      const newReserved = Math.min(amountMinor, currentReserved + additionalToProtect);
+      // Atomic RPC: GREATEST() idempotency + audit_log write.
+      // Cast to any because auto_protect_occurrence_atomic is not yet in the generated types.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: rpcData, error: rpcError } = await (serviceRoleSupabase as any)
+        .rpc("auto_protect_occurrence_atomic", {
+          p_user_id: userId,
+          p_occurrence_id: occurrenceId,
+          p_commitment_id: commitmentId,
+          p_new_reserved_minor: expectedReserved,
+          p_previous_reserved: currentReserved,
+        });
 
-      const { data: updatedOcc, error: updateError } = await serviceRoleSupabase
-        .from("planned_commitment_occurrences")
-        .update({ reserved_minor: newReserved })
-        .eq("id", occurrenceId)
-        .eq("user_id", userId)
-        .eq("status", "upcoming")
-        .select("reserved_minor")
-        .single();
-
-      if (updateError) {
-        results.push({ commitmentId, commitmentName, occurrenceId, status: "failed", error: updateError.message });
+      if (rpcError) {
+        results.push({ commitmentId, commitmentName, occurrenceId, status: "failed", error: rpcError.message });
         continue;
       }
 
-      const finalReserved = (updatedOcc as Record<string, unknown>)?.reserved_minor as number ?? newReserved;
+      const rpcResult = (rpcData ?? {}) as { reserved_minor: number | null; skipped: boolean };
+
+      if (rpcResult.skipped) {
+        results.push({ commitmentId, commitmentName, occurrenceId, status: "skipped" });
+        continue;
+      }
+
+      const finalReserved = rpcResult.reserved_minor ?? expectedReserved;
 
       results.push({
         commitmentId, commitmentName, occurrenceId,
@@ -407,7 +420,6 @@ export async function runAutoProtectForUser(
         newReservedMinor: finalReserved,
       });
 
-      // Notify (suppress if amount is 0)
       if (additionalToProtect > 0) {
         await deliverNotification(serviceRoleSupabase, {
           userId,
@@ -447,7 +459,8 @@ interface AutomationSweepResult {
 
 /**
  * Processes all users who have at least one auto-pay or auto-protect commitment.
- * Designed to be called by the cron endpoint.
+ * Fetches each user's IANA timezone from the profiles table so that "today" is
+ * computed in local time, not UTC.
  */
 export async function runCommitmentAutomationSweep(
   serviceRoleSupabase: TypedSupabaseClient,
@@ -459,7 +472,6 @@ export async function runCommitmentAutomationSweep(
     errors: [],
   };
 
-  // Gather distinct users with auto-pay or auto-protect commitments
   const { data: autoPayUsers } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
     .from("planned_commitments")
     .select("user_id")
@@ -482,22 +494,25 @@ export async function runCommitmentAutomationSweep(
 
   if (userIds.length === 0) return sweep;
 
-  // Fetch user emails (needed for notifications)
-  const { data: usersData } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
-    .from("auth.users")
-    .select("id, email")
+  // Fetch timezone from profiles. PostgREST does not expose auth.users.
+  const { data: profileRows } = await (serviceRoleSupabase as ReturnType<typeof createClient>)
+    .from("profiles")
+    .select("id, timezone")
     .in("id", userIds);
 
-  const emailMap = new Map<string, string>(
-    ((usersData ?? []) as { id: string; email: string }[]).map((u) => [u.id, u.email]),
+  const timezoneMap = new Map<string, string>(
+    ((profileRows ?? []) as { id: string; timezone: string | null }[])
+      .map((p) => [p.id, p.timezone ?? "UTC"]),
   );
 
   for (const userId of userIds) {
-    const userEmail = emailMap.get(userId) ?? "";
+    const timezone = timezoneMap.get(userId) ?? "UTC";
+    // userEmail not available from profiles; pass "" -- in-app notifications work without it
+    const userEmail = "";
     try {
       const [payResults, protectResults] = await Promise.all([
-        runAutoPayForUser(userId, userEmail, serviceRoleSupabase),
-        runAutoProtectForUser(userId, userEmail, serviceRoleSupabase),
+        runAutoPayForUser(userId, userEmail, timezone, serviceRoleSupabase),
+        runAutoProtectForUser(userId, userEmail, timezone, serviceRoleSupabase),
       ]);
       sweep.autoPayResults.push(...payResults);
       sweep.autoProtectResults.push(...protectResults);

@@ -82,9 +82,10 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (typeof body.userId === "string") {
     const userId = body.userId;
+    const timezone = typeof body.timezone === "string" ? body.timezone : "UTC";
     const [payResults, protectResults] = await Promise.all([
-      runAutoPayForUser(userId, "", supabase),
-      runAutoProtectForUser(userId, "", supabase),
+      runAutoPayForUser(userId, "", timezone, supabase),
+      runAutoProtectForUser(userId, "", timezone, supabase),
     ]);
     console.log("[commitment-automation POST single-user]", { userId, payResults, protectResults });
     return NextResponse.json({ ok: true, userId, payResults, protectResults });

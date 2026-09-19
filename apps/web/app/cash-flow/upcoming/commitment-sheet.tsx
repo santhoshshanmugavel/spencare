@@ -506,7 +506,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                 <div>
                   <Label htmlFor="c-autopay" className="text-sm font-medium">Enable Auto-pay</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Spencare will automatically record this payment in your account on the scheduled date.
+                    Spencare will automatically record this payment in your Spencare account on the scheduled date using the selected payment account.
                   </p>
                 </div>
               </div>
@@ -532,7 +532,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                 <div>
                   <Label htmlFor="c-autoprotect" className="text-sm font-medium">Enable Auto-protect</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Spencare will automatically protect money on each saving date.
+                    Spencare will automatically protect the planned amount in your reserve account on each preparation date.
                   </p>
                 </div>
               </div>
