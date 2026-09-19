@@ -19,7 +19,12 @@ export interface PlannedCommitmentRow {
   saving_cadence: RecurrenceInterval | null;
   saving_amount_minor: number | null;
   first_saving_date: string | null;
+  /** @deprecated use payment_account_id */
   funding_account_id: string | null;
+  /** The account from which this commitment will actually be paid (bank, cash, or credit_card). */
+  payment_account_id: string | null;
+  /** The bank/cash account where money is logically protected. Null for credit card commitments. */
+  reserve_account_id: string | null;
   tenure_type: CommitmentTenureType;
   tenure_payments: number | null;
   tenure_end_date: string | null;
@@ -48,7 +53,7 @@ export interface PlannedCommitmentOccurrenceRow {
 export interface PlannedCommitmentOccurrenceWithCommitment extends PlannedCommitmentOccurrenceRow {
   planned_commitments: Pick<
     PlannedCommitmentRow,
-    "name" | "category_id" | "payment_frequency" | "funding_account_id" | "deleted_at"
+    "name" | "category_id" | "payment_frequency" | "payment_account_id" | "reserve_account_id" | "funding_account_id" | "deleted_at"
   >;
 }
 
@@ -63,13 +68,16 @@ export interface CreatePlannedCommitmentPatch {
   savingCadence: RecurrenceInterval | null;
   savingAmountMinor: number | null;
   firstSavingDate: string | null;
-  fundingAccountId: string | null;
+  paymentAccountId: string | null;
+  reserveAccountId: string | null;
   tenureType: CommitmentTenureType;
   tenurePayments: number | null;
   tenureEndDate: string | null;
   notes: string | null;
   /** First occurrence due date; null for irregular frequency. */
   initialOccurrenceDate: string | null;
+  /** Amount already set aside by user before creating the commitment. Immediately sets reserved_minor on the first occurrence. Never creates a transaction. */
+  alreadyReservedMinor: number | null;
 }
 
 export interface UpdatePlannedCommitmentPatch {
@@ -82,7 +90,8 @@ export interface UpdatePlannedCommitmentPatch {
   savingCadence?: RecurrenceInterval | null;
   savingAmountMinor?: number | null;
   firstSavingDate?: string | null;
-  fundingAccountId?: string | null;
+  paymentAccountId?: string | null;
+  reserveAccountId?: string | null;
   tenureType?: CommitmentTenureType;
   tenurePayments?: number | null;
   tenureEndDate?: string | null;
@@ -91,13 +100,13 @@ export interface UpdatePlannedCommitmentPatch {
 }
 
 const COMMITMENT_COLUMNS =
-  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, first_saving_date, funding_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, created_at, updated_at, deleted_at";
+  "id, user_id, name, category_id, amount_minor, amount_is_estimate, currency, payment_frequency, next_payment_date, saving_cadence, saving_amount_minor, first_saving_date, funding_account_id, payment_account_id, reserve_account_id, tenure_type, tenure_payments, tenure_end_date, status, notes, migrated_from_bill_id, created_at, updated_at, deleted_at";
 
 const OCCURRENCE_COLUMNS =
   "id, commitment_id, user_id, due_date, amount_minor, reserved_minor, status, matched_transaction_id, paid_at, created_at, updated_at";
 
 const OCCURRENCE_WITH_COMMITMENT_COLUMNS =
-  `${OCCURRENCE_COLUMNS}, planned_commitments(name, category_id, payment_frequency, funding_account_id, deleted_at)`;
+  `${OCCURRENCE_COLUMNS}, planned_commitments(name, category_id, payment_frequency, payment_account_id, reserve_account_id, funding_account_id, deleted_at)`;
 
 export async function createPlannedCommitment(
   client: TypedSupabaseClient,
@@ -118,7 +127,10 @@ export async function createPlannedCommitment(
       saving_cadence: patch.savingCadence,
       saving_amount_minor: patch.savingAmountMinor,
       first_saving_date: patch.firstSavingDate,
-      funding_account_id: patch.fundingAccountId,
+      payment_account_id: patch.paymentAccountId,
+      reserve_account_id: patch.reserveAccountId,
+      // Keep funding_account_id in sync for backward compat with legacy queries.
+      funding_account_id: patch.paymentAccountId,
       tenure_type: patch.tenureType,
       tenure_payments: patch.tenurePayments,
       tenure_end_date: patch.tenureEndDate,
@@ -130,7 +142,21 @@ export async function createPlannedCommitment(
 
   // Create the first occurrence if a date is known.
   if (patch.initialOccurrenceDate) {
-    const reservedMinor = patch.savingAmountMinor == null ? patch.amountMinor : 0;
+    // Reserved minor:
+    //   - If no reserve account (credit card commitment): always 0
+    //   - If already_reserved_minor provided: use that (capped to amount_minor)
+    //   - If no saving cadence: full amount (reserved all at once)
+    //   - If has saving cadence: 0 (will grow via progressive reservations)
+    let reservedMinor = 0;
+    if (patch.reserveAccountId) {
+      if (patch.alreadyReservedMinor != null && patch.alreadyReservedMinor > 0) {
+        reservedMinor = Math.min(patch.amountMinor, patch.alreadyReservedMinor);
+      } else if (patch.savingAmountMinor == null) {
+        // No saving schedule means full amount reserved immediately
+        reservedMinor = patch.amountMinor;
+      }
+    }
+
     const { error: occError } = await client.from("planned_commitment_occurrences").insert({
       commitment_id: commitment.id,
       user_id: userId,
@@ -162,7 +188,11 @@ export async function updatePlannedCommitment(
       ...(patch.savingCadence !== undefined ? { saving_cadence: patch.savingCadence } : {}),
       ...(patch.savingAmountMinor !== undefined ? { saving_amount_minor: patch.savingAmountMinor } : {}),
       ...(patch.firstSavingDate !== undefined ? { first_saving_date: patch.firstSavingDate } : {}),
-      ...(patch.fundingAccountId !== undefined ? { funding_account_id: patch.fundingAccountId } : {}),
+      ...(patch.paymentAccountId !== undefined ? {
+        payment_account_id: patch.paymentAccountId,
+        funding_account_id: patch.paymentAccountId, // keep in sync
+      } : {}),
+      ...(patch.reserveAccountId !== undefined ? { reserve_account_id: patch.reserveAccountId } : {}),
       ...(patch.tenureType !== undefined ? { tenure_type: patch.tenureType } : {}),
       ...(patch.tenurePayments !== undefined ? { tenure_payments: patch.tenurePayments } : {}),
       ...(patch.tenureEndDate !== undefined ? { tenure_end_date: patch.tenureEndDate } : {}),
@@ -248,12 +278,11 @@ export async function listUpcomingOccurrences(
 
 /**
  * The Safe-to-Spend commitment reserve: sum of reserved_minor across all
- * 'upcoming' occurrences for active (non-deleted) commitments. This is a
- * LOGICAL reserve -- no money has moved. It reduces Safe-to-Spend to prevent
- * the user from accidentally spending cash earmarked for known future payments.
+ * 'upcoming' occurrences for active (non-deleted) commitments that have a
+ * reserve_account_id set (bank/cash accounts only).
  *
- * NULL handling: reserved_minor is not nullable (bigint not null in schema),
- * so no null-coalescing is needed here.
+ * Credit card commitments never have a reserve_account_id, so their
+ * reserved_minor is always 0 and correctly excluded from Safe-to-Spend.
  */
 export async function getCommitmentReservedTotal(
   client: TypedSupabaseClient,
@@ -261,13 +290,16 @@ export async function getCommitmentReservedTotal(
 ): Promise<number> {
   const { data, error } = await client
     .from("planned_commitment_occurrences")
-    .select("reserved_minor, planned_commitments(deleted_at)")
+    .select("reserved_minor, planned_commitments(deleted_at, reserve_account_id)")
     .eq("user_id", userId)
     .eq("status", "upcoming");
   if (error) throw error;
 
   return (data ?? [])
-    .filter((row) => (row.planned_commitments as { deleted_at: string | null } | null)?.deleted_at == null)
+    .filter((row) => {
+      const commitment = row.planned_commitments as { deleted_at: string | null; reserve_account_id: string | null } | null;
+      return commitment?.deleted_at == null && commitment?.reserve_account_id != null;
+    })
     .reduce((sum, row) => sum + (row.reserved_minor as number), 0);
 }
 

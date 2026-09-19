@@ -1387,7 +1387,9 @@ export type Database = {
           name: string
           next_payment_date: string
           notes: string | null
+          payment_account_id: string | null
           payment_frequency: Database["public"]["Enums"]["recurrence_interval"]
+          reserve_account_id: string | null
           saving_amount_minor: number | null
           saving_cadence: Database["public"]["Enums"]["recurrence_interval"] | null
           status: "active" | "paused" | "completed" | "cancelled"
@@ -1411,7 +1413,9 @@ export type Database = {
           name: string
           next_payment_date: string
           notes?: string | null
+          payment_account_id?: string | null
           payment_frequency: Database["public"]["Enums"]["recurrence_interval"]
+          reserve_account_id?: string | null
           saving_amount_minor?: number | null
           saving_cadence?: Database["public"]["Enums"]["recurrence_interval"] | null
           status?: "active" | "paused" | "completed" | "cancelled"
@@ -1435,7 +1439,9 @@ export type Database = {
           name?: string
           next_payment_date?: string
           notes?: string | null
+          payment_account_id?: string | null
           payment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
+          reserve_account_id?: string | null
           saving_amount_minor?: number | null
           saving_cadence?: Database["public"]["Enums"]["recurrence_interval"] | null
           status?: "active" | "paused" | "completed" | "cancelled"
@@ -1456,6 +1462,20 @@ export type Database = {
           {
             foreignKeyName: "planned_commitments_funding_account_id_fkey"
             columns: ["funding_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planned_commitments_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planned_commitments_reserve_account_id_fkey"
+            columns: ["reserve_account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["id"]

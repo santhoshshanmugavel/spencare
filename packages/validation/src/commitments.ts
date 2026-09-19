@@ -63,10 +63,24 @@ export const createCommitmentSchema = z
     currency: z.string().length(3).default("INR"),
     paymentFrequency: z.enum(PAYMENT_FREQUENCIES),
     nextPaymentDate: dateSchema,
+    // paymentAccountId: the account used for the actual payment (bank, cash, or credit card).
+    paymentAccountId: z.string().uuid("Invalid account.").nullable().optional(),
+    // reserveAccountId: the bank/cash account where money is logically protected.
+    // Null for credit card commitments (no cash reserve created).
+    reserveAccountId: z.string().uuid("Invalid account.").nullable().optional(),
+    // alreadyReservedMinor: money the user has already set aside before creating
+    // this commitment. Immediately sets reserved_minor on the first occurrence.
+    // No transaction is created. Must be <= amountMinor.
+    alreadyReservedMinor: z
+      .number({ error: "Enter a valid amount." })
+      .int("Amount must be in minor units.")
+      .nonnegative("Cannot be negative.")
+      .max(1_000_000_000_000, "Amount is too large.")
+      .nullable()
+      .optional(),
     savingCadence: z.enum(SAVING_CADENCES).nullable().optional(),
     savingAmountMinor: amountSchema.nullable().optional(),
     firstSavingDate: dateSchema.nullable().optional(),
-    fundingAccountId: z.string().uuid("Invalid account.").nullable().optional(),
     tenureType: z.enum(["none", "n_payments", "end_date"]).default("none"),
     tenurePayments: z.number().int().positive().nullable().optional(),
     tenureEndDate: dateSchema.nullable().optional(),
@@ -101,6 +115,22 @@ export const createCommitmentSchema = z
         path: ["firstSavingDate"],
       });
     }
+    if (data.alreadyReservedMinor != null && data.alreadyReservedMinor > data.amountMinor) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Amount already set aside cannot exceed the total payment amount.",
+        path: ["alreadyReservedMinor"],
+      });
+    }
+    // If a reserve account is set, saving cadence fields are relevant.
+    // If no reserve account (credit card), saving cadence should not be set.
+    if (!data.reserveAccountId && data.savingCadence) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A saving schedule requires a reserve account.",
+        path: ["savingCadence"],
+      });
+    }
   });
 
 export type CreateCommitmentInput = z.infer<typeof createCommitmentSchema>;
@@ -112,10 +142,11 @@ export const updateCommitmentSchema = z.object({
   amountIsEstimate: z.boolean().optional(),
   paymentFrequency: z.enum(PAYMENT_FREQUENCIES).optional(),
   nextPaymentDate: dateSchema.optional(),
+  paymentAccountId: z.string().uuid().nullable().optional(),
+  reserveAccountId: z.string().uuid().nullable().optional(),
   savingCadence: z.enum(SAVING_CADENCES).nullable().optional(),
   savingAmountMinor: amountSchema.nullable().optional(),
   firstSavingDate: dateSchema.nullable().optional(),
-  fundingAccountId: z.string().uuid().nullable().optional(),
   tenureType: z.enum(["none", "n_payments", "end_date"]).optional(),
   tenurePayments: z.number().int().positive().nullable().optional(),
   tenureEndDate: dateSchema.nullable().optional(),

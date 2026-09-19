@@ -403,6 +403,8 @@ export {
   type PlannedCommitmentRow,
   type PlannedCommitmentOccurrenceRow,
   type PlannedCommitmentOccurrenceWithCommitment,
+  type CreatePlannedCommitmentPatch,
+  type UpdatePlannedCommitmentPatch,
 } from "./queries/plannedCommitments.js";
 export {
   listAllLoans,

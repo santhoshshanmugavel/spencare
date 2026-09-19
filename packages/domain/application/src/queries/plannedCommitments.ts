@@ -23,6 +23,8 @@ export type {
   PlannedCommitmentRow,
   PlannedCommitmentOccurrenceRow,
   PlannedCommitmentOccurrenceWithCommitment,
+  CreatePlannedCommitmentPatch,
+  UpdatePlannedCommitmentPatch,
 };
 
 export async function getPlannedCommitmentById(

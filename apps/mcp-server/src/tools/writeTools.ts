@@ -832,8 +832,11 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
         const privacyMode = await isPrivacyModeEnabled(ctx);
         const amountText = describeAmountForProvider(input.amountMinor, input.currency ?? "INR", privacyMode);
         const accounts = await listAccounts(ctx);
-        const fundingAccName = input.fundingAccountId
-          ? (accounts.find((a) => a.id === input.fundingAccountId)?.name ?? "the selected account")
+        const paymentAccName = input.paymentAccountId
+          ? (accounts.find((a) => a.id === input.paymentAccountId)?.name ?? "selected account")
+          : null;
+        const reserveAccName = input.reserveAccountId
+          ? (accounts.find((a) => a.id === input.reserveAccountId)?.name ?? "selected account")
           : null;
         const fields: ProposalPreviewField[] = [
           { label: "Name", value: input.name },
@@ -841,7 +844,12 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
           { label: "Payment frequency", value: input.paymentFrequency },
           { label: "Next payment", value: input.nextPaymentDate },
         ];
-        if (fundingAccName) fields.push({ label: "Funding account", value: fundingAccName });
+        if (paymentAccName) fields.push({ label: "Payment account", value: paymentAccName });
+        if (reserveAccName) fields.push({ label: "Reserve account", value: reserveAccName });
+        if (input.alreadyReservedMinor) {
+          const alreadyText = describeAmountForProvider(input.alreadyReservedMinor, input.currency ?? "INR", privacyMode);
+          fields.push({ label: "Already protected", value: alreadyText });
+        }
         if (input.savingCadence) {
           const saveText = input.savingAmountMinor ? describeAmountForProvider(input.savingAmountMinor, input.currency ?? "INR", privacyMode) : "?";
           fields.push({ label: "Saving schedule", value: `${saveText} ${input.savingCadence} from ${input.firstSavingDate ?? "?"}` });
