@@ -2,45 +2,28 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, CreditCard, Landmark, MoreHorizontal, Pause, Pencil, PiggyBank, Play, Plus, ShieldCheck, Trash2, Zap } from "lucide-react";
+import { CalendarClock, CreditCard, Landmark, PiggyBank, Plus, ShieldCheck, Target, Zap } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import type {
-  PlannedCommitmentOccurrenceWithCommitment,
   PlannedCommitmentRow,
-  BillPredictionWithDefinition,
   LoanRow,
   AccountRow,
   CategoryRow,
+  UpcomingEvent,
 } from "@spencare/domain-application";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { EmptyState } from "@/components/spencare/empty-state";
-import { toastConfirmed, toastError } from "@/lib/toast";
 import { CommitmentSheet } from "./commitment-sheet";
 import { LoanSheet } from "./loan-sheet";
 import { CommitmentActions } from "./commitment-actions";
 import { PrepProtectActions } from "./prep-protect-actions";
-import { deleteLoanAction, deleteCommitmentAction, pauseCommitmentAction, resumeCommitmentAction } from "./actions";
+import { ProjectedItemActions } from "./projected-item-actions";
+import { LoanActions } from "./loan-actions";
 import { minorUnitsToDisplay } from "@/lib/money-input";
-import type { PrepEvent, ProjectedOccurrence } from "./page";
 
 const CURRENCY = "INR";
 
@@ -91,9 +74,9 @@ function ReserveLabel({ reservedMinor, amountMinor }: { reservedMinor: number; a
 // ── Month navigation ──────────────────────────────────────────────────────────
 
 interface MonthKey {
-  key: string; // "YYYY-MM"
-  label: string; // "Sep 2026"
-  shortLabel: string; // "Sep"
+  key: string;
+  label: string;
+  shortLabel: string;
 }
 
 function buildMonths(fromDate: Date, count: number): MonthKey[] {
@@ -112,168 +95,21 @@ function isoToMonthKey(iso: string): string {
   return iso.slice(0, 7);
 }
 
-// ── Loan actions ──────────────────────────────────────────────────────────────
-
-function LoanActions({
-  loan,
-  accounts,
-  onChanged,
-  onEdit,
-}: {
-  loan: LoanRow;
-  accounts: AccountRow[];
-  onChanged: () => void;
-  onEdit: (loan: LoanRow) => void;
-}) {
-  const [deleting, setDeleting] = useState(false);
-  async function handleDelete() {
-    if (!confirm(`Delete "${loan.name}"? This cannot be undone.`)) return;
-    setDeleting(true);
-    await deleteLoanAction(loan.id);
-    onChanged();
-    setDeleting(false);
-  }
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-8" aria-label="Loan actions">
-          <MoreHorizontal className="size-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => onEdit(loan)}>Edit loan</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={handleDelete}
-          disabled={deleting}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="size-4 mr-2" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-// ── Projected item actions (commitment-level: Edit / Pause / Delete) ─────────
-
-function ProjectedItemActions({
-  commitment,
-  accounts,
-  categories,
-  onChanged,
-}: {
-  commitment: PlannedCommitmentRow;
-  accounts: AccountRow[];
-  categories: CategoryRow[];
-  onChanged: () => void;
-}) {
-  const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const isPaused = commitment.status === "paused";
-
-  async function handlePauseResume() {
-    setLoading(true);
-    const result = isPaused
-      ? await resumeCommitmentAction(commitment.id)
-      : await pauseCommitmentAction(commitment.id);
-    setLoading(false);
-    if (!result.ok) { toastError(result.error.message); return; }
-    toastConfirmed(isPaused ? "Commitment resumed." : "Commitment paused.");
-    onChanged();
-  }
-
-  async function handleDelete() {
-    setLoading(true);
-    const result = await deleteCommitmentAction(commitment.id);
-    setLoading(false);
-    if (!result.ok) { toastError(result.error.message); return; }
-    toastConfirmed("Commitment deleted.");
-    setDeleteOpen(false);
-    onChanged();
-  }
-
-  return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label={`Actions for ${commitment.name}`}>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-            <Pencil className="size-4 mr-2" />
-            Edit commitment
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={handlePauseResume} disabled={loading}>
-            {isPaused ? <Play className="size-4 mr-2" /> : <Pause className="size-4 mr-2" />}
-            {isPaused ? "Resume" : "Pause"}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={() => setDeleteOpen(true)}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="size-4 mr-2" />
-            Delete commitment
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete commitment</DialogTitle>
-            <DialogDescription>
-              This will delete {commitment.name} and stop all future payments from being scheduled.
-              Past transactions remain. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={loading}>
-              {loading ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <CommitmentSheet
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        onSaved={() => { setEditOpen(false); onChanged(); }}
-        accounts={accounts}
-        categories={categories}
-        existing={commitment}
-      />
-    </>
-  );
-}
-
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export function UpcomingDashboard({
-  commitmentOccurrences,
+  events,
   commitments,
-  billPredictions,
   loans,
   accounts,
   categories,
-  prepEvents,
-  projectedOccurrences,
   masked,
 }: {
-  commitmentOccurrences: PlannedCommitmentOccurrenceWithCommitment[];
+  events: UpcomingEvent[];
   commitments: PlannedCommitmentRow[];
-  billPredictions: BillPredictionWithDefinition[];
   loans: LoanRow[];
   accounts: AccountRow[];
   categories: CategoryRow[];
-  prepEvents: PrepEvent[];
-  projectedOccurrences: ProjectedOccurrence[];
   masked: boolean;
 }) {
   const router = useRouter();
@@ -281,62 +117,60 @@ export function UpcomingDashboard({
   const [commitmentSheetOpen, setCommitmentSheetOpen] = useState(false);
   const [loanSheetOpen, setLoanSheetOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<LoanRow | undefined>(undefined);
-  const [showPredictions, setShowPredictions] = useState(false);
 
   const commitmentById = new Map(commitments.map((c) => [c.id, c]));
+  const loanById = new Map(loans.map((l) => [l.id, l]));
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const categoryById = new Map(categories.map((c) => [c.id, c]));
-
-  const upcomingBills = billPredictions.filter((p) => p.status === "open" || p.status === "overdue");
-  const activeLoans = loans.filter((l) => l.status === "active" && l.next_payment_date != null);
+  const bankCashAccounts = accounts.filter((a) => (a.type === "bank" || a.type === "cash") && !a.is_archived);
 
   function refresh() {
     startTransition(() => router.refresh());
   }
 
-  type Item =
-    | { kind: "commitment"; occ: PlannedCommitmentOccurrenceWithCommitment }
-    | { kind: "loan"; loan: LoanRow }
-    | { kind: "prediction"; pred: BillPredictionWithDefinition }
-    | { kind: "preparation"; ev: PrepEvent }
-    | { kind: "projected"; proj: ProjectedOccurrence };
-
-  function itemDate(item: Item): string {
-    if (item.kind === "commitment") return item.occ.due_date;
-    if (item.kind === "loan") return item.loan.next_payment_date!;
-    if (item.kind === "preparation") return item.ev.date;
-    if (item.kind === "projected") return item.proj.date;
-    return item.pred.expected_date;
-  }
-
-  const allItems: Item[] = [
-    ...commitmentOccurrences.map((occ) => ({ kind: "commitment" as const, occ })),
-    ...activeLoans.map((loan) => ({ kind: "loan" as const, loan })),
-    ...prepEvents.map((ev) => ({ kind: "preparation" as const, ev })),
-    ...projectedOccurrences.map((proj) => ({ kind: "projected" as const, proj })),
-    ...(showPredictions ? upcomingBills.map((pred) => ({ kind: "prediction" as const, pred })) : []),
-  ];
-
   // Month navigation: current month + next 11 months (12 total)
   const today = new Date();
   const months = buildMonths(today, 12);
-  const currentMonthKey = months[0].key;
+  const currentMonthKey = months[0]!.key;
   const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
 
-  // Count items per month for the tab badges
+  // Count events per month for the tab badges
   const countByMonth = new Map<string, number>();
-  for (const item of allItems) {
-    const mk = isoToMonthKey(itemDate(item));
+  for (const ev of events) {
+    const mk = isoToMonthKey(ev.date);
     countByMonth.set(mk, (countByMonth.get(mk) ?? 0) + 1);
   }
 
-  // Items for the selected month, sorted by date
-  const selectedItems = allItems
-    .filter((i) => isoToMonthKey(itemDate(i)) === selectedMonthKey)
-    .sort((a, b) => itemDate(a).localeCompare(itemDate(b)));
+  // Events for the selected month, sorted by date
+  const selectedEvents = events
+    .filter((ev) => isoToMonthKey(ev.date) === selectedMonthKey)
+    .sort((a, b) => a.date.localeCompare(b.date));
 
-  const predictionCount = upcomingBills.length;
-  const hasAnything = allItems.length > 0;
+  const hasAnything = events.length > 0;
+
+  // Build a lookup: commitmentId+preparationForDate -> payment event (for PrepProtectActions)
+  const paymentEventByKey = new Map<string, UpcomingEvent>();
+  for (const ev of events) {
+    if (ev.kind === "commitment_payment") {
+      paymentEventByKey.set(`${ev.sourceId}:${ev.date}`, ev);
+    }
+  }
+
+  // Month summary
+  const monthSummary = (() => {
+    let paymentsDue = 0;
+    let toProtect = 0;
+    for (const ev of selectedEvents) {
+      if (ev.kind === "commitment_payment" || ev.kind === "loan") {
+        paymentsDue += ev.amountMinor;
+      }
+      if (ev.kind === "commitment_payment" && ev.reserveAccountId) {
+        const shortfall = ev.amountMinor - (ev.reservedMinor ?? 0);
+        if (shortfall > 0) toProtect += shortfall;
+      }
+    }
+    return { paymentsDue, toProtect };
+  })();
 
   return (
     <div className="space-y-6">
@@ -396,50 +230,32 @@ export function UpcomingDashboard({
       </div>
 
       {/* Month summary */}
-      {selectedItems.length > 0 && (() => {
-        let paymentsDue = 0;
-        let toProtect = 0;
-        for (const item of selectedItems) {
-          if (item.kind === "commitment") {
-            paymentsDue += item.occ.amount_minor;
-            if (item.occ.planned_commitments.reserve_account_id) {
-              const shortfall = item.occ.amount_minor - item.occ.reserved_minor;
-              if (shortfall > 0) toProtect += shortfall;
-            }
-          } else if (item.kind === "projected") {
-            paymentsDue += item.proj.amountMinor;
-          } else if (item.kind === "loan") {
-            paymentsDue += item.loan.installment_amount_minor;
-          }
-        }
-        if (paymentsDue === 0 && toProtect === 0) return null;
-        return (
-          <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/40 px-4 py-3 text-sm">
-            {paymentsDue > 0 && (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-muted-foreground">Payments due</span>
-                <Money
-                  value={DomainMoney.fromMinorUnits(BigInt(paymentsDue), CURRENCY)}
-                  masked={masked}
-                  size="numeric"
-                  className="text-sm font-semibold"
-                />
-              </div>
-            )}
-            {toProtect > 0 && (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-muted-foreground">Still to protect</span>
-                <Money
-                  value={DomainMoney.fromMinorUnits(BigInt(toProtect), CURRENCY)}
-                  masked={masked}
-                  size="numeric"
-                  className="text-sm font-semibold text-warning"
-                />
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      {selectedEvents.length > 0 && (monthSummary.paymentsDue > 0 || monthSummary.toProtect > 0) && (
+        <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/40 px-4 py-3 text-sm">
+          {monthSummary.paymentsDue > 0 && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">Payments due</span>
+              <Money
+                value={DomainMoney.fromMinorUnits(BigInt(monthSummary.paymentsDue), CURRENCY)}
+                masked={masked}
+                size="numeric"
+                className="text-sm font-semibold"
+              />
+            </div>
+          )}
+          {monthSummary.toProtect > 0 && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">Still to protect</span>
+              <Money
+                value={DomainMoney.fromMinorUnits(BigInt(monthSummary.toProtect), CURRENCY)}
+                masked={masked}
+                size="numeric"
+                className="text-sm font-semibold text-warning"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {!hasAnything ? (
         <EmptyState
@@ -447,7 +263,7 @@ export function UpcomingDashboard({
           title="Nothing upcoming"
           description="Add a planned commitment or loan to track what is coming and protect money in Safe to Spend."
         />
-      ) : selectedItems.length === 0 ? (
+      ) : selectedEvents.length === 0 ? (
         <div className="py-12 text-center">
           <p className="text-sm text-muted-foreground">Nothing due in {months.find((m) => m.key === selectedMonthKey)?.label ?? selectedMonthKey}.</p>
         </div>
@@ -455,38 +271,64 @@ export function UpcomingDashboard({
         <div className="space-y-3">
           <Card>
             <CardContent className="p-0">
-              {selectedItems.map((item) => {
-                if (item.kind === "commitment") {
-                  const occ = item.occ;
-                  const commitment = commitmentById.get(occ.commitment_id);
-                  const paymentAccount = occ.planned_commitments.payment_account_id
-                    ? accountById.get(occ.planned_commitments.payment_account_id)
-                    : null;
+              {selectedEvents.map((ev) => {
+                if (ev.kind === "commitment_payment") {
+                  const commitment = commitmentById.get(ev.sourceId);
+                  const paymentAccount = ev.paymentAccountId ? accountById.get(ev.paymentAccountId) : null;
                   const isCredit = paymentAccount?.type === "credit_card";
-                  const category = occ.planned_commitments.category_id
-                    ? categoryById.get(occ.planned_commitments.category_id)
-                    : null;
+                  const category = ev.categoryId ? categoryById.get(ev.categoryId) : null;
                   const CategoryIcon = (category ? getCategoryIcon(category.icon) : null) ?? (isCredit ? CreditCard : CalendarClock);
+
+                  const occurrenceId = ev.occurrenceId;
+                  const reservedMinor = ev.reservedMinor ?? 0;
+
+                  // Build a minimal occ shape for CommitmentActions (persisted events only).
+                  // CommitmentActions uses: occ.id, occ.amount_minor, occ.reserved_minor, occ.due_date.
+                  // planned_commitments is required by the type but CommitmentActions uses the
+                  // separate `commitment` prop instead.
+                  const fakeOcc = occurrenceId && commitment ? ({
+                    id: occurrenceId,
+                    commitment_id: ev.sourceId,
+                    due_date: ev.date,
+                    amount_minor: ev.amountMinor,
+                    reserved_minor: reservedMinor,
+                    status: ev.occurrenceStatus ?? "upcoming",
+                    planned_commitments: {
+                      name: commitment.name,
+                      category_id: commitment.category_id,
+                      payment_frequency: commitment.payment_frequency,
+                      payment_account_id: commitment.payment_account_id,
+                      reserve_account_id: commitment.reserve_account_id,
+                      funding_account_id: commitment.funding_account_id ?? null,
+                      deleted_at: commitment.deleted_at,
+                    },
+                    user_id: "",
+                    matched_transaction_id: null,
+                    paid_at: null,
+                    created_at: "",
+                    updated_at: "",
+                  } as unknown as Parameters<typeof CommitmentActions>[0]["occ"]) : null;
+
                   return (
                     <ListRow
-                      key={`c-${occ.id}`}
+                      key={ev.id}
                       icon={<CategoryIcon className="size-4 text-muted-foreground" />}
-                      title={occ.planned_commitments.name}
+                      title={ev.title}
                       subtitle={
                         <span className="flex flex-wrap items-center gap-2">
-                          <DueDateLabel isoDate={occ.due_date} />
+                          <DueDateLabel isoDate={ev.date} />
                           {category && (
                             <span className="text-xs text-muted-foreground">{category.name}</span>
                           )}
-                          {occ.planned_commitments.reserve_account_id ? (
-                            <ReserveLabel reservedMinor={occ.reserved_minor} amountMinor={occ.amount_minor} />
+                          {ev.reserveAccountId ? (
+                            <ReserveLabel reservedMinor={reservedMinor} amountMinor={ev.amountMinor} />
                           ) : isCredit ? (
                             <span className="text-xs text-muted-foreground">Credit card</span>
                           ) : null}
                           {paymentAccount && (
                             <span className="text-xs text-muted-foreground">via {paymentAccount.name}</span>
                           )}
-                          {commitment?.auto_pay_enabled && occ.status === "upcoming" && (
+                          {ev.autoPayEnabled && ev.occurrenceStatus === "upcoming" && (
                             <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-success/10 text-success">
                               <Zap className="size-3 mr-0.5" />
                               Auto-pay
@@ -497,48 +339,56 @@ export function UpcomingDashboard({
                       trailing={
                         <div className="flex items-center gap-1">
                           <Money
-                            value={DomainMoney.fromMinorUnits(BigInt(occ.amount_minor), CURRENCY)}
+                            value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), CURRENCY)}
                             masked={masked}
                             size="numeric"
                           />
-                          {commitment && (
+                          {fakeOcc && commitment ? (
                             <CommitmentActions
-                              occ={occ}
+                              occ={fakeOcc}
                               commitment={commitment}
                               accounts={accounts}
                               categories={categories}
                               onChanged={refresh}
                             />
-                          )}
+                          ) : commitment ? (
+                            <ProjectedItemActions
+                              commitment={commitment}
+                              accounts={accounts}
+                              categories={categories}
+                              onChanged={refresh}
+                            />
+                          ) : null}
                         </div>
                       }
                     />
                   );
                 }
 
-                if (item.kind === "preparation") {
-                  const ev = item.ev;
-                  const occ = commitmentOccurrences.find((o) => o.commitment_id === ev.commitment.id);
-                  const category = ev.commitment.category_id ? categoryById.get(ev.commitment.category_id) : null;
+                if (ev.kind === "commitment_preparation") {
+                  const commitment = commitmentById.get(ev.sourceId);
+                  const category = ev.categoryId ? categoryById.get(ev.categoryId) : null;
                   const PrepIcon = (category ? getCategoryIcon(category.icon) : null) ?? PiggyBank;
-                  const paymentDate = formatDate(occ?.due_date ?? ev.date);
 
-                  const reserveAccountId = ev.commitment.reserve_account_id;
+                  const paymentDate = ev.preparationForDate ? formatDate(ev.preparationForDate) : null;
+                  const occurrenceId = ev.preparationForOccurrenceId;
+                  const reserveAccountId = ev.reserveAccountId;
                   const reserveAccount = reserveAccountId ? (accountById.get(reserveAccountId) ?? null) : null;
-                  const bankCashAccounts = accounts.filter(
-                    (a) => (a.type === "bank" || a.type === "cash") && !a.is_archived,
-                  );
 
-                  const currentReserved = occ?.reserved_minor ?? 0;
-                  const totalNeeded = occ?.amount_minor ?? ev.amountMinor;
+                  // Find the corresponding payment event to get reserved/total amounts
+                  const paymentEv = ev.preparationForDate
+                    ? paymentEventByKey.get(`${ev.sourceId}:${ev.preparationForDate}`)
+                    : undefined;
+                  const currentReserved = paymentEv?.reservedMinor ?? 0;
+                  const totalNeeded = paymentEv?.amountMinor ?? ev.amountMinor;
 
                   return (
                     <ListRow
-                      key={`prep-${ev.commitment.id}-${ev.date}`}
+                      key={ev.id}
                       icon={<PrepIcon className="size-4 text-muted-foreground opacity-60" />}
                       title={
                         <span className="flex items-center gap-1.5">
-                          <span>Prepare for {ev.commitment.name}</span>
+                          <span>{ev.title}</span>
                           <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
                             <ShieldCheck className="size-3 mr-0.5" />
                             Saving
@@ -548,7 +398,9 @@ export function UpcomingDashboard({
                       subtitle={
                         <span className="flex flex-wrap items-center gap-2">
                           <DueDateLabel isoDate={ev.date} />
-                          <span className="text-xs text-muted-foreground">toward {paymentDate} payment</span>
+                          {paymentDate && (
+                            <span className="text-xs text-muted-foreground">toward {paymentDate} payment</span>
+                          )}
                           {currentReserved > 0 && (
                             <span className="text-xs text-muted-foreground">
                               {minorUnitsToDisplay(currentReserved, CURRENCY)} / {minorUnitsToDisplay(totalNeeded, CURRENCY)} protected
@@ -564,14 +416,14 @@ export function UpcomingDashboard({
                             size="numeric"
                             className="text-muted-foreground"
                           />
-                          {occ && (
+                          {occurrenceId && commitment && (
                             <PrepProtectActions
-                              occurrenceId={occ.id}
-                              commitmentId={ev.commitment.id}
+                              occurrenceId={occurrenceId}
+                              commitmentId={ev.sourceId}
                               occurrenceReservedMinor={currentReserved}
                               occurrenceAmountMinor={totalNeeded}
                               savingAmountMinor={ev.amountMinor}
-                              commitment={ev.commitment}
+                              commitment={commitment}
                               reserveAccount={reserveAccount}
                               bankCashAccounts={bankCashAccounts}
                               onChanged={refresh}
@@ -583,50 +435,45 @@ export function UpcomingDashboard({
                   );
                 }
 
-                if (item.kind === "projected") {
-                  const { proj } = item;
-                  const category = proj.commitment.category_id ? categoryById.get(proj.commitment.category_id) : null;
-                  const CategoryIcon = (category ? getCategoryIcon(category.icon) : null) ?? CalendarClock;
+                if (ev.kind === "goal_contribution") {
                   return (
                     <ListRow
-                      key={`proj-${proj.commitment.id}-${proj.date}`}
-                      icon={<CategoryIcon className="size-4 text-muted-foreground" />}
-                      title={proj.commitment.name}
-                      subtitle={<DueDateLabel isoDate={proj.date} />}
+                      key={ev.id}
+                      icon={<Target className="size-4 text-muted-foreground" />}
+                      title={ev.title}
+                      subtitle={
+                        <span className="flex items-center gap-2">
+                          <DueDateLabel isoDate={ev.date} />
+                          {ev.subtitle && (
+                            <span className="text-xs text-muted-foreground">{ev.subtitle}</span>
+                          )}
+                        </span>
+                      }
                       trailing={
-                        <div className="flex items-center gap-1">
-                          <Money
-                            value={DomainMoney.fromMinorUnits(BigInt(proj.amountMinor), CURRENCY)}
-                            masked={masked}
-                            size="numeric"
-                          />
-                          <ProjectedItemActions
-                            commitment={proj.commitment}
-                            accounts={accounts}
-                            categories={categories}
-                            onChanged={refresh}
-                          />
-                        </div>
+                        <Money
+                          value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), CURRENCY)}
+                          masked={masked}
+                          size="numeric"
+                          className="text-muted-foreground"
+                        />
                       }
                     />
                   );
                 }
 
-                if (item.kind === "loan") {
-                  const loan = item.loan;
-                  const paymentAccount = loan.payment_account_id
-                    ? accountById.get(loan.payment_account_id)
-                    : null;
+                if (ev.kind === "loan") {
+                  const loan = loanById.get(ev.sourceId);
+                  const paymentAccount = loan?.payment_account_id ? accountById.get(loan.payment_account_id) : null;
                   return (
                     <ListRow
-                      key={`l-${loan.id}`}
+                      key={ev.id}
                       icon={<Landmark className="size-4 text-muted-foreground" />}
-                      title={loan.name}
+                      title={ev.title}
                       subtitle={
                         <span className="flex items-center gap-2">
-                          <DueDateLabel isoDate={loan.next_payment_date!} />
-                          {loan.lender_name && (
-                            <span className="text-xs text-muted-foreground">{loan.lender_name}</span>
+                          <DueDateLabel isoDate={ev.date} />
+                          {ev.subtitle && (
+                            <span className="text-xs text-muted-foreground">{ev.subtitle}</span>
                           )}
                           {paymentAccount && (
                             <span className="text-xs text-muted-foreground">via {paymentAccount.name}</span>
@@ -636,67 +483,59 @@ export function UpcomingDashboard({
                       trailing={
                         <div className="flex items-center gap-1">
                           <Money
-                            value={DomainMoney.fromMinorUnits(
-                              BigInt(loan.installment_amount_minor),
-                              loan.currency,
-                            )}
+                            value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), ev.currency)}
                             masked={masked}
                             size="numeric"
                           />
-                          <LoanActions
-                            loan={loan}
-                            accounts={accounts}
-                            onChanged={refresh}
-                            onEdit={(l) => { setEditingLoan(l); setLoanSheetOpen(true); }}
-                          />
+                          {loan && (
+                            <LoanActions
+                              loan={loan}
+                              accounts={accounts}
+                              onChanged={refresh}
+                              onEdit={(l) => { setEditingLoan(l); setLoanSheetOpen(true); }}
+                            />
+                          )}
                         </div>
                       }
                     />
                   );
                 }
 
-                const pred = item.pred;
-                return (
-                  <ListRow
-                    key={`p-${pred.id}`}
-                    icon={<CalendarClock className="size-4 text-muted-foreground" />}
-                    title={pred.bill_definitions.merchant_pattern}
-                    subtitle={
-                      <span className="flex items-center gap-2">
-                        <DueDateLabel isoDate={pred.expected_date} />
-                        <span className="text-xs text-muted-foreground italic">Spensa prediction</span>
-                      </span>
-                    }
-                    trailing={
-                      pred.expected_amount_minor != null ? (
-                        <Money
-                          value={DomainMoney.fromMinorUnits(BigInt(pred.expected_amount_minor), CURRENCY)}
-                          masked={masked}
-                          size="numeric"
-                        />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Amount varies</span>
-                      )
-                    }
-                  />
-                );
+                if (ev.kind === "credit_card_statement" || ev.kind === "credit_card_payment") {
+                  const isCcPayment = ev.kind === "credit_card_payment";
+                  return (
+                    <ListRow
+                      key={ev.id}
+                      icon={<CreditCard className="size-4 text-muted-foreground" />}
+                      title={ev.title}
+                      subtitle={
+                        <span className="flex items-center gap-2">
+                          <DueDateLabel isoDate={ev.date} />
+                          {ev.subtitle && (
+                            <span className="text-xs text-muted-foreground">{ev.subtitle}</span>
+                          )}
+                        </span>
+                      }
+                      trailing={
+                        ev.amountMinor > 0 ? (
+                          <Money
+                            value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), ev.currency)}
+                            masked={masked}
+                            size="numeric"
+                            className={isCcPayment ? undefined : "text-muted-foreground"}
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Amount varies</span>
+                        )
+                      }
+                    />
+                  );
+                }
+
+                return null;
               })}
             </CardContent>
           </Card>
-
-          {predictionCount > 0 && (
-            <div className="px-1">
-              <button
-                type="button"
-                className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-                onClick={() => setShowPredictions((v) => !v)}
-              >
-                {showPredictions
-                  ? "Hide Spensa predictions"
-                  : `Show ${predictionCount} Spensa prediction${predictionCount === 1 ? "" : "s"}`}
-              </button>
-            </div>
-          )}
         </div>
       )}
 
