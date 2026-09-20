@@ -66,7 +66,7 @@ async function runChecksForUser(
   const { data: profile } = await serviceRoleSupabase
     .from("profiles")
     .select("timezone")
-    .eq("id", userId)
+    .eq("user_id", userId)
     .maybeSingle();
   const userTimezone = profile?.timezone ?? "UTC";
   const todayIso = new Intl.DateTimeFormat("en-CA", {
