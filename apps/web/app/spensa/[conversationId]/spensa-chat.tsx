@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Loader2, AlertTriangle, Sparkles, MessageSquarePlus, Send, Bot, Mic, MicOff, Copy, Check, RefreshCw } from "lucide-react";
+import { Loader2, AlertTriangle, Sparkles, MessageSquarePlus, Send, Bot, Mic, MicOff, Copy, Check, RefreshCw, Headphones, HeadphoneOff } from "lucide-react";
 import type { AccountRow, CategoryRow, GoalRow } from "@spencare/domain-application";
 import type { AiConversationRow, AiMessageRow } from "@spencare/ai";
 import { Button } from "@/components/ui/button";
@@ -76,8 +76,10 @@ export function SpensaChat({
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [isPending, startTransition] = useTransition();
   const [isListening, setIsListening] = useState(false);
+  const [voiceAgentActive, setVoiceAgentActive] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const voiceAgentRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const starterSentRef = useRef(false);
@@ -163,6 +165,9 @@ export function SpensaChat({
           if (completedText.trim()) {
             setMessages((m) => [...m, { id: event.messageId as string, role: "assistant", kind: "text", text: completedText }]);
             setQuickReplies(generateQuickReplies(completedText));
+            if (voiceAgentRef.current) {
+              speakText(completedText, () => startVoiceAgentListen());
+            }
           }
           finalText = "";
           setStreamingText("");
@@ -197,6 +202,64 @@ export function SpensaChat({
     if (typeof window === "undefined") return null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition ?? null;
+  }
+
+  function hasTTS() {
+    return typeof window !== "undefined" && "speechSynthesis" in window;
+  }
+
+  function speakText(text: string, onEnd?: () => void) {
+    if (!hasTTS()) { onEnd?.(); return; }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "en-IN";
+    utter.rate = 1.05;
+    utter.onend = () => onEnd?.();
+    utter.onerror = () => onEnd?.();
+    window.speechSynthesis.speak(utter);
+  }
+
+  function stopTTS() {
+    if (hasTTS()) window.speechSynthesis.cancel();
+  }
+
+  function startVoiceAgentListen() {
+    const SR = getSpeechRecognitionClass();
+    if (!SR || !voiceAgentRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const recognition = new SR();
+    recognitionRef.current = recognition;
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (event: { results: { [0]: { [0]: { transcript: string } } } }) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? "";
+      if (transcript && voiceAgentRef.current) {
+        setIsListening(false);
+        void handleSend(transcript);
+      }
+    };
+    recognition.onend = () => {
+      if (voiceAgentRef.current) setIsListening(false);
+    };
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.start();
+    setIsListening(true);
+  }
+
+  function toggleVoiceAgent() {
+    if (voiceAgentActive) {
+      voiceAgentRef.current = false;
+      setVoiceAgentActive(false);
+      stopTTS();
+      if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
+      setIsListening(false);
+    } else {
+      voiceAgentRef.current = true;
+      setVoiceAgentActive(true);
+    }
   }
 
   function handleVoiceToggle() {
@@ -362,17 +425,31 @@ export function SpensaChat({
                 disabled={isStreaming}
               />
             </div>
+            {getSpeechRecognitionClass() && hasTTS() ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={toggleVoiceAgent}
+                disabled={isStreaming && !voiceAgentActive}
+                className={cn("size-12 shrink-0 rounded-xl", voiceAgentActive && "text-primary bg-primary/10")}
+                aria-label={voiceAgentActive ? "Exit voice agent mode" : "Voice agent mode"}
+                title={voiceAgentActive ? "Exit voice agent mode" : "Voice agent mode: Spensa speaks and listens continuously"}
+              >
+                {voiceAgentActive ? <HeadphoneOff className="size-4" /> : <Headphones className="size-4" />}
+              </Button>
+            ) : null}
             {getSpeechRecognitionClass() ? (
               <Button
                 type="button"
                 size="icon"
                 variant="ghost"
                 onClick={handleVoiceToggle}
-                disabled={isStreaming}
-                className={cn("size-12 shrink-0 rounded-xl", isListening && "text-destructive")}
+                disabled={isStreaming || voiceAgentActive}
+                className={cn("size-12 shrink-0 rounded-xl", isListening && !voiceAgentActive && "text-destructive")}
                 aria-label={isListening ? "Stop recording" : "Voice input"}
               >
-                {isListening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+                {isListening && !voiceAgentActive ? <MicOff className="size-4" /> : <Mic className="size-4" />}
               </Button>
             ) : null}
             <Button

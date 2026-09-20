@@ -142,7 +142,9 @@ export {
   listAccounts,
   getAccount,
   getAccountBalance,
+  getCreditCardStatementSummary,
   type AccountBalance,
+  type CreditCardStatementSummary,
 } from "./queries/accounts.js";
 export {
   listTransactions,

@@ -58,11 +58,26 @@ async function runChecksForUser(
   userEmail: string,
 ): Promise<number> {
   let checksRun = 0;
-  const today = new Date();
+  const now = new Date();
+
+  // Resolve "today" in the user's stored IANA timezone so reminders fire on
+  // the correct local calendar date rather than always using UTC.
+  const { data: profile } = await serviceRoleSupabase
+    .from("profiles")
+    .select("timezone")
+    .eq("id", userId)
+    .maybeSingle();
+  const userTimezone = profile?.timezone ?? "UTC";
+  const todayIso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: userTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const today = new Date(todayIso + "T00:00:00Z");
 
   // ---- Budget checks ----
   // Budgets are category-based; find all active budgets covering today
-  const todayIso = today.toISOString().slice(0, 10);
   const { data: budgets } = await serviceRoleSupabase
     .from("budgets")
     .select("id, category_id, amount_minor, period_start, period_end")
