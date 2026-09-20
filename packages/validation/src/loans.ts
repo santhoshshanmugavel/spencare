@@ -30,6 +30,23 @@ const amountSchema = z
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a date in YYYY-MM-DD format.");
 
+export const LOAN_REPAYMENT_FREQUENCIES = [
+  "weekly", "biweekly", "monthly", "every_2_months", "quarterly",
+  "every_6_months", "yearly",
+] as const;
+
+export type LoanRepaymentFrequency = (typeof LOAN_REPAYMENT_FREQUENCIES)[number];
+
+export const LOAN_REPAYMENT_FREQUENCY_LABELS: Record<LoanRepaymentFrequency, string> = {
+  weekly: "Weekly",
+  biweekly: "Every 2 weeks",
+  monthly: "Monthly",
+  every_2_months: "Every 2 months",
+  quarterly: "Quarterly (every 3 months)",
+  every_6_months: "Every 6 months",
+  yearly: "Yearly",
+};
+
 export const createLoanSchema = z.object({
   name: z.string().trim().min(1, "Give this loan a name.").max(120, "Name is too long."),
   lenderName: z.string().trim().max(120).nullable().optional(),
@@ -41,11 +58,12 @@ export const createLoanSchema = z.object({
   startDate: dateSchema.nullable().optional(),
   endDate: dateSchema.nullable().optional(),
   repaymentFrequency: z
-    .enum(["weekly", "biweekly", "monthly", "quarterly", "yearly"])
+    .enum(LOAN_REPAYMENT_FREQUENCIES)
     .default("monthly"),
   installmentAmountMinor: amountSchema,
   nextPaymentDate: dateSchema.nullable().optional(),
   paymentAccountId: z.string().uuid("Invalid account.").nullable().optional(),
+  reserveAccountId: z.string().uuid("Invalid account.").nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
 });
 
@@ -57,10 +75,11 @@ export const updateLoanSchema = z.object({
   loanType: z.enum(LOAN_TYPES).optional(),
   interestRatePct: z.number().min(0).max(100).nullable().optional(),
   endDate: dateSchema.nullable().optional(),
-  repaymentFrequency: z.enum(["weekly", "biweekly", "monthly", "quarterly", "yearly"]).optional(),
+  repaymentFrequency: z.enum(LOAN_REPAYMENT_FREQUENCIES).optional(),
   installmentAmountMinor: amountSchema.optional(),
   nextPaymentDate: dateSchema.nullable().optional(),
   paymentAccountId: z.string().uuid().nullable().optional(),
+  reserveAccountId: z.string().uuid().nullable().optional(),
   outstandingMinor: amountSchema.nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
 });

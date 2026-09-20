@@ -934,6 +934,7 @@ export type Database = {
           notes: string | null
           outstanding_minor: number | null
           payment_account_id: string | null
+          reserve_account_id: string | null
           principal_minor: number
           repayment_frequency: Database["public"]["Enums"]["recurrence_interval"]
           start_date: string | null
@@ -956,6 +957,7 @@ export type Database = {
           notes?: string | null
           outstanding_minor?: number | null
           payment_account_id?: string | null
+          reserve_account_id?: string | null
           principal_minor: number
           repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
           start_date?: string | null
@@ -978,6 +980,7 @@ export type Database = {
           notes?: string | null
           outstanding_minor?: number | null
           payment_account_id?: string | null
+          reserve_account_id?: string | null
           principal_minor?: number
           repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
           start_date?: string | null
@@ -989,6 +992,13 @@ export type Database = {
           {
             foreignKeyName: "loans_payment_account_id_fkey"
             columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loans_reserve_account_id_fkey"
+            columns: ["reserve_account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["id"]

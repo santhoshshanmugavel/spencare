@@ -242,10 +242,13 @@ export {
 export {
   LOAN_TYPES,
   LOAN_TYPE_LABELS,
+  LOAN_REPAYMENT_FREQUENCIES,
+  LOAN_REPAYMENT_FREQUENCY_LABELS,
   createLoanSchema,
   updateLoanSchema,
   recordLoanPaymentSchema,
   type LoanType,
+  type LoanRepaymentFrequency,
   type CreateLoanInput,
   type UpdateLoanInput,
   type RecordLoanPaymentInput,

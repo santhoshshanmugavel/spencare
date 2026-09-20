@@ -20,6 +20,7 @@ export interface LoanRow {
   installment_amount_minor: number;
   next_payment_date: string | null;
   payment_account_id: string | null;
+  reserve_account_id: string | null;
   outstanding_minor: number | null;
   status: LoanStatus;
   notes: string | null;
@@ -41,6 +42,7 @@ export interface CreateLoanPatch {
   installmentAmountMinor: number;
   nextPaymentDate: string | null;
   paymentAccountId: string | null;
+  reserveAccountId: string | null;
   outstandingMinor: number | null;
   notes: string | null;
 }
@@ -55,13 +57,14 @@ export interface UpdateLoanPatch {
   installmentAmountMinor?: number;
   nextPaymentDate?: string | null;
   paymentAccountId?: string | null;
+  reserveAccountId?: string | null;
   outstandingMinor?: number | null;
   status?: LoanStatus;
   notes?: string | null;
 }
 
 const LOAN_COLUMNS =
-  "id, user_id, name, lender_name, loan_type, principal_minor, interest_rate_pct, currency, start_date, end_date, repayment_frequency, installment_amount_minor, next_payment_date, payment_account_id, outstanding_minor, status, notes, created_at, updated_at, deleted_at";
+  "id, user_id, name, lender_name, loan_type, principal_minor, interest_rate_pct, currency, start_date, end_date, repayment_frequency, installment_amount_minor, next_payment_date, payment_account_id, reserve_account_id, outstanding_minor, status, notes, created_at, updated_at, deleted_at";
 
 export async function createLoan(
   client: TypedSupabaseClient,
@@ -84,6 +87,7 @@ export async function createLoan(
       installment_amount_minor: patch.installmentAmountMinor,
       next_payment_date: patch.nextPaymentDate,
       payment_account_id: patch.paymentAccountId,
+      reserve_account_id: patch.reserveAccountId,
       outstanding_minor: patch.outstandingMinor,
       notes: patch.notes,
     })
@@ -111,6 +115,7 @@ export async function updateLoan(
       ...(patch.installmentAmountMinor !== undefined ? { installment_amount_minor: patch.installmentAmountMinor } : {}),
       ...(patch.nextPaymentDate !== undefined ? { next_payment_date: patch.nextPaymentDate } : {}),
       ...(patch.paymentAccountId !== undefined ? { payment_account_id: patch.paymentAccountId } : {}),
+      ...(patch.reserveAccountId !== undefined ? { reserve_account_id: patch.reserveAccountId } : {}),
       ...(patch.outstandingMinor !== undefined ? { outstanding_minor: patch.outstandingMinor } : {}),
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       ...(patch.notes !== undefined ? { notes: patch.notes } : {}),

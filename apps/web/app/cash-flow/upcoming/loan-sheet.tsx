@@ -7,6 +7,8 @@ import {
   createLoanSchema,
   LOAN_TYPES,
   LOAN_TYPE_LABELS,
+  LOAN_REPAYMENT_FREQUENCIES,
+  LOAN_REPAYMENT_FREQUENCY_LABELS,
   type CreateLoanInput,
 } from "@spencare/validation";
 import type { AccountRow, LoanRow } from "@spencare/domain-application";
@@ -45,13 +47,6 @@ function useMoneyField(initialMinor?: number) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function msg(e: any): string | undefined { return typeof e?.message === "string" ? e.message : undefined; }
 
-const REPAYMENT_LABELS: Record<string, string> = {
-  weekly: "Weekly",
-  biweekly: "Every 2 weeks",
-  monthly: "Monthly",
-  quarterly: "Quarterly",
-  yearly: "Yearly",
-};
 
 interface LoanSheetProps {
   open: boolean;
@@ -87,10 +82,11 @@ export function LoanSheet({ open, onOpenChange, onSaved, accounts, existing }: L
       currency: CURRENCY,
       startDate: existing?.start_date ?? null,
       endDate: existing?.end_date ?? null,
-      repaymentFrequency: (existing?.repayment_frequency ?? "monthly") as "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly",
+      repaymentFrequency: (existing?.repayment_frequency ?? "monthly") as CreateLoanInput["repaymentFrequency"],
       installmentAmountMinor: existing?.installment_amount_minor ?? (undefined as unknown as number),
       nextPaymentDate: existing?.next_payment_date ?? null,
       paymentAccountId: existing?.payment_account_id ?? null,
+      reserveAccountId: existing?.reserve_account_id ?? null,
       notes: existing?.notes ?? null,
     },
   });
@@ -216,8 +212,8 @@ export function LoanSheet({ open, onOpenChange, onSaved, accounts, existing }: L
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger id="l-freq"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(REPAYMENT_LABELS).map(([v, label]) => (
-                      <SelectItem key={v} value={v}>{label}</SelectItem>
+                    {LOAN_REPAYMENT_FREQUENCIES.map((v) => (
+                      <SelectItem key={v} value={v}>{LOAN_REPAYMENT_FREQUENCY_LABELS[v]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -242,6 +238,26 @@ export function LoanSheet({ open, onOpenChange, onSaved, accounts, existing }: L
                   <SelectTrigger id="l-account"><SelectValue placeholder="Which account pays this?" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">No specific account</SelectItem>
+                    {accounts
+                      .filter((a) => a.type === "bank" || a.type === "cash")
+                      .map((a) => (
+                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="reserveAccountId"
+            render={({ field }) => (
+              <FormField id="l-reserve" label="Reserve account (optional)" error={msg(errors.reserveAccountId)}>
+                <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
+                  <SelectTrigger id="l-reserve"><SelectValue placeholder="Reserve from a bank account?" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No reserve account</SelectItem>
                     {accounts
                       .filter((a) => a.type === "bank" || a.type === "cash")
                       .map((a) => (

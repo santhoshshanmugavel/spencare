@@ -598,7 +598,7 @@ export async function getUpcomingProjection(
       reserveStatus: computeReserveStatus({
         amountMinor: loan.installment_amount_minor,
         reservedMinor: 0,
-        hasReserveAccount: false,
+        hasReserveAccount: !!loan.reserve_account_id,
         occurrenceStatus: "upcoming",
         dueDate: loan.next_payment_date,
         today: todayLocal,

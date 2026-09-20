@@ -381,6 +381,7 @@ export async function createLoanAction(input: CreateLoanInput) {
       installmentAmountMinor: data.installmentAmountMinor,
       nextPaymentDate: data.nextPaymentDate ?? null,
       paymentAccountId: data.paymentAccountId ?? null,
+      reserveAccountId: data.reserveAccountId ?? null,
       outstandingMinor: data.outstandingMinor ?? null,
       notes: data.notes ?? null,
     });
@@ -408,6 +409,7 @@ export async function updateLoanAction(loanId: string, input: UpdateLoanInput) {
       ...(data.installmentAmountMinor !== undefined ? { installmentAmountMinor: data.installmentAmountMinor } : {}),
       ...(data.nextPaymentDate !== undefined ? { nextPaymentDate: data.nextPaymentDate ?? null } : {}),
       ...(data.paymentAccountId !== undefined ? { paymentAccountId: data.paymentAccountId } : {}),
+      ...(data.reserveAccountId !== undefined ? { reserveAccountId: data.reserveAccountId } : {}),
       ...(data.outstandingMinor !== undefined ? { outstandingMinor: data.outstandingMinor } : {}),
       ...(data.notes !== undefined ? { notes: data.notes } : {}),
     });
