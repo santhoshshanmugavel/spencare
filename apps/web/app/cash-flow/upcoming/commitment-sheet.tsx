@@ -233,8 +233,12 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
     }
   }, [autoSavingAmount, setValue]);
 
-  const alreadyReservedMinor = !isEdit && autoSavingAmount != null
-    ? Math.min(contributionCount * autoSavingAmount, amountMinorWatched ?? 0)
+  const alreadyReservedMinor = !isEdit && periods != null && amountMinorWatched != null && amountMinorWatched > 0
+    ? (() => {
+        const q = Math.floor(amountMinorWatched / periods);
+        const r = amountMinorWatched % periods;
+        return Math.min(contributionCount * q + Math.min(contributionCount, r), amountMinorWatched);
+      })()
     : null;
 
   useEffect(() => {

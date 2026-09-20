@@ -171,29 +171,10 @@ function generatePrepEventsForPayment(
   if (effectiveEmitFrom > prepEnd) return [];
 
   const savingDayRule = (commitment as { saving_day_rule?: number | null }).saving_day_rule ?? null;
-  // savingAmountMinor is guaranteed non-null by the guard above; cast for TypeScript
-  const savingAmountMinorNum = savingAmountMinor as number;
-  const events: UpcomingEvent[] = [];
 
-  function pushPrepEvent(date: string) {
-    events.push({
-      id: projectedId("prep", commitment.id, date),
-      kind: "commitment_preparation",
-      date,
-      title: `Prepare for ${commitment.name}`,
-      subtitle: commitment.name,
-      amountMinor: savingAmountMinorNum,
-      currency: "INR",
-      sourceId: commitment.id,
-      projected: true,
-      preparationForDate: paymentDate,
-      preparationForOccurrenceId: paymentOccurrenceId,
-      savingCadence: commitment.saving_cadence,
-      savingAmountMinor: commitment.saving_amount_minor,
-      autoProtectEnabled: commitment.auto_protect_enabled ?? false,
-      reserveAccountId: commitment.reserve_account_id,
-    });
-  }
+  // Collect ALL dates in this payment cycle (strictly after prevPaymentDate, up to paymentDate).
+  // Iterating the full cycle gives the correct total n for balanced allocation.
+  const cycleDates: string[] = [];
 
   if (savingCadence === "monthly" && savingDayRule != null) {
     // Non-cascading: compute each month independently from the canonical day rule.
@@ -208,8 +189,8 @@ function generatePrepEventsForPayment(
       const ty = Math.floor(totalMonths / 12);
       const tm = (totalMonths % 12) + 1;
       const date = resolveRecurringDay({ year: ty, month: tm, paymentDayRule: savingDayRule });
-      if (date > prepEnd) break;
-      if (date >= effectiveEmitFrom) pushPrepEvent(date);
+      if (date > paymentDate) break;
+      if (date > prepStart) cycleDates.push(date);
       step++;
     }
   } else {
@@ -217,26 +198,46 @@ function generatePrepEventsForPayment(
     let cur = firstSavingDate;
     let iters = 0;
     const MAX = 240;
-    while (cur <= prepEnd && iters < MAX) {
+    while (cur <= paymentDate && iters < MAX) {
       iters++;
-      if (cur >= effectiveEmitFrom) pushPrepEvent(cur);
+      if (cur > prepStart) cycleDates.push(cur);
       const next = predictNextOccurrence(cur, savingCadence);
       if (!next || next <= cur) break;
       cur = next;
     }
   }
 
-  // Exact allocation: adjust the last prep event so the sum equals the payment amount exactly.
-  // e.g. ₹10,000 / 12 = ceil = ₹834 × 12 = ₹10,008 → last event adjusted to ₹826 → total = ₹10,000.
-  if (events.length > 0) {
-    const target = commitment.amount_minor;
-    const totalWithoutLast = events.slice(0, -1).reduce((s, e) => s + e.amountMinor, 0);
-    const adjustedLast = target - totalWithoutLast;
-    if (adjustedLast > 0 && adjustedLast !== events[events.length - 1]!.amountMinor) {
-      events[events.length - 1]!.amountMinor = adjustedLast;
-    }
-  }
+  const n = cycleDates.length;
+  if (n === 0) return [];
 
+  // Balanced allocation: first r events get q+1, remaining n-r get q.
+  // Sum equals commitment.amount_minor exactly. Spread is at most 1 minor unit.
+  const target = commitment.amount_minor;
+  const q = Math.floor(target / n);
+  const r = target % n;
+
+  const events: UpcomingEvent[] = [];
+  for (let i = 0; i < n; i++) {
+    const date = cycleDates[i]!;
+    if (date < effectiveEmitFrom || date > prepEnd) continue;
+    events.push({
+      id: projectedId("prep", commitment.id, date),
+      kind: "commitment_preparation",
+      date,
+      title: `Prepare for ${commitment.name}`,
+      subtitle: commitment.name,
+      amountMinor: i < r ? q + 1 : q,
+      currency: "INR",
+      sourceId: commitment.id,
+      projected: true,
+      preparationForDate: paymentDate,
+      preparationForOccurrenceId: paymentOccurrenceId,
+      savingCadence: commitment.saving_cadence,
+      savingAmountMinor: commitment.saving_amount_minor,
+      autoProtectEnabled: commitment.auto_protect_enabled ?? false,
+      reserveAccountId: commitment.reserve_account_id,
+    });
+  }
   return events;
 }
 
