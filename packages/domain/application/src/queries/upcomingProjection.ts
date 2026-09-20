@@ -586,7 +586,11 @@ export async function getUpcomingProjection(
     const { statement_generated_day: stmtDay, payment_due_day: dueDay } = account;
     const outstanding = account.credit_used_minor ?? 0;
 
-    // Iterate over all months that overlap with [startDate, endDate]
+    // Iterate over all months that overlap with [startDate, endDate].
+    // Start one month before the window so that a payment whose statement
+    // closed in the previous month is still captured (e.g. statement closes
+    // Aug 25, payment due Sep 5 -- we need the Aug iteration when the
+    // display window starts Sep 1).
     const startParts = startDate.split("-").map(Number);
     const endParts = endDate.split("-").map(Number);
     const sy = startParts[0]!;
@@ -597,7 +601,7 @@ export async function getUpcomingProjection(
     const totalStartMonth = sy * 12 + sm - 1;
     const totalEndMonth = ey * 12 + em - 1;
 
-    for (let monthOffset = totalStartMonth; monthOffset <= totalEndMonth; monthOffset++) {
+    for (let monthOffset = totalStartMonth - 1; monthOffset <= totalEndMonth; monthOffset++) {
       const year = Math.floor(monthOffset / 12);
       const month = (monthOffset % 12) + 1;
 
@@ -619,7 +623,26 @@ export async function getUpcomingProjection(
       }
 
       if (dueDay != null) {
-        const dueDate = resolveRecurringDay({ year, month, paymentDayRule: dueDay });
+        // When a statement close day is configured, the payment is due on the
+        // first occurrence of payment_due_day STRICTLY AFTER the statement
+        // close date for this billing cycle. If payment_due_day falls on or
+        // before the statement close day in the same month, it must shift to
+        // the following month.
+        let dueYear = year;
+        let dueMonth = month;
+
+        if (stmtDay != null) {
+          const stmtDate = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
+          const sameMoDue = resolveRecurringDay({ year, month, paymentDayRule: dueDay });
+          if (sameMoDue <= stmtDate) {
+            // Due day is on or before the statement close: shift payment to the next month
+            const nextTotal = year * 12 + month;
+            dueYear = Math.floor(nextTotal / 12);
+            dueMonth = (nextTotal % 12) + 1;
+          }
+        }
+
+        const dueDate = resolveRecurringDay({ year: dueYear, month: dueMonth, paymentDayRule: dueDay });
         if (dueDate >= startDate && dueDate <= endDate) {
           allEvents.push({
             id: projectedId("cc_payment", account.id, dueDate),

@@ -154,7 +154,7 @@ export function EditAccountSheet({
           </FormField>
           {account.type === "credit_card" ? (
             <>
-              <FormField id="edit-statement-day" label="Statement generated on" error={errors.statementGeneratedDay?.message} hint="Day of month your statement is cut (32 = last day). Leave blank if unknown.">
+              <FormField id="edit-statement-day" label="Statement closes on" error={errors.statementGeneratedDay?.message} hint="Day of month your statement closes (32 = last day). Leave blank if unknown.">
                 <Controller
                   control={control}
                   name="statementGeneratedDay"
