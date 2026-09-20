@@ -262,3 +262,132 @@ describe("UpcomingDashboard -- soft-deleted commitment generates no projection",
     expect(screen.queryByText("Netflix")).not.toBeInTheDocument();
   });
 });
+
+// ── Date grouping tests ───────────────────────────────────────────────────────
+
+describe("UpcomingDashboard -- date grouping", () => {
+  it("shows a date heading for an event (day + full month name)", async () => {
+    const user = userEvent.setup();
+    const commitment = makeCommitment({ next_payment_date: "2026-11-02" });
+    const ev = makeProjectedPaymentEvent(commitment, "2026-11-02");
+
+    render(<UpcomingDashboard {...emptyProps} events={[ev]} commitments={[commitment]} />);
+    const novTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Nov"));
+    if (novTab) await user.click(novTab);
+
+    // Heading contains "2 November" (day + full month; weekday may vary by locale)
+    expect(screen.getByText(/2 November/)).toBeInTheDocument();
+  });
+
+  it("two events on same date share exactly one date heading", async () => {
+    const user = userEvent.setup();
+    const c1 = makeCommitment({ id: "c1", name: "Netflix", next_payment_date: "2026-11-02", payment_day_rule: 2 });
+    const c2 = makeCommitment({ id: "c2", name: "Spotify", next_payment_date: "2026-11-02", payment_day_rule: 2 });
+    const ev1 = makeProjectedPaymentEvent(c1, "2026-11-02");
+    const ev2 = makeProjectedPaymentEvent(c2, "2026-11-02");
+
+    render(<UpcomingDashboard {...emptyProps} events={[ev1, ev2]} commitments={[c1, c2]} />);
+    const novTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Nov"));
+    if (novTab) await user.click(novTab);
+
+    expect(screen.getByText("Netflix")).toBeInTheDocument();
+    expect(screen.getByText("Spotify")).toBeInTheDocument();
+    // Only one date heading despite two events
+    expect(screen.getAllByText(/2 November/)).toHaveLength(1);
+  });
+
+  it("events on different dates get separate date headings", async () => {
+    const user = userEvent.setup();
+    const c1 = makeCommitment({ id: "c1", name: "Netflix", next_payment_date: "2026-11-02", payment_day_rule: 2 });
+    const c2 = makeCommitment({ id: "c2", name: "Spotify", next_payment_date: "2026-11-13", payment_day_rule: 13 });
+    const ev1 = makeProjectedPaymentEvent(c1, "2026-11-02");
+    const ev2 = makeProjectedPaymentEvent(c2, "2026-11-13");
+
+    render(<UpcomingDashboard {...emptyProps} events={[ev1, ev2]} commitments={[c1, c2]} />);
+    const novTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Nov"));
+    if (novTab) await user.click(novTab);
+
+    expect(screen.getByText(/2 November/)).toBeInTheDocument();
+    expect(screen.getByText(/13 November/)).toBeInTheDocument();
+  });
+
+  it("date headings appear in chronological order regardless of event input order", async () => {
+    const user = userEvent.setup();
+    // c1 has the later date; c2 has the earlier date -- verify display order is still ascending
+    const c1 = makeCommitment({ id: "c1", name: "Netflix", next_payment_date: "2026-11-13", payment_day_rule: 13 });
+    const c2 = makeCommitment({ id: "c2", name: "Spotify", next_payment_date: "2026-11-02", payment_day_rule: 2 });
+    const ev1 = makeProjectedPaymentEvent(c1, "2026-11-13");
+    const ev2 = makeProjectedPaymentEvent(c2, "2026-11-02");
+
+    // Pass events with later date first to verify the component sorts them
+    render(<UpcomingDashboard {...emptyProps} events={[ev1, ev2]} commitments={[c1, c2]} />);
+    const novTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Nov"));
+    if (novTab) await user.click(novTab);
+
+    const headings = screen.getAllByText(/November/);
+    expect(headings).toHaveLength(2);
+    // Nov 2 heading must come before Nov 13 in the DOM
+    expect(headings[0]?.textContent).toMatch(/2 November/);
+    expect(headings[1]?.textContent).toMatch(/13 November/);
+  });
+
+  it("selected month with no events shows nothing-due message", async () => {
+    const user = userEvent.setup();
+    // Event in Nov; selecting Oct should show nothing-due message
+    const commitment = makeCommitment({ next_payment_date: "2026-11-02" });
+    const ev = makeProjectedPaymentEvent(commitment, "2026-11-02");
+
+    render(<UpcomingDashboard {...emptyProps} events={[ev]} commitments={[commitment]} />);
+    const octTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Oct"));
+    if (octTab) await user.click(octTab);
+
+    expect(screen.getByText(/Nothing due in/)).toBeInTheDocument();
+  });
+
+  it("commitment_preparation and commitment_payment on same date share one date heading", async () => {
+    const user = userEvent.setup();
+    const commitment = makeCommitment({ id: "c1", name: "Insurance", next_payment_date: "2026-11-02", payment_day_rule: 2 });
+    const paymentEv = makeProjectedPaymentEvent(commitment, "2026-11-02");
+    const prepEv: UpcomingEvent = {
+      id: "proj:commitment_preparation:c1:2026-11-02",
+      kind: "commitment_preparation",
+      date: "2026-11-02",
+      title: "Prepare for Insurance",
+      subtitle: "Insurance",
+      amountMinor: 5000,
+      currency: "INR",
+      sourceId: "c1",
+      projected: true,
+      preparationForDate: "2026-12-02",
+      preparationForOccurrenceId: undefined,
+      savingCadence: "monthly",
+      savingAmountMinor: 5000,
+      autoProtectEnabled: false,
+      reserveAccountId: null,
+    };
+
+    render(<UpcomingDashboard {...emptyProps} events={[prepEv, paymentEv]} commitments={[commitment]} />);
+    const novTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Nov"));
+    if (novTab) await user.click(novTab);
+
+    expect(screen.getByText("Insurance")).toBeInTheDocument();
+    expect(screen.getByText("Prepare for Insurance")).toBeInTheDocument();
+    // Only one date heading for Nov 2
+    expect(screen.getAllByText(/2 November/)).toHaveLength(1);
+  });
+
+  it("date heading uses local calendar date (parses ev.date as local YYYY-MM-DD)", async () => {
+    // ev.date "2026-11-02" is a local date string; heading must show "2 November" not a UTC-shifted date
+    const user = userEvent.setup();
+    const commitment = makeCommitment({ next_payment_date: "2026-11-02" });
+    const ev = makeProjectedPaymentEvent(commitment, "2026-11-02");
+
+    render(<UpcomingDashboard {...emptyProps} events={[ev]} commitments={[commitment]} />);
+    const novTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Nov"));
+    if (novTab) await user.click(novTab);
+
+    expect(screen.getByText(/2 November/)).toBeInTheDocument();
+    expect(screen.queryByText(/1 November/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/3 November/)).not.toBeInTheDocument();
+  });
+});
