@@ -70,6 +70,7 @@ interface AccountDetailsSheetProps {
   masked: boolean;
   goalReserveMinor: number;
   commitmentReserveMinor: number;
+  loanReserveMinor: number;
   cardReserveMinor: number;
   cardReserveDetails: CardReserveDetail[];
 }
@@ -81,6 +82,7 @@ export function AccountDetailsSheet({
   masked,
   goalReserveMinor,
   commitmentReserveMinor,
+  loanReserveMinor,
   cardReserveMinor,
   cardReserveDetails,
 }: AccountDetailsSheetProps) {
@@ -125,6 +127,13 @@ export function AccountDetailsSheet({
                   <span className="text-muted-foreground">None</span>
                 )}
               </Row>
+              <Row label="Reserved for loans">
+                {loanReserveMinor > 0 ? (
+                  <Money value={money(loanReserveMinor)} masked={masked} size="numeric" className="text-muted-foreground" />
+                ) : (
+                  <span className="text-muted-foreground">None</span>
+                )}
+              </Row>
               {cardReserveDetails.length > 0 && (
                 <>
                   {cardReserveDetails.map((d) => (
@@ -145,7 +154,7 @@ export function AccountDetailsSheet({
                   value={money(
                     Math.max(
                       0,
-                      account.balance_minor - goalReserveMinor - commitmentReserveMinor - cardReserveMinor,
+                      account.balance_minor - goalReserveMinor - commitmentReserveMinor - loanReserveMinor - cardReserveMinor,
                     ),
                   )}
                   masked={masked}
