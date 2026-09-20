@@ -5,14 +5,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccountRow } from "@spencare/domain-application";
 import { GoalWizardSheet } from "./goal-wizard-sheet";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/goals",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock("@/app/goals/actions", () => ({
-  createGoalAction: vi.fn(async () => ({ ok: true, value: {} })),
+  createGoalAction: vi.fn(async () => ({ ok: true, value: { id: "goal-1" } })),
+  createGoalContributionPlanAction: vi.fn(async () => ({ ok: true, value: {} })),
 }));
 
 beforeEach(async () => {
-  const { createGoalAction } = await import("@/app/goals/actions");
+  const { createGoalAction, createGoalContributionPlanAction } = await import("@/app/goals/actions");
   vi.mocked(createGoalAction).mockReset();
-  vi.mocked(createGoalAction).mockResolvedValue({ ok: true, value: {} as never });
+  vi.mocked(createGoalAction).mockResolvedValue({ ok: true, value: { id: "goal-1" } as never });
+  vi.mocked(createGoalContributionPlanAction).mockReset();
+  vi.mocked(createGoalContributionPlanAction).mockResolvedValue({ ok: true, value: {} as never });
 });
 
 const bankAccount: AccountRow = {
@@ -33,113 +42,82 @@ const bankAccount: AccountRow = {
 };
 
 describe("<GoalWizardSheet> — accessibility", () => {
-  it("has no axe violations at the opening question", async () => {
+  it("has no axe violations", async () => {
     const { container } = render(
       <GoalWizardSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={[bankAccount]} />,
     );
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("opens by asking a real, visible question rather than a bare form", () => {
+  it("opens with form fields immediately visible", () => {
     render(<GoalWizardSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={[bankAccount]} />);
-    expect(screen.getByText("What are you saving for?")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Trip" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Emergency Fund" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Create Goal" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Goal name")).toBeInTheDocument();
+    expect(screen.getByLabelText("How much would you like to save?")).toBeInTheDocument();
   });
 });
 
-describe("<GoalWizardSheet> — the full conversational happy path (Vietnam trip, matches Goal Creation.pdf)", () => {
-  it("walks category -> trip band -> name -> amount -> savings -> date -> account -> summary -> create", async () => {
+describe("<GoalWizardSheet> — happy path (fill name + amount)", () => {
+  it("calls createGoalAction with correct args when name and amount are filled", async () => {
     const { createGoalAction } = await import("@/app/goals/actions");
     const onCreated = vi.fn();
     const user = userEvent.setup();
     render(<GoalWizardSheet open onOpenChange={() => {}} onCreated={onCreated} accounts={[bankAccount]} />);
 
-    await user.click(screen.getByRole("button", { name: "Trip" }));
-    expect(screen.getByText("Nice. Where are you planning to go?")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "International" }));
-    expect(screen.getByText("What should we call this trip?")).toBeInTheDocument();
-
     await user.type(screen.getByLabelText("Goal name"), "Vietnam Trip");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByText(/Trips abroad usually cost/)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "₹60,000" }));
-    expect(screen.getByText("Do you already have some savings for this?")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "₹0" }));
-    expect(screen.getByText(/When are you planning to reach this goal\?/)).toBeInTheDocument();
-
-    const dateChip = screen.getAllByRole("button").find((b) => /^[A-Z][a-z]{2} \d{4}$/.test(b.textContent ?? ""));
-    expect(dateChip).toBeDefined();
-    await user.click(dateChip!);
-    expect(screen.getByText("Where should we save money for this goal?")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "HDFC Bank" }));
-    expect(screen.getAllByText("Vietnam Trip").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Create Goal" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Create Goal" }));
+    await user.type(screen.getByLabelText("How much would you like to save?"), "60000");
+    await user.click(screen.getByRole("button", { name: "Create goal" }));
 
     expect(createGoalAction).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "Vietnam Trip",
         targetAmountMinor: 6_000_000,
-        fundingAccountId: bankAccount.id,
-        initialSavedAmountMinor: 0,
       }),
     );
-    expect(await screen.findByRole("button", { name: "View goal" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "View goal" }));
     expect(onCreated).toHaveBeenCalledTimes(1);
   });
-});
 
-describe("<GoalWizardSheet> — Emergency Fund (no destination sub-step, name auto-filled)", () => {
-  it("skips straight to the amount question", async () => {
+  it("Create goal button is disabled until both name and amount are entered", async () => {
     const user = userEvent.setup();
     render(<GoalWizardSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={[bankAccount]} />);
-    await user.click(screen.getByRole("button", { name: "Emergency Fund" }));
-    expect(screen.getByText(/common starting point is 3–6 months/)).toBeInTheDocument();
+    const createBtn = screen.getByRole("button", { name: "Create goal" });
+    expect(createBtn).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Goal name"), "Emergency Fund");
+    expect(createBtn).toBeDisabled();
+
+    await user.type(screen.getByLabelText("How much would you like to save?"), "75000");
+    expect(createBtn).toBeEnabled();
   });
 });
 
-describe("<GoalWizardSheet> — Adjust Plan", () => {
-  it("returns to the amount question and re-asks savings/date/account", async () => {
+describe("<GoalWizardSheet> — goal type selection", () => {
+  it("defaults to Short term and lets user switch to Long term", async () => {
+    const { createGoalAction } = await import("@/app/goals/actions");
     const user = userEvent.setup();
     render(<GoalWizardSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={[bankAccount]} />);
-    await user.click(screen.getByRole("button", { name: "Vehicle" }));
-    await user.type(screen.getByLabelText("Goal name"), "Royal Enfield");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    await user.click(screen.getByRole("button", { name: "₹1,50,000" }));
-    await user.click(screen.getByRole("button", { name: "₹0" }));
-    const dateChip = screen.getAllByRole("button").find((b) => /^[A-Z][a-z]{2} \d{4}$/.test(b.textContent ?? ""));
-    await user.click(dateChip!);
-    await user.click(screen.getByRole("button", { name: "HDFC Bank" }));
-    expect(screen.getByRole("button", { name: "Create Goal" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Adjust Plan" }));
-    expect(screen.getByText(/Vehicle costs vary/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Goal name"), "Retirement");
+    await user.type(screen.getByLabelText("How much would you like to save?"), "5000000");
+    await user.click(screen.getByRole("button", { name: "Long term" }));
+    await user.click(screen.getByRole("button", { name: "Create goal" }));
+
+    expect(createGoalAction).toHaveBeenCalledWith(
+      expect.objectContaining({ term: "long" }),
+    );
   });
 });
 
-describe("<GoalWizardSheet> — no eligible accounts (matches New Goal-1.pdf's branch)", () => {
-  it("offers to connect an account instead of a dead-end funding-account question", async () => {
-    const user = userEvent.setup();
+describe("<GoalWizardSheet> — no accounts", () => {
+  it("still shows the form with no accounts connected", () => {
     render(<GoalWizardSheet open onOpenChange={() => {}} onCreated={() => {}} accounts={[]} />);
-    await user.click(screen.getByRole("button", { name: "Emergency Fund" }));
-    await user.click(screen.getByRole("button", { name: "₹75,000" }));
-    await user.click(screen.getByRole("button", { name: "₹0" }));
-    const dateChip = screen.getAllByRole("button").find((b) => /^[A-Z][a-z]{2} \d{4}$/.test(b.textContent ?? ""));
-    await user.click(dateChip!);
-    expect(screen.getByRole("link", { name: "Setup account" })).toHaveAttribute("href", "/settings/accounts");
+    expect(screen.getByLabelText("Goal name")).toBeInTheDocument();
+    expect(screen.getByLabelText("How much would you like to save?")).toBeInTheDocument();
   });
 });
 
 describe("<GoalWizardSheet> — server-side failure", () => {
-  it("surfaces the error and stays on the summary step rather than showing a false success", async () => {
+  it("surfaces the error and does not call onCreated when createGoalAction fails", async () => {
     const { createGoalAction } = await import("@/app/goals/actions");
     vi.mocked(createGoalAction).mockResolvedValueOnce({
       ok: false,
@@ -148,14 +126,12 @@ describe("<GoalWizardSheet> — server-side failure", () => {
     const onCreated = vi.fn();
     const user = userEvent.setup();
     render(<GoalWizardSheet open onOpenChange={() => {}} onCreated={onCreated} accounts={[bankAccount]} />);
-    await user.click(screen.getByRole("button", { name: "Emergency Fund" }));
-    await user.click(screen.getByRole("button", { name: "₹75,000" }));
-    await user.click(screen.getByRole("button", { name: "₹0" }));
-    const dateChip = screen.getAllByRole("button").find((b) => /^[A-Z][a-z]{2} \d{4}$/.test(b.textContent ?? ""));
-    await user.click(dateChip!);
-    await user.click(screen.getByRole("button", { name: "HDFC Bank" }));
-    await user.click(screen.getByRole("button", { name: "Create Goal" }));
-    expect(screen.queryByRole("button", { name: "View goal" })).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Goal name"), "Emergency Fund");
+    await user.type(screen.getByLabelText("How much would you like to save?"), "75000");
+    await user.click(screen.getByRole("button", { name: "Create goal" }));
+
     expect(onCreated).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Goal name")).toBeInTheDocument();
   });
 });

@@ -5,10 +5,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccountRow, GoalRow, TransactionRow } from "@spencare/domain-application";
 import { GoalDetailDialog } from "./goal-detail-dialog";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/goals",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock("./actions", () => ({
   listContributionsAction: vi.fn(async () => []),
   updateGoalImageAction: vi.fn(async () => ({ ok: true, value: { signedUrl: "https://signed.example/new.png" } })),
   removeGoalImageAction: vi.fn(async () => ({ ok: true, value: {} })),
+  getGoalContributionPlanAction: vi.fn(async () => null),
 }));
 vi.mock("@/lib/toast", () => ({
   toastConfirmed: vi.fn(),
@@ -126,7 +133,7 @@ describe("<GoalDetailDialog> — accessibility", () => {
         onDelete={noop}
       />,
     );
-    await screen.findByText("Contribution");
+    await screen.findByText("Manual");
     expect(await axe(container)).toHaveNoViolations();
   });
 });
@@ -278,7 +285,7 @@ describe("<GoalDetailDialog> — content and behavior", () => {
     expect(screen.getByText(/completed in 5 months/i)).toBeInTheDocument();
   });
 
-  it("calls onContribute when 'Save more' is clicked", async () => {
+  it("calls onContribute when 'Add Cash' is clicked", async () => {
     const onContribute = vi.fn();
     const user = userEvent.setup();
     render(
@@ -296,11 +303,11 @@ describe("<GoalDetailDialog> — content and behavior", () => {
         onDelete={noop}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Save more" }));
+    await user.click(screen.getByRole("button", { name: "Add Cash" }));
     expect(onContribute).toHaveBeenCalledTimes(1);
   });
 
-  it("the More menu offers Edit/Withdraw/Archive/Delete", async () => {
+  it("the More menu offers Withdraw/Archive/Delete; Edit Goal is a direct button", async () => {
     const user = userEvent.setup();
     render(
       <GoalDetailDialog
@@ -317,8 +324,8 @@ describe("<GoalDetailDialog> — content and behavior", () => {
         onDelete={noop}
       />,
     );
+    expect(screen.getByRole("button", { name: "Edit Goal" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: `More actions for ${goal.name}` }));
-    expect(screen.getByRole("menuitem", { name: "Edit Goal" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Withdraw" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Archive Goal" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Delete Goal" })).toBeInTheDocument();

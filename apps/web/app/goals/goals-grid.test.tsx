@@ -21,6 +21,7 @@ vi.mock("./actions", () => ({
   listContributionsAction: vi.fn(async () => []),
   updateGoalImageAction: vi.fn(async () => ({ ok: true, value: { signedUrl: "https://signed.example/new.png" } })),
   removeGoalImageAction: vi.fn(async () => ({ ok: true, value: {} })),
+  getGoalContributionPlanAction: vi.fn(async () => null),
 }));
 
 const account: AccountRow = {
@@ -79,13 +80,13 @@ describe("<GoalsGrid> — empty state", () => {
     expect(screen.getByText(/no goals yet/i)).toBeInTheDocument();
   });
 
-  it("Create goal stays enabled with no eligible funding account -- the wizard itself offers to connect one mid-conversation (New Goal-1.pdf), never a silently disabled entry point", async () => {
+  it("Create goal stays enabled with no eligible funding account -- the wizard itself offers to connect one mid-conversation", async () => {
     const user = userEvent.setup();
     render(<GoalsGrid initialGoals={[]} accounts={[]} fundingEligibleAccounts={[]} contributionEligibleAccounts={[]} masked={false} imageSignedUrls={{}} />);
     const button = screen.getByRole("button", { name: "+ Create goal" });
     expect(button).toBeEnabled();
     await user.click(button);
-    expect(screen.getByText("What are you saving for?")).toBeInTheDocument();
+    expect(screen.getByLabelText("Goal name")).toBeInTheDocument();
   });
 });
 
@@ -125,45 +126,11 @@ describe("<GoalsGrid> — populated", () => {
     const user = userEvent.setup();
     render(<GoalsGrid initialGoals={[goal]} accounts={[account]} fundingEligibleAccounts={[account]} contributionEligibleAccounts={[account]} masked={false} imageSignedUrls={{}} />);
     await user.click(screen.getByRole("button", { name: "+ Create goal" }));
-    expect(screen.getByRole("heading", { name: "Create a goal with Spensa" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create Goal" })).toBeInTheDocument();
   });
 });
 
-describe("<GoalsGrid> — Short term / Long term filter (Goals-9.pdf)", () => {
-  const longTermGoal: GoalRow = { ...goal, id: "b2f8f6b4-3f0f-4f3a-9c1f-2f6c1c9a1a11", name: "Bali Trip 2027", term: "long" };
-
-  it("shows only short-term goals by default and hides long-term ones", () => {
-    render(
-      <GoalsGrid
-        initialGoals={[goal, longTermGoal]}
-        accounts={[account]}
-        fundingEligibleAccounts={[account]}
-        contributionEligibleAccounts={[account]}
-        masked={false}
-        imageSignedUrls={{}}
-      />,
-    );
-    expect(screen.getByRole("button", { name: goal.name })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: longTermGoal.name })).not.toBeInTheDocument();
-  });
-
-  it("switches to long-term goals when the Long term tab is selected", async () => {
-    const user = userEvent.setup();
-    render(
-      <GoalsGrid
-        initialGoals={[goal, longTermGoal]}
-        accounts={[account]}
-        fundingEligibleAccounts={[account]}
-        contributionEligibleAccounts={[account]}
-        masked={false}
-        imageSignedUrls={{}}
-      />,
-    );
-    await user.click(screen.getByRole("tab", { name: "Long term" }));
-    expect(screen.getByRole("button", { name: longTermGoal.name })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: goal.name })).not.toBeInTheDocument();
-  });
-
+describe("<GoalsGrid> — search filter", () => {
   it("search narrows the active term tab by goal name", async () => {
     const secondShortTermGoal: GoalRow = { ...goal, id: "c3f9f7c5-4f1f-5f4b-ad2f-3f7d2d0b2b22", name: "Emergency Fund" };
     const user = userEvent.setup();
@@ -184,7 +151,7 @@ describe("<GoalsGrid> — Short term / Long term filter (Goals-9.pdf)", () => {
 });
 
 describe("<GoalsGrid> — Phase 28: funding vs. contribution account eligibility are separate lists", () => {
-  it("Create goal offers Investment as a funding account", async () => {
+  it("Create goal wizard offers Investment as a funding account when recurring is enabled", async () => {
     const user = userEvent.setup();
     render(
       <GoalsGrid
@@ -197,13 +164,16 @@ describe("<GoalsGrid> — Phase 28: funding vs. contribution account eligibility
       />,
     );
     await user.click(screen.getByRole("button", { name: "+ Create goal" }));
-    await user.click(screen.getByRole("button", { name: "Emergency Fund" }));
-    await user.click(screen.getByRole("button", { name: "₹75,000" }));
-    await user.click(screen.getByRole("button", { name: "₹0" }));
-    const dateChip = screen.getAllByRole("button").find((b) => /^[A-Z][a-z]{2} \d{4}$/.test(b.textContent ?? ""));
-    await user.click(dateChip!);
-    expect(screen.getByText("Where should we save money for this goal?")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Mutual Fund" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Goal name"), "Vietnam Trip");
+    await user.type(screen.getByLabelText("How much would you like to save?"), "75000");
+    // Click "Yes" for "Are you planning to save regularly?" (second "Yes" radio)
+    const yesRadios = screen.getAllByRole("radio", { name: "Yes" });
+    await user.click(yesRadios[yesRadios.length - 1]);
+    // The funding account label should appear
+    expect(screen.getByLabelText("Which account for this goal?")).toBeInTheDocument();
+    // Open the account select and verify Investment account is offered
+    await user.click(screen.getByLabelText("Which account for this goal?"));
+    expect(screen.getByRole("option", { name: "Mutual Fund" })).toBeInTheDocument();
   });
 
   it("Add Cash (a real contribution) never offers Investment -- no fabricated investment-accounting operation exists", async () => {

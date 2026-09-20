@@ -226,6 +226,17 @@ function generatePrepEventsForPayment(
     }
   }
 
+  // Exact allocation: adjust the last prep event so the sum equals the payment amount exactly.
+  // e.g. ₹10,000 / 12 = ceil = ₹834 × 12 = ₹10,008 → last event adjusted to ₹826 → total = ₹10,000.
+  if (events.length > 0) {
+    const target = commitment.amount_minor;
+    const totalWithoutLast = events.slice(0, -1).reduce((s, e) => s + e.amountMinor, 0);
+    const adjustedLast = target - totalWithoutLast;
+    if (adjustedLast > 0 && adjustedLast !== events[events.length - 1]!.amountMinor) {
+      events[events.length - 1]!.amountMinor = adjustedLast;
+    }
+  }
+
   return events;
 }
 
