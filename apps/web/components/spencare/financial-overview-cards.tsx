@@ -31,6 +31,10 @@ export interface SafeToSpendPlain {
   cardPaymentReservedMinor: number;
   /** Amount reserved out of ownedSpendableMinor for upcoming bills. */
   upcomingBillsMinor: number;
+  /** Amount reserved for planned commitment obligations. Zero when no commitments have a reserve account. */
+  commitmentReservedMinor?: number;
+  /** Amount reserved for active loan installments (loans with a reserve_account_id). Zero when no loans are reserved. */
+  loanReservedMinor?: number;
 }
 
 export interface NetWorthPlain {
@@ -76,6 +80,8 @@ export function SafeToSpendHeroCard({
     safeToSpend.goalReservedMinor > 0 ||
     safeToSpend.cardPaymentReservedMinor > 0 ||
     safeToSpend.upcomingBillsMinor > 0 ||
+    (safeToSpend.commitmentReservedMinor ?? 0) > 0 ||
+    (safeToSpend.loanReservedMinor ?? 0) > 0 ||
     safeToSpend.creditAvailableMinor > 0;
 
   return (
@@ -129,6 +135,30 @@ export function SafeToSpendHeroCard({
                 <span className="text-muted-foreground">Reserved for card payments</span>
                 <Money
                   value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.cardPaymentReservedMinor), safeToSpend.currency as never)}
+                  masked={masked}
+                  size="numeric"
+                  tone="neutral"
+                  className="text-xs tabular-nums"
+                />
+              </div>
+            ) : null}
+            {(safeToSpend.commitmentReservedMinor ?? 0) > 0 ? (
+              <div className="flex items-center justify-between py-2 text-xs">
+                <span className="text-muted-foreground">Reserved for commitments</span>
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.commitmentReservedMinor!), safeToSpend.currency as never)}
+                  masked={masked}
+                  size="numeric"
+                  tone="neutral"
+                  className="text-xs tabular-nums"
+                />
+              </div>
+            ) : null}
+            {(safeToSpend.loanReservedMinor ?? 0) > 0 ? (
+              <div className="flex items-center justify-between py-2 text-xs">
+                <span className="text-muted-foreground">Reserved for loans</span>
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(safeToSpend.loanReservedMinor!), safeToSpend.currency as never)}
                   masked={masked}
                   size="numeric"
                   tone="neutral"

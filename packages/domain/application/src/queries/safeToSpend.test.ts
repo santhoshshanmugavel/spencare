@@ -43,11 +43,13 @@ let budgetUsagesFixture: Array<{ limitMinor: number; spentMinor: number }> = [];
 let goalsAggregateFixture = { count: 0, totalMinor: 0 };
 let upcomingBillsFixture = 0;
 let commitmentReservedFixture = 0;
+let loanReservedFixture = 0;
 
 const listAccountsMock = vi.fn(async (_client: unknown, _userId: string) => accountsFixture);
 const getActiveGoalsReservedTotalMock = vi.fn(async (_client: unknown, _userId: string) => goalsAggregateFixture);
 const getUpcomingBillsTotalMock = vi.fn(async (_client: unknown, _userId: string) => upcomingBillsFixture);
 const getCommitmentReservedTotalMock = vi.fn(async (_client: unknown, _userId: string) => commitmentReservedFixture);
+const getLoanReservedTotalMock = vi.fn(async (_client: unknown, _userId: string) => loanReservedFixture);
 const listBudgetsWithUsageMock = vi.fn(async (_ctx: unknown, _periodStart: string) => budgetUsagesFixture);
 const listCreditCardPaymentSourcesMock = vi.fn(async (_client: unknown, _userId: string) => []);
 
@@ -56,6 +58,7 @@ vi.mock("@spencare/domain-infra", () => ({
   getActiveGoalsReservedTotal: (...args: unknown[]) => getActiveGoalsReservedTotalMock(...(args as [unknown, string])),
   getUpcomingBillsTotal: (...args: unknown[]) => getUpcomingBillsTotalMock(...(args as [unknown, string])),
   getCommitmentReservedTotal: (...args: unknown[]) => getCommitmentReservedTotalMock(...(args as [unknown, string])),
+  getLoanReservedTotal: (...args: unknown[]) => getLoanReservedTotalMock(...(args as [unknown, string])),
   listCreditCardPaymentSources: (...args: unknown[]) => listCreditCardPaymentSourcesMock(...(args as [unknown, string])),
   deriveCardPaymentReserveState: () => ({ totalMinor: 0, perPaymentAccount: {}, perCard: {} }),
 }));

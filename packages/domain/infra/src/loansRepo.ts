@@ -166,3 +166,16 @@ export async function listLoans(client: TypedSupabaseClient, userId: string): Pr
   if (error) throw error;
   return (data ?? []) as LoanRow[];
 }
+
+/** Sum of installment_amount_minor for active loans that have a reserve_account_id set. */
+export async function getLoanReservedTotal(client: TypedSupabaseClient, userId: string): Promise<number> {
+  const { data, error } = await client
+    .from("loans")
+    .select("installment_amount_minor")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .not("reserve_account_id", "is", null)
+    .is("deleted_at", null);
+  if (error) throw error;
+  return (data ?? []).reduce((sum, row) => sum + (row.installment_amount_minor as number), 0);
+}

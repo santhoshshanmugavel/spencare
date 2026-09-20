@@ -60,6 +60,7 @@ export {
   deleteLoan,
   getLoan,
   listLoans,
+  getLoanReservedTotal,
   type LoanType,
   type LoanStatus,
   type LoanRow,

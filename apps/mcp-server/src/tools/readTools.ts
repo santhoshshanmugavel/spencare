@@ -74,6 +74,8 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
               ownedSpendableMinor: Number(result.ownedSpendableTotal.amountMinorUnits),
               creditAvailableMinor: Number(result.creditAvailableTotal.amountMinorUnits),
               cardPaymentReservedMinor: Number(result.cardPaymentReservedTotal.amountMinorUnits),
+              commitmentReservedMinor: Number(result.commitmentReservedTotal.amountMinorUnits),
+              loanReservedMinor: Number(result.loanReservedTotal.amountMinorUnits),
             },
             accounts: [],
           },

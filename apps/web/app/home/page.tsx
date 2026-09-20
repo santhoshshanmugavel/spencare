@@ -91,6 +91,8 @@ export default async function HomePage({
     goalReservedMinor: Number(safeToSpendResult.goalReservedTotal.amountMinorUnits),
     cardPaymentReservedMinor: Number(safeToSpendResult.cardPaymentReservedTotal.amountMinorUnits),
     upcomingBillsMinor: Number(safeToSpendResult.upcomingBillsTotal.amountMinorUnits),
+    commitmentReservedMinor: Number(safeToSpendResult.commitmentReservedTotal.amountMinorUnits),
+    loanReservedMinor: Number(safeToSpendResult.loanReservedTotal.amountMinorUnits),
   };
   const netWorth: NetWorthPlain = {
     netWorthMinor: Number(netWorthResult.netWorth.amountMinorUnits),
