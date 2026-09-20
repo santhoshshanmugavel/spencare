@@ -318,6 +318,9 @@ export async function checkCommitmentReminder(input: CommitmentRuleInput): Promi
   } else if (daysUntilDue === 3) {
     eventType = "COMMITMENT_3_DAYS";
     dedupeKey = `commitment_3d_${occurrenceId}_${dueDateIso}`;
+  } else if (daysUntilDue === 1) {
+    eventType = "COMMITMENT_1_DAY";
+    dedupeKey = `commitment_1d_${occurrenceId}_${dueDateIso}`;
   } else if (daysUntilDue === 0) {
     eventType = "COMMITMENT_DUE_TODAY";
     dedupeKey = `commitment_due_${occurrenceId}_${dueDateIso}`;
@@ -454,6 +457,12 @@ export async function checkLoanReminder(input: LoanRuleInput): Promise<void> {
   if (daysUntilDue === 7) {
     eventType = "LOAN_7_DAYS";
     dedupeKey = `loan_7d_${loanId}_${dueDateIso}`;
+  } else if (daysUntilDue === 3) {
+    eventType = "LOAN_3_DAYS";
+    dedupeKey = `loan_3d_${loanId}_${dueDateIso}`;
+  } else if (daysUntilDue === 1) {
+    eventType = "LOAN_1_DAY";
+    dedupeKey = `loan_1d_${loanId}_${dueDateIso}`;
   } else if (daysUntilDue === 0) {
     eventType = "LOAN_DUE_TODAY";
     dedupeKey = `loan_due_${loanId}_${dueDateIso}`;

@@ -158,8 +158,10 @@ export async function deliverNotification(
 
         if (result.ok) deliveredChannels.push("telegram");
       }
-    } catch {
+    } catch (err) {
       // Telegram delivery errors must not interrupt the engine
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn("[notifications/engine] Telegram delivery skipped:", msg);
     }
   }
 

@@ -19,3 +19,4 @@ next-env.d.ts
 
 # Vercel build output
 .vercel/output/
+.env*

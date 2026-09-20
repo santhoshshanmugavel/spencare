@@ -25,9 +25,9 @@ export type NotificationEventType =
   | "GOAL_CONTRIBUTION" | "GOAL_25" | "GOAL_50" | "GOAL_75" | "GOAL_90" | "GOAL_COMPLETED"
   | "GOAL_PLAN_UPCOMING" | "GOAL_PLAN_DUE" | "GOAL_PLAN_MISSED"
   | "BILL_7_DAYS" | "BILL_3_DAYS" | "BILL_1_DAY" | "BILL_DUE_TODAY" | "BILL_OVERDUE" | "BILL_AMOUNT_CHANGED"
-  | "COMMITMENT_7_DAYS" | "COMMITMENT_3_DAYS" | "COMMITMENT_DUE_TODAY" | "COMMITMENT_OVERDUE" | "COMMITMENT_SHORTFALL"
+  | "COMMITMENT_7_DAYS" | "COMMITMENT_3_DAYS" | "COMMITMENT_1_DAY" | "COMMITMENT_DUE_TODAY" | "COMMITMENT_OVERDUE" | "COMMITMENT_SHORTFALL"
   | "COMMITMENT_AUTO_PAID" | "COMMITMENT_AUTO_PAY_FAILED" | "COMMITMENT_AUTO_PROTECTED" | "COMMITMENT_PREPARATION"
-  | "LOAN_7_DAYS" | "LOAN_DUE_TODAY" | "LOAN_OVERDUE"
+  | "LOAN_7_DAYS" | "LOAN_3_DAYS" | "LOAN_1_DAY" | "LOAN_DUE_TODAY" | "LOAN_OVERDUE"
   | "CC_STATEMENT_7_DAYS" | "CC_STATEMENT_TODAY"
   | "CC_PAYMENT_7_DAYS" | "CC_PAYMENT_3_DAYS" | "CC_PAYMENT_1_DAY" | "CC_PAYMENT_TODAY" | "CC_PAYMENT_OVERDUE"
   | "TRANSACTION_LARGE" | "TRANSACTION_UNUSUAL"
@@ -318,6 +318,17 @@ export function composeNotificationMessage(
         body: `${fmt(amountMinor, currency)} due in 3 days.${shortfallPart}`,
       };
     }
+    case "COMMITMENT_1_DAY": {
+      const { commitmentName, amountMinor, reservedMinor } = c as {
+        commitmentName: string; amountMinor: number; reservedMinor: number;
+      };
+      const shortfall = amountMinor - reservedMinor;
+      const shortfallPart = shortfall > 0 ? ` ${fmt(shortfall, currency)} still needed.` : " You're covered.";
+      return {
+        title: `${commitmentName} due tomorrow`,
+        body: `${fmt(amountMinor, currency)} due tomorrow.${shortfallPart}`,
+      };
+    }
     case "COMMITMENT_DUE_TODAY": {
       const { commitmentName, amountMinor } = c as { commitmentName: string; amountMinor: number };
       return {
@@ -394,6 +405,20 @@ export function composeNotificationMessage(
       return {
         title: `${loanName} payment due in 7 days`,
         body: `${fmt(installmentMinor, currency)} installment is due next week.`,
+      };
+    }
+    case "LOAN_3_DAYS": {
+      const { loanName, installmentMinor } = c as { loanName: string; installmentMinor: number };
+      return {
+        title: `${loanName} payment due in 3 days`,
+        body: `${fmt(installmentMinor, currency)} installment is due in 3 days.`,
+      };
+    }
+    case "LOAN_1_DAY": {
+      const { loanName, installmentMinor } = c as { loanName: string; installmentMinor: number };
+      return {
+        title: `${loanName} payment due tomorrow`,
+        body: `Your ${loanName} installment of ${fmt(installmentMinor, currency)} is due tomorrow.`,
       };
     }
     case "LOAN_DUE_TODAY": {
