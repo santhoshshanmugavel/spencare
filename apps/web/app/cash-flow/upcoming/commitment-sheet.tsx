@@ -605,17 +605,26 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                     {/* Saving amount - auto-calculated from payment amount / periods, shown read-only */}
                     {autoSavingAmount != null && amountMinorWatched ? (
                       <div className="rounded-md bg-muted/50 px-3 py-2 text-sm space-y-0.5">
-                        <p className="text-xs text-muted-foreground">Amount to set aside each time</p>
+                        <p className="text-xs text-muted-foreground">Set aside each time</p>
                         <p className="font-medium text-foreground">
                           {minorUnitsToDisplay(amountMinorWatched, CURRENCY)} over {periods} {savingCadenceUnit(savingCadence!)}s = {minorUnitsToDisplay(autoSavingAmount, CURRENCY)} per {savingCadenceUnit(savingCadence!)}
                         </p>
                       </div>
                     ) : (
-                      <FormField id="c-saving-amt" label="How much should you set aside each time? (INR)" hint="Enter the payment amount above first." error={msg(errors.savingAmountMinor)}>
+                      <FormField
+                        id="c-saving-amt"
+                        label="Set aside each time (INR)"
+                        hint={
+                          amountMinorWatched && amountMinorWatched > 0 && savingCadence && periods === null
+                            ? "This payment and saving schedule combination cannot be automatically calculated. Choose compatible schedules (e.g. quarterly + monthly)."
+                            : "Enter the payment amount above to calculate automatically."
+                        }
+                        error={msg(errors.savingAmountMinor)}
+                      >
                         <Input
                           id="c-saving-amt"
                           inputMode="decimal"
-                          placeholder="0"
+                          placeholder="--"
                           disabled
                           value=""
                           readOnly
@@ -695,8 +704,8 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                   render={({ field }) => (
                     <FormField
                       id="c-reserve-account"
-                      label="Where do you want to set money aside?"
-                      hint="Choose a bank or cash account to hold this money. Credit cards are not allowed."
+                      label="Where should Spencare track the money you are protecting?"
+                      hint="Choose a bank or cash account. You move the money there yourself. Credit cards are not allowed."
                       error={msg(errors.reserveAccountId)}
                     >
                       <Select
@@ -816,9 +825,9 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                 )}
               />
               <div>
-                <Label htmlFor="c-autopay" className="text-sm font-medium">Automatically track payments</Label>
+                <Label htmlFor="c-autopay" className="text-sm font-medium">Automatically match payments</Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Spencare will look for a matching transaction and automatically record this payment in your account on the scheduled date. It does not make a real bank payment.
+                  Spencare will look for a matching real transaction when this payment is due. It will never create a bank payment or invent a transaction.
                 </p>
               </div>
             </div>
@@ -870,9 +879,9 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                   )}
                 />
                 <div>
-                  <Label htmlFor="c-autoprotect" className="text-sm font-medium">Automatically record protection on schedule</Label>
+                  <Label htmlFor="c-autoprotect" className="text-sm font-medium">Remind me to set money aside on schedule</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Spencare will mark each installment as protected on the scheduled date. You still move the money yourself. No bank transfer is made.
+                    Spencare will remind you on the scheduled date to set this amount aside. You move the money yourself and confirm each installment. No bank transfer is made.
                   </p>
                 </div>
               </div>

@@ -160,6 +160,7 @@ export function UpcomingDashboard({
   const monthSummary = (() => {
     let paymentsDue = 0;
     let toProtect = 0;
+    let preparationDue = 0;
     for (const ev of selectedEvents) {
       if (ev.kind === "commitment_payment" || ev.kind === "loan") {
         paymentsDue += ev.amountMinor;
@@ -168,8 +169,11 @@ export function UpcomingDashboard({
         const shortfall = ev.amountMinor - (ev.reservedMinor ?? 0);
         if (shortfall > 0) toProtect += shortfall;
       }
+      if (ev.kind === "commitment_preparation") {
+        preparationDue += ev.amountMinor;
+      }
     }
-    return { paymentsDue, toProtect };
+    return { paymentsDue, toProtect, preparationDue };
   })();
 
   return (
@@ -230,7 +234,7 @@ export function UpcomingDashboard({
       </div>
 
       {/* Month summary */}
-      {selectedEvents.length > 0 && (monthSummary.paymentsDue > 0 || monthSummary.toProtect > 0) && (
+      {selectedEvents.length > 0 && (monthSummary.paymentsDue > 0 || monthSummary.toProtect > 0 || monthSummary.preparationDue > 0) && (
         <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/40 px-4 py-3 text-sm">
           {monthSummary.paymentsDue > 0 && (
             <div className="flex flex-col gap-0.5">
@@ -240,6 +244,17 @@ export function UpcomingDashboard({
                 masked={masked}
                 size="numeric"
                 className="text-sm font-semibold"
+              />
+            </div>
+          )}
+          {monthSummary.preparationDue > 0 && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs text-muted-foreground">Prepare</span>
+              <Money
+                value={DomainMoney.fromMinorUnits(BigInt(monthSummary.preparationDue), CURRENCY)}
+                masked={masked}
+                size="numeric"
+                className="text-sm font-semibold text-muted-foreground"
               />
             </div>
           )}

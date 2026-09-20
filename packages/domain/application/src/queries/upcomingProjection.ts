@@ -633,13 +633,13 @@ export async function getUpcomingProjection(
   allEvents.sort((a, b) => {
     const dc = a.date.localeCompare(b.date);
     if (dc !== 0) return dc;
-    // Within same date: payments first, then preparation, then goals, then loans, then CC events
+    // Within same date: preparation first (reminder before obligation), then payments/loans/CC, then goals
     const kindOrder: Record<UpcomingEventKind, number> = {
-      commitment_payment: 0,
-      loan: 1,
-      credit_card_payment: 2,
-      goal_contribution: 3,
-      commitment_preparation: 4,
+      commitment_preparation: 0,
+      commitment_payment: 1,
+      loan: 2,
+      credit_card_payment: 3,
+      goal_contribution: 4,
       credit_card_statement: 5,
     };
     return kindOrder[a.kind] - kindOrder[b.kind];
