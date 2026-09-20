@@ -110,6 +110,8 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
                 ownedSpendableMinor: Number(summary.safeToSpend.ownedSpendableTotal.amountMinorUnits),
                 creditAvailableMinor: Number(summary.safeToSpend.creditAvailableTotal.amountMinorUnits),
                 cardPaymentReservedMinor: Number(summary.safeToSpend.cardPaymentReservedTotal.amountMinorUnits),
+                commitmentReservedMinor: Number(summary.safeToSpend.commitmentReservedTotal.amountMinorUnits),
+                loanReservedMinor: Number(summary.safeToSpend.loanReservedTotal.amountMinorUnits),
               },
               accounts: [],
             },

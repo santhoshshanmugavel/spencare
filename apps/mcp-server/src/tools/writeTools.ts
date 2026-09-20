@@ -41,6 +41,7 @@ import {
   proposeCreateLoanSchema,
   proposeUpdateLoanSchema,
   proposeDeleteLoanSchema,
+  proposeMarkLoanPaidSchema,
   confirmCommandSchema,
   cancelCommandSchema,
 } from "@spencare/validation";
@@ -1043,6 +1044,29 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
         return proposeCommand(ctx, "mcp", "deleteLoan", { loanId }, {
           summary: "Delete this loan record. This cannot be undone.",
           fields: [{ label: "Action", value: "Delete loan" }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeMarkLoanPaid",
+    {
+      description:
+        "Propose recording a loan installment payment. Creates an expense transaction from the payment account and advances the loan's next payment date. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: proposeMarkLoanPaidSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeMarkLoanPaid", "write", async () => {
+        const input = proposeMarkLoanPaidSchema.parse(rawInput);
+        const privacyMode = await isPrivacyModeEnabled(ctx);
+        const amountText = describeAmountForProvider(input.amountMinor, "INR", privacyMode);
+        return proposeCommand(ctx, "mcp", "markLoanPaid", input as unknown as Record<string, unknown>, {
+          summary: `Record loan installment payment of ${amountText} on ${input.paidDate}.`,
+          fields: [
+            { label: "Amount", value: amountText },
+            { label: "Date", value: input.paidDate },
+            { label: "Loan ID", value: input.loanId },
+          ],
         });
       }),
   );

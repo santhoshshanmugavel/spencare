@@ -177,6 +177,16 @@ export const proposeDeleteCommitmentSchema = proposeCommitmentIdSchema;
 const proposeLoanIdSchema = z.object({ loanId: z.string().uuid() });
 export const proposeDeleteLoanSchema = proposeLoanIdSchema;
 
+export const proposeMarkLoanPaidSchema = z.object({
+  loanId: z.string().uuid(),
+  paymentAccountId: z.string().uuid(),
+  amountMinor: z.number().int().positive(),
+  paidDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD"),
+  categoryId: z.string().uuid(),
+  outstandingMinor: z.number().int().nonnegative().optional(),
+});
+export type ProposeMarkLoanPaidInput = z.infer<typeof proposeMarkLoanPaidSchema>;
+
 export type ProposeCreateCommitmentInput = z.infer<typeof createCommitmentSchema>;
 export type ProposeUpdateCommitmentInput = z.infer<typeof updateCommitmentSchema>;
 
@@ -230,6 +240,7 @@ export const CONFIRMATION_COMMAND_TYPES = [
   "createLoan",
   "updateLoan",
   "deleteLoan",
+  "markLoanPaid",
 ] as const;
 export type ConfirmationCommandType = (typeof CONFIRMATION_COMMAND_TYPES)[number];
 

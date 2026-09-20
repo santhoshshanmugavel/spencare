@@ -184,6 +184,8 @@ export {
   proposeCreateLoanSchema,
   proposeUpdateLoanSchema,
   proposeDeleteLoanSchema,
+  proposeMarkLoanPaidSchema,
+  type ProposeMarkLoanPaidInput,
   type ProposeCreateCommitmentInput,
   type ProposeUpdateCommitmentInput,
   CONFIRMATION_COMMAND_TYPES,
