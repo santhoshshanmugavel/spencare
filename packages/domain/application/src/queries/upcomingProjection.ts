@@ -37,6 +37,8 @@ import {
   calculateNextOccurrence,
   predictNextOccurrence,
   resolveRecurringDay,
+  computeReserveStatus,
+  type ReserveStatusResult,
   type PaymentFrequency,
   type GoalContributionFrequency,
   type RecurrenceInterval,
@@ -97,6 +99,9 @@ export interface UpcomingEvent {
   preparationForDate?: string;
   /** The commitment occurrence id this preparation belongs to (if persisted). */
   preparationForOccurrenceId?: string;
+
+  /** Canonical reserve status computed at projection time. */
+  reserveStatus?: ReserveStatusResult;
 
   // Goal contribution fields
   goalTargetDate?: string | null;
@@ -287,6 +292,12 @@ export async function getUpcomingProjection(
   const { startDate, endDate } = opts;
   const CURRENCY = "INR";
 
+  // Local calendar date for reserve status computation (YYYY-MM-DD).
+  const todayLocal = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
   // Fetch all required data in parallel
   const [commitments, persistedOccurrences, loans, goalPlans, goals, accounts] = await Promise.all([
     listCommitments(ctx),
@@ -355,6 +366,14 @@ export async function getUpcomingProjection(
       tenureType: c.tenure_type ?? undefined,
       tenurePayments: c.tenure_payments,
       tenureEndDate: c.tenure_end_date,
+      reserveStatus: computeReserveStatus({
+        amountMinor: occ.amount_minor,
+        reservedMinor: occ.reserved_minor ?? 0,
+        hasReserveAccount: !!c.reserve_account_id,
+        occurrenceStatus: occ.status,
+        dueDate: occ.due_date,
+        today: todayLocal,
+      }),
     });
   }
 
@@ -403,6 +422,14 @@ export async function getUpcomingProjection(
         tenureType: c.tenure_type ?? undefined,
         tenurePayments: c.tenure_payments,
         tenureEndDate: c.tenure_end_date,
+        reserveStatus: computeReserveStatus({
+          amountMinor: c.amount_minor,
+          reservedMinor: 0,
+          hasReserveAccount: !!c.reserve_account_id,
+          occurrenceStatus: "upcoming",
+          dueDate: date,
+          today: todayLocal,
+        }),
       });
     }
   }
@@ -568,6 +595,14 @@ export async function getUpcomingProjection(
       currency: loan.currency ?? CURRENCY,
       sourceId: loan.id,
       projected: false,
+      reserveStatus: computeReserveStatus({
+        amountMinor: loan.installment_amount_minor,
+        reservedMinor: 0,
+        hasReserveAccount: false,
+        occurrenceStatus: "upcoming",
+        dueDate: loan.next_payment_date,
+        today: todayLocal,
+      }),
     });
   }
 

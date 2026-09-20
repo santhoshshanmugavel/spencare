@@ -152,6 +152,13 @@ export {
 } from "./oauth.js";
 
 export {
+  computeReserveStatus,
+  type ReserveStatus,
+  type ReserveStatusInput,
+  type ReserveStatusResult,
+} from "./reserveStatus.js";
+
+export {
   redactFinancialSnapshot,
   redactBudgetSummaries,
   redactGoalSummaries,

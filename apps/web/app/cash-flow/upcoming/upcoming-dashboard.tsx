@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, CreditCard, Landmark, PiggyBank, Plus, ShieldCheck, Target, Zap } from "lucide-react";
-import { Money as DomainMoney } from "@spencare/domain-core";
+import { Money as DomainMoney, type ReserveStatusResult } from "@spencare/domain-core";
 import type {
   PlannedCommitmentRow,
   LoanRow,
@@ -63,21 +63,31 @@ function DueDateLabel({ isoDate }: { isoDate: string }) {
   return <span className="text-xs text-muted-foreground">{formatDate(isoDate)}</span>;
 }
 
-function ReserveLabel({ reservedMinor, amountMinor }: { reservedMinor: number; amountMinor: number }) {
-  const shortfall = amountMinor - reservedMinor;
-  if (shortfall <= 0)
-    return (
-      <span className="text-xs font-medium text-success">
-        Ready to pay
-      </span>
-    );
-  if (reservedMinor > 0)
-    return (
-      <span className="text-xs text-warning">
-        {minorUnitsToDisplay(reservedMinor, CURRENCY)} / {minorUnitsToDisplay(amountMinor, CURRENCY)} protected
-      </span>
-    );
-  return null;
+function ReserveLabel({ rs, currency = CURRENCY }: { rs: ReserveStatusResult; currency?: string }) {
+  switch (rs.status) {
+    case "paid":
+      return <span className="text-xs font-medium text-success">{rs.label}</span>;
+    case "fully_reserved":
+      return <span className="text-xs font-medium text-success">Fully reserved</span>;
+    case "partially_reserved":
+      return (
+        <span className="text-xs text-warning">
+          {minorUnitsToDisplay(rs.shortfallMinor, currency)} still to reserve
+        </span>
+      );
+    case "overdue":
+      return <span className="text-xs font-medium text-destructive">Overdue</span>;
+    case "due_today":
+      return <span className="text-xs font-medium text-warning">Due today</span>;
+    case "due_soon":
+      return <span className="text-xs text-warning">Due soon</span>;
+    case "needs_funding":
+      return <span className="text-xs text-muted-foreground">Needs funding</span>;
+    case "no_reserve_account":
+      return null;
+    default:
+      return null;
+  }
 }
 
 // ── Month navigation ──────────────────────────────────────────────────────────
@@ -223,6 +233,7 @@ export function UpcomingDashboard({
         updated_at: "",
       } as unknown as Parameters<typeof CommitmentActions>[0]["occ"]) : null;
 
+      const rs = ev.reserveStatus;
       return (
         <ListRow
           key={ev.id}
@@ -234,8 +245,8 @@ export function UpcomingDashboard({
               {category && (
                 <span className="text-xs text-muted-foreground">{category.name}</span>
               )}
-              {ev.reserveAccountId ? (
-                <ReserveLabel reservedMinor={reservedMinor} amountMinor={ev.amountMinor} />
+              {rs ? (
+                <ReserveLabel rs={rs} />
               ) : isCredit ? (
                 <span className="text-xs text-muted-foreground">Credit card</span>
               ) : null}
@@ -378,6 +389,7 @@ export function UpcomingDashboard({
     if (ev.kind === "loan") {
       const loan = loanById.get(ev.sourceId);
       const paymentAccount = loan?.payment_account_id ? accountById.get(loan.payment_account_id) : null;
+      const lrs = ev.reserveStatus;
       return (
         <ListRow
           key={ev.id}
@@ -386,9 +398,7 @@ export function UpcomingDashboard({
           subtitle={
             <span className="flex items-center gap-2">
               <DueDateLabel isoDate={ev.date} />
-              {ev.subtitle && (
-                <span className="text-xs text-muted-foreground">{ev.subtitle}</span>
-              )}
+              {lrs && <ReserveLabel rs={lrs} />}
               {paymentAccount && (
                 <span className="text-xs text-muted-foreground">via {paymentAccount.name}</span>
               )}

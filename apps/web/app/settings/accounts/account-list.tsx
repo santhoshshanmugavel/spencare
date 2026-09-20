@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/spencare/empty-state";
 import { AddAccountSheet } from "./add-account-sheet";
 import { EditAccountSheet } from "./edit-account-sheet";
 import { ArchiveAccountDialog } from "./archive-account-dialog";
+import { AccountDetailsSheet } from "./account-details-sheet";
 
 /**
  * Grid-of-cards layout per SP-234 ("Settings > Accounts (Main Grid)"),
@@ -73,6 +74,7 @@ export function AccountList({
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<AccountRow | null>(null);
   const [archiving, setArchiving] = useState<AccountRow | null>(null);
+  const [viewingDetails, setViewingDetails] = useState<AccountRow | null>(null);
 
   const grouped = SECTION_ORDER.map((type) => ({
     type,
@@ -120,6 +122,7 @@ export function AccountList({
                 masked={masked}
                 onEdit={() => setEditing(account)}
                 onDelete={() => setArchiving(account)}
+                onViewDetails={() => setViewingDetails(account)}
                 cardReserveMinor={cardReservePerAccount[account.id] ?? 0}
                 goalReserveMinor={goalReservePerAccount[account.id] ?? 0}
                 commitmentReserveMinor={commitmentReservePerAccount[account.id] ?? 0}
@@ -173,6 +176,17 @@ export function AccountList({
           }}
         />
       ) : null}
+
+      <AccountDetailsSheet
+        account={viewingDetails}
+        open={!!viewingDetails}
+        onOpenChange={(o) => { if (!o) setViewingDetails(null); }}
+        masked={masked}
+        goalReserveMinor={viewingDetails ? (goalReservePerAccount[viewingDetails.id] ?? 0) : 0}
+        commitmentReserveMinor={viewingDetails ? (commitmentReservePerAccount[viewingDetails.id] ?? 0) : 0}
+        cardReserveMinor={viewingDetails ? (cardReservePerAccount[viewingDetails.id] ?? 0) : 0}
+        cardReserveDetails={viewingDetails ? cardReserveDetails.filter((d) => d.paymentAccountId === viewingDetails.id) : []}
+      />
     </div>
   );
 }

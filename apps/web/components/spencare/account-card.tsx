@@ -78,6 +78,7 @@ export function AccountCard({
   masked,
   onEdit,
   onDelete,
+  onViewDetails,
   cardReserveMinor = 0,
   goalReserveMinor = 0,
   commitmentReserveMinor = 0,
@@ -88,6 +89,7 @@ export function AccountCard({
   masked: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onViewDetails?: () => void;
   /** Reserved for credit-card payments from this account (0 when no payment source configured). */
   cardReserveMinor?: number;
   /** Reserved for goals funded from this account. */
@@ -123,6 +125,9 @@ export function AccountCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {onViewDetails && (
+              <DropdownMenuItem onSelect={onViewDetails}>View details</DropdownMenuItem>
+            )}
             <DropdownMenuItem onSelect={onEdit}>{labels.edit}</DropdownMenuItem>
             <DropdownMenuItem variant="destructive" onSelect={onDelete}>
               {labels.delete}
