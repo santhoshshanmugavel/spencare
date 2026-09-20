@@ -83,14 +83,10 @@ export async function createNotification(
       { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
     )
     .select(NOTIFICATION_COLUMNS)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    // If it was a conflict (dedupe), fetch the existing row
-    if (error.code === "23505" || error.message?.includes("duplicate")) return null;
-    throw error;
-  }
-  return data as NotificationRow;
+  if (error) throw error;
+  return data as NotificationRow | null;
 }
 
 export async function listNotifications(
