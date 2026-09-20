@@ -431,3 +431,13 @@ export type {
   LoanType,
   LoanStatus,
 } from "@spencare/domain-infra";
+export {
+  upsertCreditCardObligation,
+  getCreditCardObligation,
+  getActiveObligationForAccount,
+  applyPaymentToObligation,
+  matchCreditCardPayment,
+  type CreditCardObligation,
+  type ObligationStatus,
+  type PaymentMatchResult,
+} from "./services/creditCardPayment.js";

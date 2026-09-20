@@ -37,6 +37,7 @@ export { WRITE_TOOLS } from "./tools/writeTools.js";
 export type { ToolHandlerContext } from "./tools/readTools.js";
 
 export { sendMessage, type OrchestratorEvent, type SendMessageOptions, RATE_LIMIT_RETRY_BACKOFF_MS } from "./orchestrator.js";
+export { extractReceiptFromImage, ReceiptExtractionCapabilityError, type ReceiptExtraction } from "./receiptExtraction.js";
 export { SPENSA_SYSTEM_PROMPT } from "./systemPrompt.js";
 export { getConversation, listConversations, getConversationMessages, deleteConversation, regenerateReply } from "./conversations.js";
 

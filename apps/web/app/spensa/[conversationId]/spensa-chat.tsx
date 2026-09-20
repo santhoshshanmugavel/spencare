@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Loader2, AlertTriangle, Sparkles, MessageSquarePlus, Send, Bot, Mic, MicOff, Copy, Check, RefreshCw, Headphones, HeadphoneOff } from "lucide-react";
+import { Loader2, AlertTriangle, Sparkles, MessageSquarePlus, Send, Bot, Mic, MicOff, Copy, Check, RefreshCw, Headphones, HeadphoneOff, Paperclip, X, FileText, Image as ImageIcon } from "lucide-react";
 import type { AccountRow, CategoryRow, GoalRow } from "@spencare/domain-application";
 import type { AiConversationRow, AiMessageRow } from "@spencare/ai";
 import { Button } from "@/components/ui/button";
@@ -77,6 +77,13 @@ export function SpensaChat({
   const [isPending, startTransition] = useTransition();
   const [isListening, setIsListening] = useState(false);
   const [voiceAgentActive, setVoiceAgentActive] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<{
+    file: File;
+    attachmentId: string | null;
+    status: "uploading" | "uploaded" | "extracting" | "ready" | "error";
+    errorMessage?: string;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const voiceAgentRef = useRef(false);
@@ -196,6 +203,79 @@ export function SpensaChat({
       await cancelCommandAction(confirmationId);
       setConfirmStates((s) => ({ ...s, [confirmationId]: { state: "cancelled" } }));
     });
+  }
+
+  const ALLOWED_ATTACHMENT_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf", "text/csv"];
+  const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+  async function handleAttachmentFile(file: File) {
+    if (!ALLOWED_ATTACHMENT_TYPES.includes(file.type)) {
+      setPendingAttachment({ file, attachmentId: null, status: "error", errorMessage: "Unsupported file type." });
+      return;
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      setPendingAttachment({ file, attachmentId: null, status: "error", errorMessage: "File exceeds 10 MB limit." });
+      return;
+    }
+    setPendingAttachment({ file, attachmentId: null, status: "uploading" });
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      if (activeConversationId) form.append("conversationId", activeConversationId);
+      const res = await fetch("/api/spensa/attachments", { method: "POST", body: form });
+      const data = await res.json() as { attachmentId?: string; error?: string };
+      if (!res.ok || !data.attachmentId) {
+        setPendingAttachment((p) => p ? { ...p, status: "error", errorMessage: data.error ?? "Upload failed." } : null);
+        return;
+      }
+      const attachmentId = data.attachmentId;
+      // If it's an image, auto-extract receipt
+      if (file.type.startsWith("image/")) {
+        setPendingAttachment({ file, attachmentId, status: "extracting" });
+        const extractRes = await fetch("/api/spensa/extract-receipt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ attachmentId }),
+        });
+        const extractData = await extractRes.json() as { extraction?: Record<string, unknown>; error?: string };
+        if (extractRes.ok && extractData.extraction) {
+          const e = extractData.extraction;
+          const parts: string[] = [];
+          if (e.merchantName) parts.push(`Merchant: ${e.merchantName}`);
+          if (e.amountMinor && e.currency) {
+            const amount = (e.amountMinor as number) / 100;
+            parts.push(`Amount: ${e.currency} ${amount.toFixed(2)}`);
+          }
+          if (e.occurredAt) parts.push(`Date: ${e.occurredAt}`);
+          if (parts.length > 0) {
+            setInput((prev) => (prev ? prev + "\n" : "") + `[Receipt] ${parts.join(", ")}`);
+          }
+          setPendingAttachment({ file, attachmentId, status: "ready" });
+        } else {
+          setPendingAttachment({ file, attachmentId, status: "uploaded" });
+        }
+      } else {
+        setPendingAttachment({ file, attachmentId, status: "uploaded" });
+      }
+    } catch {
+      setPendingAttachment((p) => p ? { ...p, status: "error", errorMessage: "Upload failed." } : null);
+    }
+  }
+
+  function handleAttachmentButtonClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) void handleAttachmentFile(file);
+    if (e.target) e.target.value = "";
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) void handleAttachmentFile(file);
   }
 
   function getSpeechRecognitionClass() {
@@ -394,13 +474,65 @@ export function SpensaChat({
         )}
 
         {/* Input bar */}
-        <div className="border-t border-border/60 bg-background/80 px-4 py-3 backdrop-blur">
+        <div
+          className="border-t border-border/60 bg-background/80 px-4 py-3 backdrop-blur"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/csv"
+            className="sr-only"
+            onChange={handleFileInputChange}
+            aria-label="Attach file"
+          />
           <form
             className="mx-auto flex max-w-2xl items-end gap-2"
             onSubmit={(e) => { e.preventDefault(); void handleSend(); }}
           >
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={handleAttachmentButtonClick}
+              disabled={isStreaming}
+              className="size-12 shrink-0 rounded-xl"
+              aria-label="Attach file"
+              title="Attach image, PDF, or CSV"
+            >
+              <Paperclip className="size-4" />
+            </Button>
             <label htmlFor="spensa-composer" className="sr-only">Message Spensa</label>
             <div className="relative flex-1">
+              {pendingAttachment && (
+                <div className={cn(
+                  "mb-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs",
+                  pendingAttachment.status === "error"
+                    ? "border-destructive/40 bg-destructive/5 text-destructive"
+                    : "border-border/60 bg-muted/60 text-foreground/80",
+                )}>
+                  {pendingAttachment.file.type.startsWith("image/")
+                    ? <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                    : <FileText className="size-3.5 shrink-0 text-muted-foreground" />}
+                  <span className="truncate flex-1">{pendingAttachment.file.name}</span>
+                  <span className="shrink-0 text-muted-foreground">
+                    {pendingAttachment.status === "uploading" && "Uploading..."}
+                    {pendingAttachment.status === "extracting" && "Reading receipt..."}
+                    {pendingAttachment.status === "uploaded" && `${(pendingAttachment.file.size / 1024).toFixed(0)} KB`}
+                    {pendingAttachment.status === "ready" && "Ready"}
+                    {pendingAttachment.status === "error" && (pendingAttachment.errorMessage ?? "Error")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingAttachment(null)}
+                    className="shrink-0 rounded p-0.5 hover:bg-muted"
+                    aria-label="Remove attachment"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              )}
               <textarea
                 id="spensa-composer"
                 ref={inputRef}

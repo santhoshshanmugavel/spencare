@@ -8,6 +8,7 @@ import type { TypedSupabaseClient } from "@spencare/domain-infra";
 import { checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder, checkCreditCardBillingReminder } from "./eventRules";
 import { resolveRecurringDay } from "@spencare/domain-core";
 import { savingDatesForOccurrence } from "@spencare/domain-core";
+import { getCreditCardStatementSummary, upsertCreditCardObligation } from "@spencare/domain-application";
 
 interface CheckOutcome {
   userId: string;
@@ -426,14 +427,42 @@ async function runChecksForUser(
   }
 
   // ---- Credit card billing reminders (statement cut day + payment due day) ----
+  // Service-role ctx for obligation queries (no user session available in cron)
+  const svcCtx = { userId, email: userEmail, supabase: serviceRoleSupabase, serviceRoleSupabase };
+
   for (const account of accounts ?? []) {
     if (account.type !== "credit_card") continue;
     const stmtDay: number | null = (account as { statement_generated_day?: number | null }).statement_generated_day ?? null;
     const payDay: number | null = (account as { payment_due_day?: number | null }).payment_due_day ?? null;
     if (stmtDay == null && payDay == null) continue;
 
+    // Compute statement summary and upsert obligation for the current period
+    let obligationRemainingMinor: number | null = null;
+    let obligationStatus: string | null = null;
+    let currentStatementDate: string | null = null;
+    try {
+      const summary = await getCreditCardStatementSummary(svcCtx, account.id);
+      if (summary) {
+        currentStatementDate = summary.statementDate;
+        const obligation = await upsertCreditCardObligation(svcCtx, {
+          accountId: account.id,
+          statementDate: summary.statementDate,
+          periodStart: summary.periodStart,
+          periodEnd: summary.periodEnd,
+          statementBalanceMinor: summary.statementBalanceMinor,
+          dueDate: summary.paymentDueDate,
+        });
+        obligationRemainingMinor = obligation.remainingMinor;
+        obligationStatus = obligation.status;
+      }
+    } catch {
+      // Obligation upsert failure must not block reminders
+    }
+
     // Check the current month and the next month so reminders fire near month boundaries.
-    const outstanding = account.credit_used_minor ?? 0;
+    // For payment reminders: suppress when the obligation is fully paid.
+    const outstanding = obligationRemainingMinor ?? (account.credit_used_minor ?? 0);
+
     for (const offset of [0, 1]) {
       const checkDate = new Date(today.getTime() + offset * 28 * 24 * 60 * 60 * 1000);
       const year = checkDate.getUTCFullYear();
@@ -460,12 +489,22 @@ async function runChecksForUser(
       try {
         if (payDay != null) {
           const payDateIso = resolveRecurringDay({ year, month, paymentDayRule: payDay });
+          // Suppress payment reminders when the obligation is fully paid
+          const isCurrentCyclePaid =
+            obligationStatus === "paid" &&
+            currentStatementDate != null &&
+            resolveRecurringDay({ year, month, paymentDayRule: stmtDay ?? payDay }) === currentStatementDate;
+          if (isCurrentCyclePaid) {
+            checksRun++;
+            continue;
+          }
           await checkCreditCardBillingReminder({
             serviceRoleSupabase, userId, userEmail,
             accountId: account.id,
             accountName: account.name,
             dueDateIso: payDateIso,
             kind: "payment",
+            // Use canonical remaining amount (from obligation) for partial-payment messaging
             outstandingMinor: outstanding,
             currency: account.currency ?? "INR",
           });
