@@ -223,6 +223,7 @@ async function runChecksForUser(
         dueDateIso: prediction.expected_date,
         expectedAmountMinor: prediction.expected_amount_minor ?? null,
         currency: "INR",
+        todayIso,
       });
       checksRun++;
     } catch {
@@ -317,6 +318,7 @@ async function runChecksForUser(
           amountMinor: occ.amount_minor,
           reservedMinor: occ.reserved_minor,
           currency: commitment.currency,
+          todayIso,
         });
         checksRun++;
       } catch {
@@ -419,6 +421,7 @@ async function runChecksForUser(
         dueDateIso: loan.next_payment_date,
         installmentMinor: loan.installment_amount_minor,
         currency: loan.currency,
+        todayIso,
       });
       checksRun++;
     } catch {
@@ -459,15 +462,19 @@ async function runChecksForUser(
       // Obligation upsert failure must not block reminders
     }
 
-    // Check the current month and the next month so reminders fire near month boundaries.
+    // Check the current calendar month and the next so reminders fire near month boundaries.
     // For payment reminders: suppress when the obligation is fully paid.
     const outstanding = obligationRemainingMinor ?? (account.credit_used_minor ?? 0);
 
-    for (const offset of [0, 1]) {
-      const checkDate = new Date(today.getTime() + offset * 28 * 24 * 60 * 60 * 1000);
-      const year = checkDate.getUTCFullYear();
-      const month = checkDate.getUTCMonth() + 1;
+    const todayYear = today.getUTCFullYear();
+    const todayMonth = today.getUTCMonth() + 1;
+    const nextMonthTotal = todayYear * 12 + todayMonth;
+    const months: Array<{ year: number; month: number }> = [
+      { year: todayYear, month: todayMonth },
+      { year: Math.floor(nextMonthTotal / 12), month: (nextMonthTotal % 12) + 1 },
+    ];
 
+    for (const { year, month } of months) {
       try {
         if (stmtDay != null) {
           const stmtDateIso = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
@@ -479,6 +486,7 @@ async function runChecksForUser(
             kind: "statement",
             outstandingMinor: outstanding,
             currency: account.currency ?? "INR",
+            todayIso,
           });
           checksRun++;
         }
@@ -488,12 +496,26 @@ async function runChecksForUser(
 
       try {
         if (payDay != null) {
-          const payDateIso = resolveRecurringDay({ year, month, paymentDayRule: payDay });
+          // When payment_due_day falls on or before the statement close date in the same
+          // month, the payment is due the following month. Mirror getUpcomingProjection.
+          let dueYear = year;
+          let dueMonth = month;
+          if (stmtDay != null) {
+            const stmtDateIso = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
+            const sameMoDue = resolveRecurringDay({ year, month, paymentDayRule: payDay });
+            if (sameMoDue <= stmtDateIso) {
+              const nextTotal = year * 12 + month;
+              dueYear = Math.floor(nextTotal / 12);
+              dueMonth = (nextTotal % 12) + 1;
+            }
+          }
+          const payDateIso = resolveRecurringDay({ year: dueYear, month: dueMonth, paymentDayRule: payDay });
           // Suppress payment reminders when the obligation is fully paid
           const isCurrentCyclePaid =
             obligationStatus === "paid" &&
             currentStatementDate != null &&
-            resolveRecurringDay({ year, month, paymentDayRule: stmtDay ?? payDay }) === currentStatementDate;
+            stmtDay != null &&
+            resolveRecurringDay({ year, month, paymentDayRule: stmtDay }) === currentStatementDate;
           if (isCurrentCyclePaid) {
             checksRun++;
             continue;
@@ -504,9 +526,9 @@ async function runChecksForUser(
             accountName: account.name,
             dueDateIso: payDateIso,
             kind: "payment",
-            // Use canonical remaining amount (from obligation) for partial-payment messaging
             outstandingMinor: outstanding,
             currency: account.currency ?? "INR",
+            todayIso,
           });
           checksRun++;
         }

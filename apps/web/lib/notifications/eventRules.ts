@@ -162,6 +162,7 @@ interface BillRuleInput extends UserTarget {
   dueDateIso: string;
   expectedAmountMinor: number | null;
   currency?: string;
+  todayIso: string;
 }
 
 interface GoalPlanRuleInput extends UserTarget {
@@ -223,10 +224,9 @@ export async function checkGoalPlanReminder(input: GoalPlanRuleInput): Promise<v
 export async function checkBillReminder(input: BillRuleInput): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, billId, billName, dueDateIso, expectedAmountMinor } = input;
   const currency = input.currency ?? "INR";
-  const today = new Date();
-  const dueDate = new Date(dueDateIso);
-  const diffMs = dueDate.getTime() - today.getTime();
-  const daysUntilDue = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const today = new Date(input.todayIso + "T00:00:00Z");
+  const dueDate = new Date(dueDateIso + "T00:00:00Z");
+  const daysUntilDue = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000);
 
   let eventType: DeliverNotificationInput["eventType"] | null = null;
   let dedupeKey = "";
@@ -277,13 +277,13 @@ interface CommitmentRuleInput extends UserTarget {
   amountMinor: number;
   reservedMinor: number;
   currency?: string;
+  todayIso: string;
 }
 
 export async function checkCommitmentReminder(input: CommitmentRuleInput): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, occurrenceId, commitmentId, commitmentName, dueDateIso, amountMinor, reservedMinor } = input;
   const currency = input.currency ?? "INR";
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  const today = new Date(input.todayIso + "T00:00:00Z");
   const dueDate = new Date(dueDateIso + "T00:00:00Z");
   const daysUntilDue = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000);
   const shortfall = amountMinor - reservedMinor;
@@ -441,13 +441,13 @@ interface LoanRuleInput extends UserTarget {
   dueDateIso: string;
   installmentMinor: number;
   currency?: string;
+  todayIso: string;
 }
 
 export async function checkLoanReminder(input: LoanRuleInput): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, loanId, loanName, dueDateIso, installmentMinor } = input;
   const currency = input.currency ?? "INR";
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  const today = new Date(input.todayIso + "T00:00:00Z");
   const dueDate = new Date(dueDateIso + "T00:00:00Z");
   const daysUntilDue = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000);
 
@@ -495,13 +495,13 @@ interface CreditCardBillingRuleInput extends UserTarget {
   kind: "statement" | "payment";
   outstandingMinor: number;
   currency?: string;
+  todayIso: string;
 }
 
 export async function checkCreditCardBillingReminder(input: CreditCardBillingRuleInput): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, accountId, accountName, dueDateIso, kind, outstandingMinor } = input;
   const currency = input.currency ?? "INR";
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  const today = new Date(input.todayIso + "T00:00:00Z");
   const dueDate = new Date(dueDateIso + "T00:00:00Z");
   const daysUntilDue = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000);
 

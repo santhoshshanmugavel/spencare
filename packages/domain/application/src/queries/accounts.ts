@@ -111,8 +111,14 @@ export async function getCreditCardStatementSummary(
   let paymentDueDate: string | null = null;
   if (payDay != null) {
     const stmtDateObj = new Date(statementDate + "T00:00:00Z");
-    const payYear = stmtDateObj.getUTCFullYear();
-    const payMonth = stmtDateObj.getUTCMonth() + 1;
+    let payYear = stmtDateObj.getUTCFullYear();
+    let payMonth = stmtDateObj.getUTCMonth() + 1;
+    const sameMoDue = resolveRecurringDay({ year: payYear, month: payMonth, paymentDayRule: payDay });
+    if (sameMoDue <= statementDate) {
+      const nextTotal = payYear * 12 + payMonth;
+      payYear = Math.floor(nextTotal / 12);
+      payMonth = (nextTotal % 12) + 1;
+    }
     paymentDueDate = resolveRecurringDay({ year: payYear, month: payMonth, paymentDayRule: payDay });
   }
 
