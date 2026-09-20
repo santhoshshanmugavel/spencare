@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -112,6 +112,26 @@ function nextPaymentDateFromWeekdayRule(isoDay: number): string {
 }
 
 
+/** Returns exact integer number of saving periods per one payment cycle, or null if not expressible as an integer. */
+function getPeriodsPerCycle(paymentFreq: string, saveCadence: string): number | null {
+  const MONTHS: Record<string, number> = {
+    monthly: 1, every_2_months: 2, quarterly: 3,
+    every_6_months: 6, yearly: 12, every_2_years: 24, every_3_years: 36,
+  };
+  const pm = MONTHS[paymentFreq];
+  const sm = MONTHS[saveCadence];
+  if (!pm || !sm || pm < sm) return null;
+  const ratio = pm / sm;
+  return Number.isInteger(ratio) ? ratio : null;
+}
+
+/** Unit label for saving cadence (singular). */
+function savingCadenceUnit(cadence: string): string {
+  if (cadence === "weekly" || cadence === "biweekly") return "week";
+  if (cadence === "daily") return "day";
+  return "month";
+}
+
 function useMoneyField(initialMinor?: number) {
   const [display, setDisplay] = useState(initialMinor ? minorUnitsToDisplay(initialMinor, CURRENCY) : "");
   function onChange(raw: string, set: (minor: number | null) => void) {
@@ -141,8 +161,8 @@ interface CommitmentSheetProps {
 export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categories, existing }: CommitmentSheetProps) {
   const isEdit = !!existing;
   const amountField = useMoneyField(existing?.amount_minor);
-  const savingAmountField = useMoneyField(existing?.saving_amount_minor ?? undefined);
-  const alreadyReservedField = useMoneyField(undefined);
+  // Contribution count: how many saving installments have already been set aside (for initial reservation on create).
+  const [contributionCount, setContributionCount] = useState(0);
 
   // Whether the user wants preparation tracking
   const [preparationEnabled, setPreparationEnabled] = useState<boolean>(
@@ -194,9 +214,32 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
   const paymentFrequency = watch("paymentFrequency");
   const reserveAccountId = watch("reserveAccountId");
   const autoPayEnabled = watch("autoPayEnabled");
+  const amountMinorWatched = watch("amountMinor") as number | null | undefined;
 
   const hasSavingSchedule = !!savingCadence;
   const hasReserveAccount = !!reserveAccountId;
+
+  // Auto-calculate saving amount: payment amount / periods per cycle (integer ceiling, no float).
+  const periods = preparationEnabled && savingCadence
+    ? getPeriodsPerCycle(paymentFrequency, savingCadence)
+    : null;
+  const autoSavingAmount = (periods && amountMinorWatched && amountMinorWatched > 0)
+    ? Math.ceil(amountMinorWatched / periods)
+    : null;
+
+  useEffect(() => {
+    if (autoSavingAmount != null) {
+      setValue("savingAmountMinor", autoSavingAmount);
+    }
+  }, [autoSavingAmount, setValue]);
+
+  const alreadyReservedMinor = !isEdit && autoSavingAmount != null
+    ? Math.min(contributionCount * autoSavingAmount, amountMinorWatched ?? 0)
+    : null;
+
+  useEffect(() => {
+    setValue("alreadyReservedMinor", alreadyReservedMinor ?? null);
+  }, [alreadyReservedMinor, setValue]);
 
   // Payment date UI branches by frequency
   const paymentIsMonthly = paymentFrequency === "monthly";
@@ -221,8 +264,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
       setValue("alreadyReservedMinor", null);
       setValue("autoProtectEnabled", false);
       setSavingDayRule(null);
-      savingAmountField.setDisplay("");
-      alreadyReservedField.setDisplay("");
+      setContributionCount(0);
     }
   }
 
@@ -234,10 +276,11 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
 
   function handleSavingCadenceChange(cadence: string | null, fieldOnChange: (v: string | null) => void) {
     fieldOnChange(cadence || null);
-    // Reset day rule when cadence changes since the type of rule changes
     setSavingDayRule(null);
     setValue("savingDayRule", null);
     setValue("firstSavingDate", null);
+    setValue("savingAmountMinor", null);
+    setContributionCount(0);
   }
 
   function handleSavingDayRuleChange(rule: number, cadence: string) {
@@ -288,10 +331,9 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
       reset();
       setPreparationEnabled(false);
       setSavingDayRule(null);
+      setContributionCount(0);
       setValue("savingDayRule", null);
       amountField.setDisplay("");
-      savingAmountField.setDisplay("");
-      alreadyReservedField.setDisplay("");
     }
     onSaved();
   }
@@ -560,20 +602,26 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
 
                 {hasSavingSchedule && (
                   <>
-                    {/* Saving amount */}
-                    <FormField id="c-saving-amt" label="How much should you set aside each time? (INR)" error={msg(errors.savingAmountMinor)}>
-                      <Input
-                        id="c-saving-amt"
-                        inputMode="decimal"
-                        placeholder="0"
-                        value={savingAmountField.display}
-                        aria-invalid={!!errors.savingAmountMinor}
-                        aria-describedby={errors.savingAmountMinor ? errorId("c-saving-amt") : undefined}
-                        onChange={(e) =>
-                          savingAmountField.onChange(e.target.value, (v) => setValue("savingAmountMinor", v))
-                        }
-                      />
-                    </FormField>
+                    {/* Saving amount - auto-calculated from payment amount / periods, shown read-only */}
+                    {autoSavingAmount != null && amountMinorWatched ? (
+                      <div className="rounded-md bg-muted/50 px-3 py-2 text-sm space-y-0.5">
+                        <p className="text-xs text-muted-foreground">Amount to set aside each time</p>
+                        <p className="font-medium text-foreground">
+                          {minorUnitsToDisplay(amountMinorWatched, CURRENCY)} over {periods} {savingCadenceUnit(savingCadence!)}s = {minorUnitsToDisplay(autoSavingAmount, CURRENCY)} per {savingCadenceUnit(savingCadence!)}
+                        </p>
+                      </div>
+                    ) : (
+                      <FormField id="c-saving-amt" label="How much should you set aside each time? (INR)" hint="Enter the payment amount above first." error={msg(errors.savingAmountMinor)}>
+                        <Input
+                          id="c-saving-amt"
+                          inputMode="decimal"
+                          placeholder="0"
+                          disabled
+                          value=""
+                          readOnly
+                        />
+                      </FormField>
+                    )}
 
                     {/* When to set it aside - day rule or start date */}
                     {savingNeedsMonthDay && (
@@ -657,7 +705,7 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                           field.onChange(v || null);
                           if (!v) {
                             setValue("alreadyReservedMinor", null);
-                            alreadyReservedField.setDisplay("");
+                            setContributionCount(0);
                           }
                         }}
                       >
@@ -675,25 +723,33 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                   )}
                 />
 
-                {/* Already protected - only when a protection account is selected */}
-                {hasReserveAccount && (
+                {/* Already protected - contribution count selector (create only) */}
+                {hasReserveAccount && !isEdit && autoSavingAmount != null && periods != null && (
                   <FormField
                     id="c-already-reserved"
-                    label="How much is already protected? (INR)"
-                    hint="Enter money you have already set aside for this commitment. No transaction will be created."
-                    error={msg(errors.alreadyReservedMinor)}
+                    label="How many installments have you already set aside?"
+                    hint="No transaction is created. This just marks money as already protected."
                   >
-                    <Input
-                      id="c-already-reserved"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={alreadyReservedField.display}
-                      aria-invalid={!!errors.alreadyReservedMinor}
-                      aria-describedby={errors.alreadyReservedMinor ? errorId("c-already-reserved") : undefined}
-                      onChange={(e) =>
-                        alreadyReservedField.onChange(e.target.value, (v) => setValue("alreadyReservedMinor", v))
-                      }
-                    />
+                    <Select
+                      value={String(contributionCount)}
+                      onValueChange={(v) => setContributionCount(Number(v))}
+                    >
+                      <SelectTrigger id="c-already-reserved">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: periods + 1 }, (_, i) => {
+                          const amount = Math.min(i * autoSavingAmount, amountMinorWatched ?? 0);
+                          return (
+                            <SelectItem key={i} value={String(i)}>
+                              {i === 0
+                                ? "None yet"
+                                : `${i} ${savingCadenceUnit(savingCadence!)}${i === 1 ? "" : "s"} protected (${minorUnitsToDisplay(amount, CURRENCY)})`}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   </FormField>
                 )}
               </div>
@@ -814,9 +870,9 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                   )}
                 />
                 <div>
-                  <Label htmlFor="c-autoprotect" className="text-sm font-medium">Automatically set aside money on schedule</Label>
+                  <Label htmlFor="c-autoprotect" className="text-sm font-medium">Automatically record protection on schedule</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Spencare will automatically move the planned amount to your protection account on each preparation date.
+                    Spencare will mark each installment as protected on the scheduled date. You still move the money yourself. No bank transfer is made.
                   </p>
                 </div>
               </div>
