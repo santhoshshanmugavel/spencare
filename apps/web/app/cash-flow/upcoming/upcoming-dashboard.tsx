@@ -415,6 +415,7 @@ export function UpcomingDashboard({
                 <LoanActions
                   loan={loan}
                   accounts={accounts}
+                  categories={categories}
                   onChanged={refresh}
                   onEdit={(l) => { setEditingLoan(l); setLoanSheetOpen(true); }}
                 />

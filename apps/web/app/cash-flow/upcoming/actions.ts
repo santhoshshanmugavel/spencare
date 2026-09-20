@@ -11,6 +11,7 @@ import {
   reserveForOccurrence,
   markOccurrencePaidManually,
   payCommitmentOccurrenceAtomic,
+  createTransaction,
   predictNextOccurrence,
   addLoan,
   editLoan,
@@ -428,5 +429,61 @@ export async function deleteLoanAction(loanId: string) {
     return { ok: true as const };
   } catch (e) {
     return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to delete loan." } };
+  }
+}
+
+export async function markLoanPaidAction(input: {
+  loanId: string;
+  paymentAccountId: string;
+  paidAmountMinor: number;
+  paidDate: string;
+  categoryId: string | null;
+  outstandingMinor: number | null;
+}) {
+  if (!input.paymentAccountId) return { ok: false as const, error: { message: "Payment account is required." } };
+  if (!input.categoryId) return { ok: false as const, error: { message: "Category is required." } };
+  const ctx = await requireAuthContext();
+  try {
+    const { data: loan, error: loanError } = await ctx.supabase
+      .from("loans")
+      .select("id, name, repayment_frequency, next_payment_date")
+      .eq("id", input.loanId)
+      .eq("user_id", ctx.userId)
+      .is("deleted_at", null)
+      .single();
+    if (loanError || !loan) return { ok: false as const, error: { message: "Loan not found." } };
+
+    // Create expense transaction for the installment
+    const txnResult = await createTransaction.execute(ctx, {
+      kind: "expense",
+      accountId: input.paymentAccountId,
+      categoryId: input.categoryId,
+      amountMinor: input.paidAmountMinor,
+      itemName: loan.name,
+      merchant: undefined,
+      description: undefined,
+      occurredAt: input.paidDate,
+    });
+    if (!txnResult.ok) throw new Error(txnResult.error.message);
+
+    // Advance next_payment_date
+    const nextDate = loan.next_payment_date
+      ? (predictNextOccurrence(loan.next_payment_date, loan.repayment_frequency as RecurrenceInterval) ?? null)
+      : null;
+
+    await ctx.supabase
+      .from("loans")
+      .update({
+        ...(nextDate !== undefined ? { next_payment_date: nextDate } : {}),
+        ...(input.outstandingMinor !== null ? { outstanding_minor: input.outstandingMinor } : {}),
+      })
+      .eq("id", input.loanId)
+      .eq("user_id", ctx.userId);
+
+    revalidateAll();
+    revalidatePath("/cash-flow/transactions");
+    return { ok: true as const, nextPaymentDate: nextDate };
+  } catch (e) {
+    return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to record loan payment." } };
   }
 }
