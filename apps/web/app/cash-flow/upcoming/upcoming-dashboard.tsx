@@ -23,6 +23,7 @@ import { CommitmentActions } from "./commitment-actions";
 import { PrepProtectActions } from "./prep-protect-actions";
 import { ProjectedItemActions } from "./projected-item-actions";
 import { LoanActions } from "./loan-actions";
+import { CreditCardPaymentDialog } from "./credit-card-actions";
 import { minorUnitsToDisplay } from "@/lib/money-input";
 
 const CURRENCY = "INR";
@@ -136,6 +137,9 @@ export function UpcomingDashboard({
   const [commitmentSheetOpen, setCommitmentSheetOpen] = useState(false);
   const [loanSheetOpen, setLoanSheetOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<LoanRow | undefined>(undefined);
+  const [ccPayOpen, setCcPayOpen] = useState(false);
+  const [ccPayAccount, setCcPayAccount] = useState<AccountRow | null>(null);
+  const [ccPayOutstandingMinor, setCcPayOutstandingMinor] = useState(0);
 
   const commitmentById = new Map(commitments.map((c) => [c.id, c]));
   const loanById = new Map(loans.map((l) => [l.id, l]));
@@ -428,6 +432,7 @@ export function UpcomingDashboard({
 
     if (ev.kind === "credit_card_statement" || ev.kind === "credit_card_payment") {
       const isCcPayment = ev.kind === "credit_card_payment";
+      const ccAccount = accountById.get(ev.sourceId);
       return (
         <ListRow
           key={ev.id}
@@ -442,16 +447,32 @@ export function UpcomingDashboard({
             </span>
           }
           trailing={
-            ev.amountMinor > 0 ? (
-              <Money
-                value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), ev.currency)}
-                masked={masked}
-                size="numeric"
-                className={isCcPayment ? undefined : "text-muted-foreground"}
-              />
-            ) : (
-              <span className="text-xs text-muted-foreground">Amount varies</span>
-            )
+            <div className="flex items-center gap-1">
+              {ev.amountMinor > 0 ? (
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), ev.currency)}
+                  masked={masked}
+                  size="numeric"
+                  className={isCcPayment ? undefined : "text-muted-foreground"}
+                />
+              ) : (
+                <span className="text-xs text-muted-foreground">Amount varies</span>
+              )}
+              {isCcPayment && ccAccount && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => {
+                    setCcPayAccount(ccAccount);
+                    setCcPayOutstandingMinor(ev.amountMinor);
+                    setCcPayOpen(true);
+                  }}
+                >
+                  Pay
+                </Button>
+              )}
+            </div>
           }
         />
       );
@@ -611,6 +632,17 @@ export function UpcomingDashboard({
         accounts={accounts}
         existing={editingLoan}
       />
+
+      {ccPayAccount && (
+        <CreditCardPaymentDialog
+          open={ccPayOpen}
+          onOpenChange={(v) => { setCcPayOpen(v); if (!v) setCcPayAccount(null); }}
+          creditCardAccount={ccPayAccount}
+          accounts={accounts}
+          outstandingMinor={ccPayOutstandingMinor}
+          onPaid={refresh}
+        />
+      )}
     </div>
   );
 }

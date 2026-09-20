@@ -12,6 +12,7 @@ import {
   markOccurrencePaidManually,
   payCommitmentOccurrenceAtomic,
   createTransaction,
+  transfer,
   predictNextOccurrence,
   addLoan,
   editLoan,
@@ -486,4 +487,25 @@ export async function markLoanPaidAction(input: {
   } catch (e) {
     return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to record loan payment." } };
   }
+}
+
+export async function payCreditCardAction(input: {
+  creditCardAccountId: string;
+  fromAccountId: string;
+  amountMinor: number;
+  paidDate: string;
+}) {
+  if (!input.fromAccountId) return { ok: false as const, error: { message: "Source account is required." } };
+  if (!input.amountMinor || input.amountMinor <= 0) return { ok: false as const, error: { message: "Enter a valid payment amount." } };
+  const ctx = await requireAuthContext();
+  const result = await transfer.execute(ctx, {
+    fromAccountId: input.fromAccountId,
+    toAccountId: input.creditCardAccountId,
+    amountMinor: input.amountMinor,
+    occurredAt: input.paidDate,
+  });
+  if (!result.ok) return { ok: false as const, error: { message: result.error.message } };
+  revalidateAll();
+  revalidatePath("/cash-flow/transactions");
+  return { ok: true as const };
 }
