@@ -37,6 +37,9 @@ import {
   listCommitments,
   listUpcoming,
   listAllLoans,
+  // Credit card billing
+  getCreditCardStatementSummary,
+  getActiveObligationForAccount,
   type McpAuthContext,
 } from "@spencare/domain-application";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -575,6 +578,64 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
           repaymentFrequency: l.repayment_frequency,
           endDate: l.end_date,
         }));
+      }),
+  );
+
+  server.registerTool(
+    "getCreditCardBillingSummary",
+    {
+      description:
+        "Get the current billing cycle for a credit card account: statement close date, payment due date, outstanding balance, and payment obligation status. " +
+        "Use this to answer 'when is my credit card bill due?', 'when does my statement close?', or 'what is my credit card balance?'. " +
+        "All dates come from the canonical credit-card billing domain service -- never computed independently by this tool.",
+      inputSchema: { accountId: z.string().uuid() },
+    },
+    async (rawInput: { accountId: string }) =>
+      runScopedTool(ctx, "getCreditCardBillingSummary", "read", async () => {
+        const [account, summary, privacyModeEnabled] = await Promise.all([
+          getAccount(ctx, rawInput.accountId),
+          getCreditCardStatementSummary(ctx, rawInput.accountId),
+          isPrivacyModeEnabled(ctx),
+        ]);
+        if (!account || account.type !== "credit_card") return null;
+        if (!summary) return null;
+
+        const acctRow = account as unknown as {
+          statement_generated_day?: number | null;
+          payment_due_day?: number | null;
+          credit_used_minor?: number | null;
+        };
+
+        const obligation = await getActiveObligationForAccount(ctx, rawInput.accountId, summary.statementDate);
+
+        const currentOutstandingMinor = acctRow.credit_used_minor ?? 0;
+        const statementBalanceMinor = summary.statementBalanceMinor;
+
+        return {
+          accountId: summary.accountId,
+          accountName: summary.accountName,
+          currency: summary.currency,
+          statementCloseDay: acctRow.statement_generated_day ?? null,
+          paymentDueDay: acctRow.payment_due_day ?? null,
+          statementPeriodStart: summary.periodStart,
+          statementPeriodEnd: summary.periodEnd,
+          nextStatementDate: summary.statementDate,
+          nextPaymentDueDate: summary.paymentDueDate,
+          statementBalanceMinor: privacyModeEnabled ? null : statementBalanceMinor,
+          statementBalanceNote:
+            statementBalanceMinor === 0
+              ? "Statement has not yet closed for this period. Balance shown is charges so far."
+              : null,
+          currentOutstandingMinor: privacyModeEnabled ? null : currentOutstandingMinor,
+          obligation: obligation
+            ? {
+                status: obligation.status,
+                remainingDueMinor: privacyModeEnabled ? null : obligation.remainingMinor,
+                paidMinor: privacyModeEnabled ? null : obligation.paidMinor,
+                dueDate: obligation.dueDate,
+              }
+            : null,
+        };
       }),
   );
 }

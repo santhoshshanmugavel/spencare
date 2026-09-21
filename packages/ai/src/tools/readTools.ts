@@ -13,6 +13,9 @@ import {
   getCashFlowOverview,
   toAiAccountSummaryInput,
   getGoalContributionPlan,
+  getCreditCardStatementSummary,
+  getActiveObligationForAccount,
+  getAccount,
   type AuthContext,
 } from "@spencare/domain-application";
 import { lastDayOfMonth, redactFinancialSnapshot, redactBudgetSummaries, redactGoalSummaries, redactBillSummaries, redactCashFlowSummary } from "@spencare/domain-core";
@@ -265,6 +268,66 @@ const getGoalDetailTool: ReadToolHandler = {
   },
 };
 
+const getCreditCardBillingTool: ReadToolHandler = {
+  definition: {
+    name: "getCreditCardBillingSummary",
+    description:
+      "Get the current billing cycle for a credit card account: statement close date, payment due date, outstanding balance, and payment obligation status. " +
+      "Use this to answer 'when is my credit card bill due?', 'when does my statement close?', or 'what is my credit card balance?'. " +
+      "All dates come from the canonical credit-card billing domain service. Never calculate billing dates yourself.",
+    inputSchema: {
+      type: "object",
+      properties: { accountId: { type: "string", description: "Credit card account UUID" } },
+      required: ["accountId"],
+    },
+  },
+  execute: async ({ ctx, privacyModeEnabled }, input) => {
+    const { accountId } = input as { accountId: string };
+    const [account, summary] = await Promise.all([
+      getAccount(ctx, accountId),
+      getCreditCardStatementSummary(ctx, accountId),
+    ]);
+    if (!account || account.type !== "credit_card") return null;
+    if (!summary) return null;
+
+    const acctRow = account as unknown as {
+      statement_generated_day?: number | null;
+      payment_due_day?: number | null;
+      credit_used_minor?: number | null;
+    };
+
+    const obligation = await getActiveObligationForAccount(ctx, accountId, summary.statementDate);
+    const currentOutstandingMinor = acctRow.credit_used_minor ?? 0;
+    const statementBalanceMinor = summary.statementBalanceMinor;
+
+    return {
+      accountId: summary.accountId,
+      accountName: summary.accountName,
+      currency: summary.currency,
+      statementCloseDay: acctRow.statement_generated_day ?? null,
+      paymentDueDay: acctRow.payment_due_day ?? null,
+      statementPeriodStart: summary.periodStart,
+      statementPeriodEnd: summary.periodEnd,
+      nextStatementDate: summary.statementDate,
+      nextPaymentDueDate: summary.paymentDueDate,
+      statementBalanceMinor: privacyModeEnabled ? null : statementBalanceMinor,
+      statementBalanceNote:
+        statementBalanceMinor === 0
+          ? "Statement has not yet closed for this period. Balance shown is charges so far."
+          : null,
+      currentOutstandingMinor: privacyModeEnabled ? null : currentOutstandingMinor,
+      obligation: obligation
+        ? {
+            status: obligation.status,
+            remainingDueMinor: privacyModeEnabled ? null : obligation.remainingMinor,
+            paidMinor: privacyModeEnabled ? null : obligation.paidMinor,
+            dueDate: obligation.dueDate,
+          }
+        : null,
+    };
+  },
+};
+
 export const READ_TOOLS: ReadToolHandler[] = [
   getSafeToSpendTool,
   getDashboardSummaryTool,
@@ -275,4 +338,5 @@ export const READ_TOOLS: ReadToolHandler[] = [
   getUpcomingBillsTool,
   getCashFlowSummaryTool,
   getGoalDetailTool,
+  getCreditCardBillingTool,
 ];
