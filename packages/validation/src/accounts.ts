@@ -61,7 +61,7 @@ export const createCreditCardAccountSchema = z.object({
   currency: currencySchema,
   creditLimitMinor: nonNegativeMinorUnitsSchema,
   creditUsedMinor: nonNegativeMinorUnitsSchema,
-  statementGeneratedDay: billingDaySchema,
+  statementCloseDay: billingDaySchema,
   paymentDueDay: billingDaySchema,
 });
 export const createInvestmentAccountSchema = z.object({
@@ -101,7 +101,7 @@ export const updateAccountSchema = z.object({
   creditLimitMinor: nonNegativeMinorUnitsSchema.optional(),
   creditUsedMinor: nonNegativeMinorUnitsSchema.optional(),
   marketValueMinor: nonNegativeMinorUnitsSchema.optional(),
-  statementGeneratedDay: billingDaySchema,
+  statementCloseDay: billingDaySchema,
   paymentDueDay: billingDaySchema,
 });
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;

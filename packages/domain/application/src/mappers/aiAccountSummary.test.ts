@@ -16,7 +16,7 @@ function accountRow(overrides: Partial<AccountRow> = {}): AccountRow {
     is_archived: false,
     created_at: "",
     updated_at: "",
-    statement_generated_day: null,
+    statement_close_day: null,
     payment_due_day: null,
     ...overrides,
   };

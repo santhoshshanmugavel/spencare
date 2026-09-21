@@ -1,5 +1,5 @@
 import { getAccount as getAccountRow, listAccounts as listAccountsRow, type AccountRow } from "@spencare/domain-infra";
-import { resolveRecurringDay } from "@spencare/domain-core";
+import { getCurrentStatementPeriod, resolvePaymentDueDate } from "@spencare/domain-core";
 import type { AuthContext } from "../types.js";
 
 export async function listAccounts(
@@ -45,8 +45,8 @@ export interface CreditCardStatementSummary {
 
 /**
  * Computes the current statement period for a credit card account using
- * statement_generated_day, then sums expenses (excluding transfers) in that
- * period. Returns null when the account has no statement_generated_day set.
+ * statement_close_day, then sums expenses in that period. Returns null when
+ * the account has no statement_close_day set.
  */
 export async function getCreditCardStatementSummary(
   ctx: AuthContext,
@@ -55,39 +55,11 @@ export async function getCreditCardStatementSummary(
   const account = await getAccountRow(ctx.supabase, ctx.userId, accountId);
   if (!account || account.type !== "credit_card") return null;
 
-  const stmtDay: number | null =
-    (account as unknown as { statement_generated_day?: number | null }).statement_generated_day ??
-    null;
+  const stmtDay: number | null = account.statement_close_day ?? null;
   if (stmtDay == null) return null;
 
-  const today = new Date();
-  const year = today.getUTCFullYear();
-  const month = today.getUTCMonth() + 1;
-
-  const thisMonthStmt = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
-  const todayIso = today.toISOString().slice(0, 10);
-
-  let periodStart: string;
-  let statementDate: string;
-
-  if (todayIso <= thisMonthStmt) {
-    // We are before or on this month's statement date; current period started
-    // on last month's statement day.
-    const prevMonth = month === 1 ? 12 : month - 1;
-    const prevYear = month === 1 ? year - 1 : year;
-    const prevStmt = resolveRecurringDay({ year: prevYear, month: prevMonth, paymentDayRule: stmtDay });
-    periodStart = prevStmt;
-    statementDate = thisMonthStmt;
-  } else {
-    // We are after this month's statement date; current period started on this
-    // month's statement day.
-    periodStart = thisMonthStmt;
-    const nextMonth = month === 12 ? 1 : month + 1;
-    const nextYear = month === 12 ? year + 1 : year;
-    statementDate = resolveRecurringDay({ year: nextYear, month: nextMonth, paymentDayRule: stmtDay });
-  }
-
-  // Period is (periodStart, statementDate] exclusive-inclusive
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const { periodStart, statementDate } = getCurrentStatementPeriod(todayIso, stmtDay);
   const periodEnd = statementDate;
 
   const { data: txns } = await ctx.supabase
@@ -105,22 +77,8 @@ export async function getCreditCardStatementSummary(
     0,
   );
 
-  const payDay: number | null =
-    (account as unknown as { payment_due_day?: number | null }).payment_due_day ?? null;
-
-  let paymentDueDate: string | null = null;
-  if (payDay != null) {
-    const stmtDateObj = new Date(statementDate + "T00:00:00Z");
-    let payYear = stmtDateObj.getUTCFullYear();
-    let payMonth = stmtDateObj.getUTCMonth() + 1;
-    const sameMoDue = resolveRecurringDay({ year: payYear, month: payMonth, paymentDayRule: payDay });
-    if (sameMoDue <= statementDate) {
-      const nextTotal = payYear * 12 + payMonth;
-      payYear = Math.floor(nextTotal / 12);
-      payMonth = (nextTotal % 12) + 1;
-    }
-    paymentDueDate = resolveRecurringDay({ year: payYear, month: payMonth, paymentDayRule: payDay });
-  }
+  const payDay: number | null = account.payment_due_day ?? null;
+  const paymentDueDate = payDay != null ? resolvePaymentDueDate(statementDate, payDay) : null;
 
   return {
     accountId,

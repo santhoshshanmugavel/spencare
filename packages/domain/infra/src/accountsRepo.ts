@@ -23,14 +23,14 @@ export interface AccountRow {
   is_archived: boolean;
   created_at: string;
   updated_at: string;
-  /** Day of month the credit card statement is generated (1-32, 32=last day). Null = not configured. */
-  statement_generated_day: number | null;
+  /** Day of month the credit card billing cycle closes (1-32, 32=last day). Null = not configured. */
+  statement_close_day: number | null;
   /** Day of month the credit card payment is due (1-32, 32=last day). Null = not configured. */
   payment_due_day: number | null;
 }
 
 const ACCOUNT_COLUMNS =
-  "id, user_id, type, name, currency, balance_minor, credit_limit_minor, credit_used_minor, market_value_minor, is_archived, created_at, updated_at, statement_generated_day, payment_due_day";
+  "id, user_id, type, name, currency, balance_minor, credit_limit_minor, credit_used_minor, market_value_minor, is_archived, created_at, updated_at, statement_close_day, payment_due_day";
 
 export interface CreateAccountPatch {
   type: "bank" | "cash" | "credit_card" | "investment";
@@ -40,7 +40,7 @@ export interface CreateAccountPatch {
   creditLimitMinor?: number;
   creditUsedMinor?: number;
   marketValueMinor?: number;
-  statementGeneratedDay?: number | null;
+  statementCloseDay?: number | null;
   paymentDueDay?: number | null;
 }
 
@@ -60,7 +60,7 @@ export async function createAccount(
       credit_limit_minor: patch.creditLimitMinor ?? null,
       credit_used_minor: patch.creditUsedMinor ?? null,
       market_value_minor: patch.marketValueMinor ?? null,
-      statement_generated_day: patch.statementGeneratedDay ?? null,
+      statement_close_day: patch.statementCloseDay ?? null,
       payment_due_day: patch.paymentDueDay ?? null,
     })
     .select(ACCOUNT_COLUMNS)
@@ -75,7 +75,7 @@ export interface UpdateAccountPatch {
   creditLimitMinor?: number;
   creditUsedMinor?: number;
   marketValueMinor?: number;
-  statementGeneratedDay?: number | null;
+  statementCloseDay?: number | null;
   paymentDueDay?: number | null;
 }
 
@@ -93,7 +93,7 @@ export async function updateAccount(
       ...(patch.creditLimitMinor !== undefined ? { credit_limit_minor: patch.creditLimitMinor } : {}),
       ...(patch.creditUsedMinor !== undefined ? { credit_used_minor: patch.creditUsedMinor } : {}),
       ...(patch.marketValueMinor !== undefined ? { market_value_minor: patch.marketValueMinor } : {}),
-      ...(patch.statementGeneratedDay !== undefined ? { statement_generated_day: patch.statementGeneratedDay } : {}),
+      ...(patch.statementCloseDay !== undefined ? { statement_close_day: patch.statementCloseDay } : {}),
       ...(patch.paymentDueDay !== undefined ? { payment_due_day: patch.paymentDueDay } : {}),
     })
     .eq("id", accountId)

@@ -143,6 +143,14 @@ export {
 export { getTransactionDisplay, type TransactionDisplayFields } from "./transactionDisplay.js";
 
 export {
+  resolvePaymentDueDate,
+  getCreditCardBillingCycleForMonth,
+  getCurrentStatementPeriod,
+  type CreditCardBillingConfig,
+  type CreditCardBillingCycle,
+} from "./creditCardBilling.js";
+
+export {
   generateAuthorizationCode,
   hashAuthorizationCode,
   generateOAuthClientId,

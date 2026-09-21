@@ -170,7 +170,7 @@ export function AccountDetailsSheet({
           const used = account.credit_used_minor ?? 0;
           const limit = account.credit_limit_minor ?? 0;
           const available = Math.max(0, limit - used);
-          const stmtDay = account.statement_generated_day;
+          const stmtDay = account.statement_close_day;
           const dueDay = account.payment_due_day;
           const nextStmt = stmtDay != null ? nextOccurrenceOfDay(stmtDay) : null;
           const nextDue =

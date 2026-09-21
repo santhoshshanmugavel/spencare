@@ -125,7 +125,7 @@ describe("registerReadTools — getCreditCardBillingSummary canonical source", (
       type: "credit_card",
       name: "IDFC First Millennia",
       currency: "INR",
-      statement_generated_day: 21,
+      statement_close_day: 21,
       payment_due_day: 2,
       credit_used_minor: 4183986,
     } as never);
@@ -178,7 +178,7 @@ describe("registerReadTools — getCreditCardBillingSummary canonical source", (
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: true } as never);
     vi.mocked(domainApp.getAccount).mockResolvedValue({
       id: "acct1", type: "credit_card", name: "IDFC First Millennia",
-      currency: "INR", statement_generated_day: 21, payment_due_day: 2, credit_used_minor: 4183986,
+      currency: "INR", statement_close_day: 21, payment_due_day: 2, credit_used_minor: 4183986,
     } as never);
     vi.mocked(domainApp.getCreditCardStatementSummary).mockResolvedValue({
       accountId: "acct1", accountName: "IDFC First Millennia", currency: "INR",

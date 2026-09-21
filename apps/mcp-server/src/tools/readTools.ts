@@ -601,7 +601,7 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
         if (!summary) return null;
 
         const acctRow = account as unknown as {
-          statement_generated_day?: number | null;
+          statement_close_day?: number | null;
           payment_due_day?: number | null;
           credit_used_minor?: number | null;
         };
@@ -615,7 +615,7 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
           accountId: summary.accountId,
           accountName: summary.accountName,
           currency: summary.currency,
-          statementCloseDay: acctRow.statement_generated_day ?? null,
+          statementCloseDay: acctRow.statement_close_day ?? null,
           paymentDueDay: acctRow.payment_due_day ?? null,
           statementPeriodStart: summary.periodStart,
           statementPeriodEnd: summary.periodEnd,

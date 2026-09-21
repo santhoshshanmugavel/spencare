@@ -42,9 +42,16 @@ const CURRENCIES = ["INR", "USD", "EUR", "GBP"];
  * (Phase 7 reconnaissance): bank "Account type" (Savings/Current).
  * Investment "Investment Type" (Mutual Funds/Stocks/…) -- DD-10 is
  * unresolved, no schema column exists.
- * Credit card billing/due days are now supported (statement_generated_day,
- * payment_due_day columns added in migration 20260920000002).
+ * Credit card billing/due days are now supported (statement_close_day,
+ * payment_due_day columns added in migration 20260920000002, renamed in
+ * 20260921000002).
  */
+
+function ordinalSuffix(n: number): string {
+  if (n === 32) return "last";
+  const suffix = n === 1 || n === 21 || n === 31 ? "st" : n === 2 || n === 22 ? "nd" : n === 3 || n === 23 ? "rd" : "th";
+  return `${n}${suffix}`;
+}
 
 function useMoneyField(initial = "", currency = "INR") {
   const [display, setDisplay] = useState(initial);
@@ -176,7 +183,7 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
       currency: "INR",
       creditLimitMinor: 0,
       creditUsedMinor: 0,
-      statementGeneratedDay: null,
+      statementCloseDay: null,
       paymentDueDay: null,
     },
   });
@@ -231,42 +238,52 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
           )}
         />
       </FormField>
-      <FormField id="cc-statement-day" label="Statement generated on" error={errors.statementGeneratedDay?.message} hint="Day of month your statement is cut (1-28 = literal day, 32 = last day). Leave blank if unknown.">
-        <Controller
-          control={control}
-          name="statementGeneratedDay"
-          render={({ field }) => (
+      <Controller
+        control={control}
+        name="statementCloseDay"
+        render={({ field }) => (
+          <FormField
+            id="cc-statement-day"
+            label="Statement closes on"
+            error={errors.statementCloseDay?.message}
+            hint={field.value ? `Repeats on the ${ordinalSuffix(field.value)} of every month` : "Day of month your billing cycle closes. Leave blank if unknown."}
+          >
             <Input
               id="cc-statement-day"
               inputMode="numeric"
-              placeholder="Eg: 25"
-              value={field.value ?? ""}
+              placeholder="Eg: 21"
+              value={field.value != null ? String(field.value) : ""}
               onChange={(e) => {
                 const raw = e.target.value.replace(/[^0-9]/g, "");
                 field.onChange(raw === "" ? null : Number(raw));
               }}
             />
-          )}
-        />
-      </FormField>
-      <FormField id="cc-payment-day" label="Payment due on" error={errors.paymentDueDay?.message} hint="Day of month your bill payment is due (32 = last day). Leave blank if unknown.">
-        <Controller
-          control={control}
-          name="paymentDueDay"
-          render={({ field }) => (
+          </FormField>
+        )}
+      />
+      <Controller
+        control={control}
+        name="paymentDueDay"
+        render={({ field }) => (
+          <FormField
+            id="cc-payment-day"
+            label="Payment due on"
+            error={errors.paymentDueDay?.message}
+            hint={field.value ? `Repeats on the ${ordinalSuffix(field.value)} of every month` : "Day of month your payment is due. Leave blank if unknown."}
+          >
             <Input
               id="cc-payment-day"
               inputMode="numeric"
-              placeholder="Eg: 10"
-              value={field.value ?? ""}
+              placeholder="Eg: 2"
+              value={field.value != null ? String(field.value) : ""}
               onChange={(e) => {
                 const raw = e.target.value.replace(/[^0-9]/g, "");
                 field.onChange(raw === "" ? null : Number(raw));
               }}
             />
-          )}
-        />
-      </FormField>
+          </FormField>
+        )}
+      />
       <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
         {isSubmitting ? "Adding…" : "Add card"}
       </Button>

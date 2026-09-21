@@ -166,7 +166,7 @@ function daysFromToday(dateIso: string): number {
 }
 
 function CreditCardBillingRow({ account }: { account: AccountRow }) {
-  const stmtDay = account.statement_generated_day;
+  const stmtDay = account.statement_close_day;
   const payDay = account.payment_due_day;
   if (stmtDay == null && payDay == null) return null;
 

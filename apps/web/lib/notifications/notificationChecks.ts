@@ -6,7 +6,7 @@
 
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
 import { checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder, checkCreditCardBillingReminder } from "./eventRules";
-import { resolveRecurringDay } from "@spencare/domain-core";
+import { resolveRecurringDay, getCreditCardBillingCycleForMonth } from "@spencare/domain-core";
 import { savingDatesForOccurrence } from "@spencare/domain-core";
 import { getCreditCardStatementSummary, upsertCreditCardObligation } from "@spencare/domain-application";
 import type { NotificationRunStats } from "./engine";
@@ -165,7 +165,7 @@ async function runChecksForUser(
   // ---- Account balance checks ----
   const { data: accounts } = await serviceRoleSupabase
     .from("accounts")
-    .select("id, name, type, balance_minor, credit_limit_minor, credit_used_minor, currency, statement_generated_day, payment_due_day")
+    .select("id, name, type, balance_minor, credit_limit_minor, credit_used_minor, currency, statement_close_day, payment_due_day")
     .eq("user_id", userId)
     .eq("is_archived", false);
 
@@ -465,7 +465,7 @@ async function runChecksForUser(
 
   for (const account of accounts ?? []) {
     if (account.type !== "credit_card") continue;
-    const stmtDay: number | null = (account as { statement_generated_day?: number | null }).statement_generated_day ?? null;
+    const stmtDay: number | null = (account as { statement_close_day?: number | null }).statement_close_day ?? null;
     const payDay: number | null = (account as { payment_due_day?: number | null }).payment_due_day ?? null;
     if (stmtDay == null && payDay == null) continue;
 
@@ -505,14 +505,18 @@ async function runChecksForUser(
     ];
 
     for (const { year, month } of months) {
+      const billing = getCreditCardBillingCycleForMonth(year, month, {
+        statementCloseDay: stmtDay ?? 1,
+        paymentDueDay: payDay,
+      });
+
       try {
         if (stmtDay != null) {
-          const stmtDateIso = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
           await checkCreditCardBillingReminder({
             serviceRoleSupabase, userId, userEmail,
             accountId: account.id,
             accountName: account.name,
-            dueDateIso: stmtDateIso,
+            dueDateIso: billing.statementCloseDate,
             kind: "statement",
             outstandingMinor: outstanding,
             currency: account.currency ?? "INR",
@@ -525,27 +529,13 @@ async function runChecksForUser(
       }
 
       try {
-        if (payDay != null) {
-          // When payment_due_day falls on or before the statement close date in the same
-          // month, the payment is due the following month. Mirror getUpcomingProjection.
-          let dueYear = year;
-          let dueMonth = month;
-          if (stmtDay != null) {
-            const stmtDateIso = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
-            const sameMoDue = resolveRecurringDay({ year, month, paymentDayRule: payDay });
-            if (sameMoDue <= stmtDateIso) {
-              const nextTotal = year * 12 + month;
-              dueYear = Math.floor(nextTotal / 12);
-              dueMonth = (nextTotal % 12) + 1;
-            }
-          }
-          const payDateIso = resolveRecurringDay({ year: dueYear, month: dueMonth, paymentDayRule: payDay });
-          // Suppress payment reminders when the obligation is fully paid
+        if (payDay != null && billing.paymentDueDate != null) {
+          // Suppress payment reminders when the obligation is fully paid for the current cycle.
           const isCurrentCyclePaid =
             obligationStatus === "paid" &&
             currentStatementDate != null &&
             stmtDay != null &&
-            resolveRecurringDay({ year, month, paymentDayRule: stmtDay }) === currentStatementDate;
+            billing.statementCloseDate === currentStatementDate;
           if (isCurrentCyclePaid) {
             checksRun++;
             continue;
@@ -554,7 +544,7 @@ async function runChecksForUser(
             serviceRoleSupabase, userId, userEmail,
             accountId: account.id,
             accountName: account.name,
-            dueDateIso: payDateIso,
+            dueDateIso: billing.paymentDueDate,
             kind: "payment",
             outstandingMinor: outstanding,
             currency: account.currency ?? "INR",

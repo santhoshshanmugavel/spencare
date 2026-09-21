@@ -38,6 +38,7 @@ import {
   predictNextOccurrence,
   resolveRecurringDay,
   computeReserveStatus,
+  getCreditCardBillingCycleForMonth,
   type ReserveStatusResult,
   type PaymentFrequency,
   type GoalContributionFrequency,
@@ -608,18 +609,20 @@ export async function getUpcomingProjection(
 
   // ── Credit card statement and payment events ──────────────────────────────
   //
-  // For each active credit card with statement_generated_day or payment_due_day,
-  // project one event per month in the window using resolveRecurringDay (same
-  // 1-32 sentinel as payment_day_rule). Credit card "payments" carry the card's
-  // current outstanding balance as the amount.
+  // For each active credit card with statement_close_day or payment_due_day,
+  // project one event per month using the canonical getCreditCardBillingCycleForMonth
+  // function (single authoritative implementation for the shift rule).
 
   const creditCardPaymentDueMinor_acc: number[] = [];
 
   for (const account of accounts) {
     if (account.type !== "credit_card" || account.is_archived) continue;
 
-    const { statement_generated_day: stmtDay, payment_due_day: dueDay } = account;
+    const stmtDay = account.statement_close_day;
+    const dueDay = account.payment_due_day;
     const outstanding = account.credit_used_minor ?? 0;
+
+    if (stmtDay == null && dueDay == null) continue;
 
     // Iterate over all months that overlap with [startDate, endDate].
     // Start one month before the window so that a payment whose statement
@@ -640,58 +643,39 @@ export async function getUpcomingProjection(
       const year = Math.floor(monthOffset / 12);
       const month = (monthOffset % 12) + 1;
 
-      if (stmtDay != null) {
-        const stmtDate = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
-        if (stmtDate >= startDate && stmtDate <= endDate) {
-          allEvents.push({
-            id: projectedId("cc_statement", account.id, stmtDate),
-            kind: "credit_card_statement",
-            date: stmtDate,
-            title: `${account.name} statement`,
-            subtitle: "Statement date",
-            amountMinor: 0,
-            currency: account.currency,
-            sourceId: account.id,
-            projected: true,
-          });
-        }
+      const { statementCloseDate, paymentDueDate } = getCreditCardBillingCycleForMonth(
+        year,
+        month,
+        { statementCloseDay: stmtDay ?? 1, paymentDueDay: dueDay },
+      );
+
+      if (stmtDay != null && statementCloseDate >= startDate && statementCloseDate <= endDate) {
+        allEvents.push({
+          id: projectedId("cc_statement", account.id, statementCloseDate),
+          kind: "credit_card_statement",
+          date: statementCloseDate,
+          title: `${account.name} statement`,
+          subtitle: "Statement date",
+          amountMinor: 0,
+          currency: account.currency,
+          sourceId: account.id,
+          projected: true,
+        });
       }
 
-      if (dueDay != null) {
-        // When a statement close day is configured, the payment is due on the
-        // first occurrence of payment_due_day STRICTLY AFTER the statement
-        // close date for this billing cycle. If payment_due_day falls on or
-        // before the statement close day in the same month, it must shift to
-        // the following month.
-        let dueYear = year;
-        let dueMonth = month;
-
-        if (stmtDay != null) {
-          const stmtDate = resolveRecurringDay({ year, month, paymentDayRule: stmtDay });
-          const sameMoDue = resolveRecurringDay({ year, month, paymentDayRule: dueDay });
-          if (sameMoDue <= stmtDate) {
-            // Due day is on or before the statement close: shift payment to the next month
-            const nextTotal = year * 12 + month;
-            dueYear = Math.floor(nextTotal / 12);
-            dueMonth = (nextTotal % 12) + 1;
-          }
-        }
-
-        const dueDate = resolveRecurringDay({ year: dueYear, month: dueMonth, paymentDayRule: dueDay });
-        if (dueDate >= startDate && dueDate <= endDate) {
-          allEvents.push({
-            id: projectedId("cc_payment", account.id, dueDate),
-            kind: "credit_card_payment",
-            date: dueDate,
-            title: `${account.name} payment due`,
-            subtitle: "Credit card payment",
-            amountMinor: outstanding,
-            currency: account.currency,
-            sourceId: account.id,
-            projected: true,
-          });
-          if (outstanding > 0) creditCardPaymentDueMinor_acc.push(outstanding);
-        }
+      if (dueDay != null && paymentDueDate != null && paymentDueDate >= startDate && paymentDueDate <= endDate) {
+        allEvents.push({
+          id: projectedId("cc_payment", account.id, paymentDueDate),
+          kind: "credit_card_payment",
+          date: paymentDueDate,
+          title: `${account.name} payment due`,
+          subtitle: "Credit card payment",
+          amountMinor: outstanding,
+          currency: account.currency,
+          sourceId: account.id,
+          projected: true,
+        });
+        if (outstanding > 0) creditCardPaymentDueMinor_acc.push(outstanding);
       }
     }
   }

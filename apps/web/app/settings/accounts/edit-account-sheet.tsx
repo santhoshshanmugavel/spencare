@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, type Control, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { updateAccountSchema, type UpdateAccountInput } from "@spencare/validation";
 import type { AccountRow } from "@spencare/domain-application";
@@ -26,6 +26,131 @@ import { FormField, errorId } from "@/components/spencare/form-field";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
 import { updateAccountAction, setCardPaymentAccountAction, removeCardPaymentAccountAction } from "./actions";
+
+function ordinalSuffix(n: number): string {
+  const abs = n === 32 ? 31 : n;
+  const suffix = abs === 1 || abs === 21 || abs === 31 ? "st" : abs === 2 || abs === 22 ? "nd" : abs === 3 || abs === 23 ? "rd" : "th";
+  return n === 32 ? `last` : `${abs}${suffix}`;
+}
+
+function billingCyclePreview(statementCloseDay: number | null, paymentDueDay: number | null): string | null {
+  if (statementCloseDay == null) return null;
+  const today = new Date();
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth() + 1;
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  function resolveDay(y: number, mo: number, dayRule: number): { day: number; month: string } {
+    const daysInMo = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+    const d = dayRule >= 32 ? daysInMo : Math.min(dayRule, daysInMo);
+    return { day: d, month: monthNames[mo - 1]! };
+  }
+
+  const thisStmt = resolveDay(year, month, statementCloseDay);
+  const todayDay = today.getUTCDate();
+  const stmtDay = statementCloseDay >= 32 ? new Date(Date.UTC(year, month, 0)).getUTCDate() : Math.min(statementCloseDay, new Date(Date.UTC(year, month, 0)).getUTCDate());
+
+  let stmtYear = year;
+  let stmtMonth = month;
+  if (todayDay > stmtDay) {
+    const next = year * 12 + month;
+    stmtYear = Math.floor(next / 12);
+    stmtMonth = (next % 12) + 1;
+  }
+  const nextStmt = resolveDay(stmtYear, stmtMonth, statementCloseDay);
+
+  if (paymentDueDay == null) {
+    return `Statement closes ${nextStmt.month} ${nextStmt.day}`;
+  }
+
+  const stmtDate = `${stmtYear}-${String(stmtMonth).padStart(2, "0")}-${String(nextStmt.day).padStart(2, "0")}`;
+  const daysInPayMo = new Date(Date.UTC(stmtYear, stmtMonth, 0)).getUTCDate();
+  const payDayResolved = paymentDueDay >= 32 ? daysInPayMo : Math.min(paymentDueDay, daysInPayMo);
+  const sameMoDue = `${stmtYear}-${String(stmtMonth).padStart(2, "0")}-${String(payDayResolved).padStart(2, "0")}`;
+
+  let payYear = stmtYear;
+  let payMonth = stmtMonth;
+  if (sameMoDue <= stmtDate) {
+    const nextTotal = stmtYear * 12 + stmtMonth;
+    payYear = Math.floor(nextTotal / 12);
+    payMonth = (nextTotal % 12) + 1;
+  }
+  const dueResolved = resolveDay(payYear, payMonth, paymentDueDay);
+  return `Statement closes ${nextStmt.month} ${nextStmt.day} - Payment due ${dueResolved.month} ${dueResolved.day}`;
+}
+
+function CreditCardBillingFields({
+  control,
+  errors,
+}: {
+  control: Control<UpdateAccountInput>;
+  errors: FieldErrors<UpdateAccountInput>;
+}) {
+  return (
+    <>
+      <Controller
+        control={control}
+        name="statementCloseDay"
+        render={({ field }) => {
+          const preview = billingCyclePreview(field.value ?? null, null);
+          return (
+            <FormField
+              id="edit-statement-day"
+              label="Statement closes on"
+              error={errors.statementCloseDay?.message}
+              hint={field.value ? `Repeats on the ${ordinalSuffix(field.value)} of every month` : "Day of month your billing cycle closes. Leave blank if unknown."}
+            >
+              <Input
+                id="edit-statement-day"
+                inputMode="numeric"
+                placeholder="Eg: 21"
+                value={field.value != null ? (field.value === 32 ? "32" : String(field.value)) : ""}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^0-9]/g, "");
+                  field.onChange(raw === "" ? null : Number(raw));
+                }}
+              />
+              {preview && <p className="mt-1 text-xs text-muted-foreground">{preview}</p>}
+            </FormField>
+          );
+        }}
+      />
+      <Controller
+        control={control}
+        name="paymentDueDay"
+        render={({ field: payField }) => (
+          <Controller
+            control={control}
+            name="statementCloseDay"
+            render={({ field: stmtField }) => {
+              const preview = billingCyclePreview(stmtField.value ?? null, payField.value ?? null);
+              return (
+                <FormField
+                  id="edit-payment-day"
+                  label="Payment due on"
+                  error={errors.paymentDueDay?.message}
+                  hint={payField.value ? `Repeats on the ${ordinalSuffix(payField.value)} of every month` : "Day of month your payment is due. Leave blank if unknown."}
+                >
+                  <Input
+                    id="edit-payment-day"
+                    inputMode="numeric"
+                    placeholder="Eg: 2"
+                    value={payField.value != null ? String(payField.value) : ""}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, "");
+                      payField.onChange(raw === "" ? null : Number(raw));
+                    }}
+                  />
+                  {preview && <p className="mt-1 text-xs text-muted-foreground">{preview}</p>}
+                </FormField>
+              );
+            }}
+          />
+        )}
+      />
+    </>
+  );
+}
 
 /**
  * Only `name` and the type-appropriate value field are editable
@@ -76,7 +201,7 @@ export function EditAccountSheet({
       [valueField.key]: valueField.initial,
       ...(account.type === "credit_card"
         ? {
-            statementGeneratedDay: account.statement_generated_day ?? null,
+            statementCloseDay: account.statement_close_day ?? null,
             paymentDueDay: account.payment_due_day ?? null,
           }
         : {}),
@@ -153,44 +278,7 @@ export function EditAccountSheet({
             />
           </FormField>
           {account.type === "credit_card" ? (
-            <>
-              <FormField id="edit-statement-day" label="Statement closes on" error={errors.statementGeneratedDay?.message} hint="Day of month your statement closes (32 = last day). Leave blank if unknown.">
-                <Controller
-                  control={control}
-                  name="statementGeneratedDay"
-                  render={({ field }) => (
-                    <Input
-                      id="edit-statement-day"
-                      inputMode="numeric"
-                      placeholder="Eg: 25"
-                      value={field.value ?? ""}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/[^0-9]/g, "");
-                        field.onChange(raw === "" ? null : Number(raw));
-                      }}
-                    />
-                  )}
-                />
-              </FormField>
-              <FormField id="edit-payment-day" label="Payment due on" error={errors.paymentDueDay?.message} hint="Day of month your bill payment is due (32 = last day). Leave blank if unknown.">
-                <Controller
-                  control={control}
-                  name="paymentDueDay"
-                  render={({ field }) => (
-                    <Input
-                      id="edit-payment-day"
-                      inputMode="numeric"
-                      placeholder="Eg: 10"
-                      value={field.value ?? ""}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/[^0-9]/g, "");
-                        field.onChange(raw === "" ? null : Number(raw));
-                      }}
-                    />
-                  )}
-                />
-              </FormField>
-            </>
+            <CreditCardBillingFields control={control} errors={errors} />
           ) : null}
           {account.type === "credit_card" && bankAccounts.length > 0 ? (
             <FormField

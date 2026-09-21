@@ -27,7 +27,7 @@ export type Database = {
           market_value_minor: number | null
           name: string
           payment_due_day: number | null
-          statement_generated_day: number | null
+          statement_close_day: number | null
           type: Database["public"]["Enums"]["account_type"]
           updated_at: string
           user_id: string
@@ -44,7 +44,7 @@ export type Database = {
           market_value_minor?: number | null
           name: string
           payment_due_day?: number | null
-          statement_generated_day?: number | null
+          statement_close_day?: number | null
           type: Database["public"]["Enums"]["account_type"]
           updated_at?: string
           user_id: string
@@ -61,7 +61,7 @@ export type Database = {
           market_value_minor?: number | null
           name?: string
           payment_due_day?: number | null
-          statement_generated_day?: number | null
+          statement_close_day?: number | null
           type?: Database["public"]["Enums"]["account_type"]
           updated_at?: string
           user_id?: string

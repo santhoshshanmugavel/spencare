@@ -43,7 +43,7 @@ export const createAccount: Command<CreateAccountInput, AccountRow> = {
           ? {
               creditLimitMinor: data.creditLimitMinor,
               creditUsedMinor: data.creditUsedMinor,
-              statementGeneratedDay: data.statementGeneratedDay ?? null,
+              statementCloseDay: data.statementCloseDay ?? null,
               paymentDueDay: data.paymentDueDay ?? null,
             }
           : {}),
