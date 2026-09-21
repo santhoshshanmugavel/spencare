@@ -16,7 +16,7 @@ import {
   getNotificationAlertState,
   upsertNotificationAlertState,
 } from "@spencare/domain-infra";
-import { deliverNotification, type DeliverNotificationInput } from "./engine";
+import { deliverNotification, type DeliverNotificationInput, type NotificationRunStats } from "./engine";
 import { FREQUENCY_LABELS } from "@spencare/domain-core";
 
 interface UserTarget {
@@ -41,7 +41,7 @@ const BUDGET_THRESHOLDS = [
   { pct: 100, eventType: "BUDGET_100" as const, severity: "critical" as const },
 ];
 
-export async function checkBudgetThreshold(input: BudgetRuleInput): Promise<void> {
+export async function checkBudgetThreshold(input: BudgetRuleInput, _stats?: NotificationRunStats): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, budgetId, budgetName, spentMinor, limitMinor, daysLeft } = input;
   const currency = input.currency ?? "INR";
   const utilizationPct = limitMinor > 0 ? (spentMinor / limitMinor) * 100 : 0;
@@ -66,7 +66,7 @@ export async function checkBudgetThreshold(input: BudgetRuleInput): Promise<void
         entityId: budgetId,
         actionUrl: "/budgets",
         dedupeKey: `budget_over_${budgetId}_${Math.floor(overByMinor / 100000)}`,
-      });
+      }, _stats);
     }
     return;
   }
@@ -101,7 +101,7 @@ export async function checkBudgetThreshold(input: BudgetRuleInput): Promise<void
     entityId: budgetId,
     actionUrl: "/budgets",
     dedupeKey: `budget_${highestCrossed.pct}_${budgetId}_${new Date().toISOString().slice(0, 7)}`,
-  });
+  }, _stats);
 }
 
 interface BalanceRuleInput extends UserTarget {
@@ -113,7 +113,7 @@ interface BalanceRuleInput extends UserTarget {
   currency?: string;
 }
 
-export async function checkBalanceThreshold(input: BalanceRuleInput): Promise<void> {
+export async function checkBalanceThreshold(input: BalanceRuleInput, _stats?: NotificationRunStats): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, accountId, accountName, balanceMinor, lowThresholdMinor } = input;
   const currency = input.currency ?? "INR";
 
@@ -152,7 +152,7 @@ export async function checkBalanceThreshold(input: BalanceRuleInput): Promise<vo
     entityId: accountId,
     actionUrl: `/accounts/${accountId}`,
     dedupeKey: `balance_${eventType.toLowerCase()}_${accountId}_${Math.floor(balanceMinor / 10000)}`,
-  });
+  }, _stats);
 }
 
 interface BillRuleInput extends UserTarget {
@@ -175,7 +175,7 @@ interface GoalPlanRuleInput extends UserTarget {
   nextDueAtIso: string;
 }
 
-export async function checkGoalPlanReminder(input: GoalPlanRuleInput): Promise<void> {
+export async function checkGoalPlanReminder(input: GoalPlanRuleInput, _stats?: NotificationRunStats): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, planId, goalId, goalName, amountMinor, frequency, nextDueAtIso } = input;
   const now = new Date();
   const dueDate = new Date(nextDueAtIso);
@@ -218,10 +218,10 @@ export async function checkGoalPlanReminder(input: GoalPlanRuleInput): Promise<v
     entityId: goalId,
     actionUrl: "/goals",
     dedupeKey,
-  });
+  }, _stats);
 }
 
-export async function checkBillReminder(input: BillRuleInput): Promise<void> {
+export async function checkBillReminder(input: BillRuleInput, _stats?: NotificationRunStats): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, billId, billName, dueDateIso, expectedAmountMinor } = input;
   const currency = input.currency ?? "INR";
   const today = new Date(input.todayIso + "T00:00:00Z");
@@ -265,7 +265,7 @@ export async function checkBillReminder(input: BillRuleInput): Promise<void> {
     entityId: billId,
     actionUrl: "/bills",
     dedupeKey,
-  });
+  }, _stats);
 }
 
 interface CommitmentRuleInput extends UserTarget {
@@ -280,7 +280,7 @@ interface CommitmentRuleInput extends UserTarget {
   todayIso: string;
 }
 
-export async function checkCommitmentReminder(input: CommitmentRuleInput): Promise<void> {
+export async function checkCommitmentReminder(input: CommitmentRuleInput, _stats?: NotificationRunStats): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, occurrenceId, commitmentId, commitmentName, dueDateIso, amountMinor, reservedMinor } = input;
   const currency = input.currency ?? "INR";
   const today = new Date(input.todayIso + "T00:00:00Z");
@@ -304,7 +304,7 @@ export async function checkCommitmentReminder(input: CommitmentRuleInput): Promi
         entityId: commitmentId,
         actionUrl: "/cash-flow/upcoming",
         dedupeKey: shortfallDedupeKey,
-      });
+      }, _stats);
     }
   }
 
@@ -341,7 +341,7 @@ export async function checkCommitmentReminder(input: CommitmentRuleInput): Promi
     entityId: commitmentId,
     actionUrl: "/cash-flow/upcoming",
     dedupeKey,
-  });
+  }, _stats);
 }
 
 interface PreparationRuleInput extends UserTarget {
@@ -354,7 +354,7 @@ interface PreparationRuleInput extends UserTarget {
   currency?: string;
 }
 
-export async function checkPreparationReminder(input: PreparationRuleInput): Promise<void> {
+export async function checkPreparationReminder(input: PreparationRuleInput, _stats?: NotificationRunStats): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, commitmentId, commitmentName, savingAmountMinor, nextPaymentDateIso, todayIso } = input;
   const currency = input.currency ?? "INR";
   const dedupeKey = `commitment_preparation_${commitmentId}_${todayIso}`;
@@ -368,7 +368,7 @@ export async function checkPreparationReminder(input: PreparationRuleInput): Pro
     entityId: commitmentId,
     actionUrl: "/cash-flow/upcoming",
     dedupeKey,
-  });
+  }, _stats);
 }
 
 interface CreditRuleInput extends UserTarget {
@@ -387,7 +387,7 @@ const CREDIT_THRESHOLDS = [
   { pct: 100, eventType: "CREDIT_100" as const, severity: "critical" as const },
 ];
 
-export async function checkCreditUtilization(input: CreditRuleInput): Promise<void> {
+export async function checkCreditUtilization(input: CreditRuleInput, _stats?: NotificationRunStats): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, accountId, accountName, creditUsedMinor, creditLimitMinor } = input;
   const currency = input.currency ?? "INR";
 
@@ -431,7 +431,7 @@ export async function checkCreditUtilization(input: CreditRuleInput): Promise<vo
     entityId: accountId,
     actionUrl: `/accounts/${accountId}`,
     dedupeKey: `credit_${highestCrossed.pct}_${accountId}_${new Date().toISOString().slice(0, 7)}`,
-  });
+  }, _stats);
 }
 
 interface LoanRuleInput extends UserTarget {
@@ -444,7 +444,7 @@ interface LoanRuleInput extends UserTarget {
   todayIso: string;
 }
 
-export async function checkLoanReminder(input: LoanRuleInput): Promise<void> {
+export async function checkLoanReminder(input: LoanRuleInput, _stats?: NotificationRunStats): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, loanId, loanName, dueDateIso, installmentMinor } = input;
   const currency = input.currency ?? "INR";
   const today = new Date(input.todayIso + "T00:00:00Z");
@@ -483,7 +483,7 @@ export async function checkLoanReminder(input: LoanRuleInput): Promise<void> {
     entityId: loanId,
     actionUrl: "/cash-flow/upcoming",
     dedupeKey,
-  });
+  }, _stats);
 }
 
 interface CreditCardBillingRuleInput extends UserTarget {
@@ -498,7 +498,7 @@ interface CreditCardBillingRuleInput extends UserTarget {
   todayIso: string;
 }
 
-export async function checkCreditCardBillingReminder(input: CreditCardBillingRuleInput): Promise<void> {
+export async function checkCreditCardBillingReminder(input: CreditCardBillingRuleInput, _stats?: NotificationRunStats): Promise<void> {
   const { serviceRoleSupabase, userId, userEmail, accountId, accountName, dueDateIso, kind, outstandingMinor } = input;
   const currency = input.currency ?? "INR";
   const today = new Date(input.todayIso + "T00:00:00Z");
@@ -550,5 +550,5 @@ export async function checkCreditCardBillingReminder(input: CreditCardBillingRul
     entityId: accountId,
     actionUrl: "/settings/accounts",
     dedupeKey,
-  });
+  }, _stats);
 }

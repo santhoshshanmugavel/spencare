@@ -9,37 +9,59 @@ import { checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, ch
 import { resolveRecurringDay } from "@spencare/domain-core";
 import { savingDatesForOccurrence } from "@spencare/domain-core";
 import { getCreditCardStatementSummary, upsertCreditCardObligation } from "@spencare/domain-application";
+import type { NotificationRunStats } from "./engine";
 
 interface CheckOutcome {
   userId: string;
   ok: boolean;
   checksRun: number;
+  eventsDetected: number;
+  notificationsCreated: number;
+  notificationsDeduped: number;
+  notificationsFailed: number;
+  channelDeliveryFailures: number;
   error?: string;
 }
 
 export async function runNotificationChecks(
   serviceRoleSupabase: TypedSupabaseClient,
-): Promise<{ usersProcessed: number; succeeded: number; failed: number; outcomes: CheckOutcome[] }> {
+): Promise<{
+  usersProcessed: number;
+  succeeded: number;
+  failed: number;
+  checksRun: number;
+  eventsDetected: number;
+  notificationsCreated: number;
+  notificationsDeduped: number;
+  notificationsFailed: number;
+  channelDeliveryFailures: number;
+  outcomes: CheckOutcome[];
+}> {
   // Get all users via auth admin API (profiles table has no email column)
   const { data: usersData, error: usersError } = await serviceRoleSupabase.auth.admin.listUsers({
     perPage: 1000,
   });
 
   if (usersError) {
-    return { usersProcessed: 0, succeeded: 0, failed: 1, outcomes: [] };
+    return { usersProcessed: 0, succeeded: 0, failed: 1, checksRun: 0, eventsDetected: 0, notificationsCreated: 0, notificationsDeduped: 0, notificationsFailed: 0, channelDeliveryFailures: 0, outcomes: [] };
   }
 
   const outcomes: CheckOutcome[] = [];
 
   for (const user of usersData.users) {
     try {
-      const checksRun = await runChecksForUser(serviceRoleSupabase, user.id, user.email ?? "");
-      outcomes.push({ userId: user.id, ok: true, checksRun });
+      const result = await runChecksForUser(serviceRoleSupabase, user.id, user.email ?? "");
+      outcomes.push({ userId: user.id, ok: true, ...result });
     } catch (e) {
       outcomes.push({
         userId: user.id,
         ok: false,
         checksRun: 0,
+        eventsDetected: 0,
+        notificationsCreated: 0,
+        notificationsDeduped: 0,
+        notificationsFailed: 0,
+        channelDeliveryFailures: 0,
         error: e instanceof Error ? e.message : "Unknown error",
       });
     }
@@ -49,6 +71,12 @@ export async function runNotificationChecks(
     usersProcessed: outcomes.length,
     succeeded: outcomes.filter((o) => o.ok).length,
     failed: outcomes.filter((o) => !o.ok).length,
+    checksRun: outcomes.reduce((s, o) => s + o.checksRun, 0),
+    eventsDetected: outcomes.reduce((s, o) => s + o.eventsDetected, 0),
+    notificationsCreated: outcomes.reduce((s, o) => s + o.notificationsCreated, 0),
+    notificationsDeduped: outcomes.reduce((s, o) => s + o.notificationsDeduped, 0),
+    notificationsFailed: outcomes.reduce((s, o) => s + o.notificationsFailed, 0),
+    channelDeliveryFailures: outcomes.reduce((s, o) => s + o.channelDeliveryFailures, 0),
     outcomes,
   };
 }
@@ -57,8 +85,10 @@ async function runChecksForUser(
   serviceRoleSupabase: TypedSupabaseClient,
   userId: string,
   userEmail: string,
-): Promise<number> {
+): Promise<{ checksRun: number } & NotificationRunStats & { notificationsFailed: number }> {
   let checksRun = 0;
+  let notificationsFailed = 0;
+  const stats: NotificationRunStats = { eventsDetected: 0, notificationsCreated: 0, notificationsDeduped: 0, channelDeliveryFailures: 0 };
   const now = new Date();
 
   // Resolve "today" in the user's stored IANA timezone so reminders fire on
@@ -125,10 +155,10 @@ async function runChecksForUser(
         limitMinor: budget.amount_minor,
         daysLeft,
         currency,
-      });
+      }, stats);
       checksRun++;
     } catch {
-      // Individual check failure must not stop other checks
+      notificationsFailed++;
     }
   }
 
@@ -152,10 +182,10 @@ async function runChecksForUser(
           balanceMinor: account.balance_minor ?? 0,
           lowThresholdMinor: LOW_THRESHOLD,
           currency: account.currency ?? "INR",
-        });
+        }, stats);
         checksRun++;
       } catch {
-        // Individual check failure must not stop other checks
+        notificationsFailed++;
       }
     }
   }
@@ -173,10 +203,10 @@ async function runChecksForUser(
           creditUsedMinor: account.credit_used_minor ?? 0,
           creditLimitMinor: account.credit_limit_minor,
           currency: account.currency ?? "INR",
-        });
+        }, stats);
         checksRun++;
       } catch {
-        // Individual check failure must not stop other checks
+        notificationsFailed++;
       }
     }
   }
@@ -224,10 +254,10 @@ async function runChecksForUser(
         expectedAmountMinor: prediction.expected_amount_minor ?? null,
         currency: "INR",
         todayIso,
-      });
+      }, stats);
       checksRun++;
     } catch {
-      // Individual check failure must not stop other checks
+      notificationsFailed++;
     }
   }
 
@@ -270,10 +300,10 @@ async function runChecksForUser(
           amountMinor: plan.amount_minor,
           frequency: plan.frequency,
           nextDueAtIso: plan.next_due_at,
-        });
+        }, stats);
         checksRun++;
       } catch {
-        // Individual check failure must not stop other checks
+        notificationsFailed++;
       }
     }
   }
@@ -319,10 +349,10 @@ async function runChecksForUser(
           reservedMinor: occ.reserved_minor,
           currency: commitment.currency,
           todayIso,
-        });
+        }, stats);
         checksRun++;
       } catch {
-        // Individual check failure must not stop other checks
+        notificationsFailed++;
       }
     }
   }
@@ -387,11 +417,11 @@ async function runChecksForUser(
           nextPaymentDateIso: nextOcc.due_date,
           todayIso,
           currency: pc.currency,
-        });
+        }, stats);
         checksRun++;
       }
     } catch {
-      // Individual check failure must not stop other checks
+      notificationsFailed++;
     }
   }
 
@@ -422,10 +452,10 @@ async function runChecksForUser(
         installmentMinor: loan.installment_amount_minor,
         currency: loan.currency,
         todayIso,
-      });
+      }, stats);
       checksRun++;
     } catch {
-      // Individual check failure must not stop other checks
+      notificationsFailed++;
     }
   }
 
@@ -487,11 +517,11 @@ async function runChecksForUser(
             outstandingMinor: outstanding,
             currency: account.currency ?? "INR",
             todayIso,
-          });
+          }, stats);
           checksRun++;
         }
       } catch {
-        // Individual check failure must not stop other checks
+        notificationsFailed++;
       }
 
       try {
@@ -529,14 +559,14 @@ async function runChecksForUser(
             outstandingMinor: outstanding,
             currency: account.currency ?? "INR",
             todayIso,
-          });
+          }, stats);
           checksRun++;
         }
       } catch {
-        // Individual check failure must not stop other checks
+        notificationsFailed++;
       }
     }
   }
 
-  return checksRun;
+  return { checksRun, notificationsFailed, ...stats };
 }

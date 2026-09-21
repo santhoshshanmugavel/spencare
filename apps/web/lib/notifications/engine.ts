@@ -29,6 +29,13 @@ function getEncryptionKey(): string {
   return key;
 }
 
+export interface NotificationRunStats {
+  eventsDetected: number;
+  notificationsCreated: number;
+  notificationsDeduped: number;
+  channelDeliveryFailures: number;
+}
+
 export interface DeliverNotificationInput {
   userId: string;
   userEmail: string;
@@ -53,6 +60,7 @@ export interface DeliverNotificationInput {
 export async function deliverNotification(
   serviceRoleSupabase: TypedSupabaseClient,
   input: DeliverNotificationInput,
+  _stats?: NotificationRunStats,
 ): Promise<{ notificationId: string | null; channels: string[] }> {
   const message = composeNotificationMessage(input.eventType, input.financialContext);
 
@@ -73,9 +81,13 @@ export async function deliverNotification(
   });
 
   // Dedupe: notification already existed
-  if (!notification) return { notificationId: null, channels: [] };
+  if (!notification) {
+    if (_stats) { _stats.eventsDetected++; _stats.notificationsDeduped++; }
+    return { notificationId: null, channels: [] };
+  }
 
   const notificationId = notification.id;
+  if (_stats) { _stats.eventsDetected++; _stats.notificationsCreated++; }
 
   // Load preferences
   const preferences = await listNotificationPreferences(serviceRoleSupabase, input.userId);
@@ -122,6 +134,7 @@ export async function deliverNotification(
     }
 
     if (result.ok) deliveredChannels.push("email");
+    else if (_stats) _stats.channelDeliveryFailures++;
   }
 
   // telegram
@@ -157,11 +170,13 @@ export async function deliverNotification(
         }
 
         if (result.ok) deliveredChannels.push("telegram");
+        else if (_stats) _stats.channelDeliveryFailures++;
       }
     } catch (err) {
       // Telegram delivery errors must not interrupt the engine
       const msg = err instanceof Error ? err.message : String(err);
       console.warn("[notifications/engine] Telegram delivery skipped:", msg);
+      if (_stats) _stats.channelDeliveryFailures++;
     }
   }
 
