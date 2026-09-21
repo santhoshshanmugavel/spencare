@@ -221,8 +221,14 @@ export async function runAutoPayForUser(
         });
 
       if (rpcError) {
+        // Log the full technical error internally; send a user-safe message externally.
+        console.error(
+          "[commitmentAutomation.runAutoPayForUser] RPC error",
+          { commitmentId, occurrenceId, code: rpcError.code, message: rpcError.message },
+        );
+        const userReason = toUserSafeReason(rpcError.message);
         results.push({ commitmentId, commitmentName, occurrenceId, status: "failed", error: rpcError.message });
-        await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, today, rpcError.message);
+        await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, today, userReason);
         continue;
       }
 
@@ -262,12 +268,41 @@ export async function runAutoPayForUser(
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        "[commitmentAutomation.runAutoPayForUser] unexpected error",
+        { commitmentId, occurrenceId, message: msg },
+      );
       results.push({ commitmentId, commitmentName, occurrenceId, status: "failed", error: msg });
-      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, today, msg);
+      await sendAutoPayFailedNotification(serviceRoleSupabase, userId, userEmail, commitmentName, amountMinor, today, toUserSafeReason(msg));
     }
   }
 
   return results;
+}
+
+/**
+ * Converts an internal error message into a user-safe string.
+ * SQL errors (column not found, constraint violations, etc.) must never
+ * reach the user's notification -- they expose schema details and are
+ * meaningless to end users.
+ */
+function toUserSafeReason(technicalMessage: string): string {
+  // occurrence_not_found_or_already_paid is a known domain signal
+  if (technicalMessage.includes("occurrence_not_found_or_already_paid")) {
+    return "Payment was already recorded or the occurrence could not be found.";
+  }
+  // Catch any PostgreSQL / Supabase error that contains SQL internals
+  if (
+    technicalMessage.includes("column") ||
+    technicalMessage.includes("relation") ||
+    technicalMessage.includes("violates") ||
+    technicalMessage.includes("syntax") ||
+    technicalMessage.includes("permission denied") ||
+    technicalMessage.includes("not_authorized")
+  ) {
+    return "Spencare encountered an internal error and could not record this payment automatically. The team has been alerted.";
+  }
+  return "Spencare could not record this payment automatically. Please record it manually.";
 }
 
 function computeAllowedNextDate(

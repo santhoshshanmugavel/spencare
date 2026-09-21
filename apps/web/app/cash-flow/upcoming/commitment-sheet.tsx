@@ -829,9 +829,9 @@ export function CommitmentSheet({ open, onOpenChange, onSaved, accounts, categor
                 )}
               />
               <div>
-                <Label htmlFor="c-autopay" className="text-sm font-medium">Automatically match payments</Label>
+                <Label htmlFor="c-autopay" className="text-sm font-medium">Automatically record payments</Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Spencare will look for a matching real transaction when this payment is due. It will never create a bank payment or invent a transaction.
+                  Spencare will record this payment as a transaction on the due date. It will never initiate a real bank transfer.
                 </p>
               </div>
             </div>

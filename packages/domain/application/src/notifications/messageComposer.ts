@@ -374,8 +374,8 @@ export function composeNotificationMessage(
         commitmentName: string; amountMinor: number; reason: string;
       };
       return {
-        title: `${commitmentName} auto-pay could not complete`,
-        body: `The ${fmt(amountMinor, currency)} payment for ${commitmentName} could not be recorded automatically. Reason: ${reason}. Please record it manually.`,
+        title: `${commitmentName} auto-record could not complete`,
+        body: `The ${fmt(amountMinor, currency)} payment for ${commitmentName} could not be recorded automatically. ${reason}`,
       };
     }
     case "COMMITMENT_AUTO_PROTECTED": {

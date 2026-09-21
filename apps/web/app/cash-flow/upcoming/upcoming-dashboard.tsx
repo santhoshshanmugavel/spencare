@@ -260,7 +260,7 @@ export function UpcomingDashboard({
               {ev.autoPayEnabled && ev.occurrenceStatus === "upcoming" && (
                 <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-success/10 text-success">
                   <Zap className="size-3 mr-0.5" />
-                  Auto-pay
+                  Auto-record
                 </span>
               )}
             </span>
