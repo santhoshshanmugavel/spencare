@@ -10,6 +10,8 @@ import type {
   AccountRow,
   CategoryRow,
   UpcomingEvent,
+  BillPredictionWithDefinition,
+  BillDefinitionRow,
 } from "@spencare/domain-application";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +26,10 @@ import { PrepProtectActions } from "./prep-protect-actions";
 import { ProjectedItemActions } from "./projected-item-actions";
 import { LoanActions } from "./loan-actions";
 import { CreditCardPaymentDialog } from "./credit-card-actions";
+import { BillNowSheet } from "../bills/bill-now-sheet";
+import { EditBillSheet } from "../bills/edit-bill-sheet";
+import { getBillAction } from "../bills/actions";
+import { toastError } from "@/lib/toast";
 import { minorUnitsToDisplay } from "@/lib/money-input";
 
 const CURRENCY = "INR";
@@ -121,6 +127,7 @@ export function UpcomingDashboard({
   events,
   commitments,
   loans,
+  bills = [],
   accounts,
   categories,
   masked,
@@ -128,6 +135,7 @@ export function UpcomingDashboard({
   events: UpcomingEvent[];
   commitments: PlannedCommitmentRow[];
   loans: LoanRow[];
+  bills?: BillPredictionWithDefinition[];
   accounts: AccountRow[];
   categories: CategoryRow[];
   masked: boolean;
@@ -140,6 +148,8 @@ export function UpcomingDashboard({
   const [ccPayOpen, setCcPayOpen] = useState(false);
   const [ccPayAccount, setCcPayAccount] = useState<AccountRow | null>(null);
   const [ccPayOutstandingMinor, setCcPayOutstandingMinor] = useState(0);
+  const [payingBill, setPayingBill] = useState<BillPredictionWithDefinition | null>(null);
+  const [editingBill, setEditingBill] = useState<BillDefinitionRow | null>(null);
 
   const commitmentById = new Map(commitments.map((c) => [c.id, c]));
   const loanById = new Map(loans.map((l) => [l.id, l]));
@@ -157,11 +167,17 @@ export function UpcomingDashboard({
   const currentMonthKey = months[0]!.key;
   const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
 
-  // Count events per month for the tab badges
+  // Count events per month for the tab badges (includes bills)
   const countByMonth = new Map<string, number>();
   for (const ev of events) {
     const mk = isoToMonthKey(ev.date);
     countByMonth.set(mk, (countByMonth.get(mk) ?? 0) + 1);
+  }
+  for (const b of bills) {
+    const mk = isoToMonthKey(b.expected_date);
+    // Overdue bills (past months) are surfaced in the current month tab
+    const effectiveMk = mk < currentMonthKey ? currentMonthKey : mk;
+    countByMonth.set(effectiveMk, (countByMonth.get(effectiveMk) ?? 0) + 1);
   }
 
   // Events for the selected month, sorted by date
@@ -169,7 +185,7 @@ export function UpcomingDashboard({
     .filter((ev) => isoToMonthKey(ev.date) === selectedMonthKey)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const hasAnything = events.length > 0;
+  const hasAnything = events.length > 0 || bills.length > 0;
 
   // Build a lookup: commitmentId+preparationForDate -> payment event (for PrepProtectActions)
   const paymentEventByKey = new Map<string, UpcomingEvent>();
@@ -198,6 +214,65 @@ export function UpcomingDashboard({
     }
     return { paymentsDue, toProtect, preparationDue };
   })();
+
+  // Bills to show in the selected month tab.
+  // Current month: includes all open/overdue bills (even those past-due from earlier dates).
+  // Future months: only bills with expected_date in that month.
+  const selectedBills = bills.filter((b) => {
+    const mk = isoToMonthKey(b.expected_date);
+    if (selectedMonthKey === currentMonthKey) return mk <= currentMonthKey;
+    return mk === selectedMonthKey;
+  }).sort((a, b) => a.expected_date.localeCompare(b.expected_date));
+
+  async function openBillEdit(billDefinitionId: string) {
+    const bill = await getBillAction(billDefinitionId);
+    if (!bill) {
+      toastError("That bill no longer exists.");
+      return;
+    }
+    setEditingBill(bill);
+  }
+
+  const renderBill = (b: BillPredictionWithDefinition) => {
+    const amountMinor = b.expected_amount_minor;
+    return (
+      <div key={b.id} className="space-y-1">
+        <ListRow
+          icon={<CalendarClock className="size-4 text-muted-foreground" />}
+          title={b.bill_definitions.merchant_pattern}
+          subtitle={
+            <DueDateLabel isoDate={b.expected_date} />
+          }
+          trailing={
+            <div className="flex items-center gap-1">
+              {amountMinor != null ? (
+                <Money
+                  value={DomainMoney.fromMinorUnits(BigInt(amountMinor), CURRENCY)}
+                  masked={masked}
+                  size="numeric"
+                />
+              ) : (
+                <span className="text-xs text-muted-foreground">Amount varies</span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => openBillEdit(b.bill_definition_id)}
+              >
+                Edit
+              </Button>
+            </div>
+          }
+        />
+        <div className="flex justify-end px-3">
+          <Button size="sm" variant="outline" onClick={() => setPayingBill(b)}>
+            Bill Now
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   const renderEvent = (ev: UpcomingEvent) => {
     if (ev.kind === "commitment_payment") {
@@ -596,7 +671,7 @@ export function UpcomingDashboard({
           title="Nothing upcoming"
           description="Add a planned commitment or loan to track what is coming and protect money in Safe to Spend."
         />
-      ) : selectedEvents.length === 0 ? (
+      ) : selectedEvents.length === 0 && selectedBills.length === 0 ? (
         <div className="py-12 text-center">
           <p className="text-sm text-muted-foreground">Nothing due in {months.find((m) => m.key === selectedMonthKey)?.label ?? selectedMonthKey}.</p>
         </div>
@@ -614,6 +689,16 @@ export function UpcomingDashboard({
               </Card>
             </div>
           ))}
+          {selectedBills.length > 0 && (
+            <div>
+              <p className="px-1 pb-2 text-sm font-semibold text-foreground">Bills</p>
+              <Card>
+                <CardContent className="px-2 py-1.5 space-y-0.5">
+                  {selectedBills.map(renderBill)}
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       )}
 
@@ -641,6 +726,27 @@ export function UpcomingDashboard({
           accounts={accounts}
           outstandingMinor={ccPayOutstandingMinor}
           onPaid={refresh}
+        />
+      )}
+
+      {payingBill && (
+        <BillNowSheet
+          prediction={payingBill}
+          accounts={accounts}
+          categories={categories}
+          open={!!payingBill}
+          onOpenChange={(v) => { if (!v) setPayingBill(null); }}
+          onPaid={() => { setPayingBill(null); refresh(); }}
+        />
+      )}
+
+      {editingBill && (
+        <EditBillSheet
+          bill={editingBill}
+          categories={categories}
+          open={!!editingBill}
+          onOpenChange={(v) => { if (!v) setEditingBill(null); }}
+          onUpdated={() => { setEditingBill(null); refresh(); }}
         />
       )}
     </div>

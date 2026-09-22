@@ -7,6 +7,7 @@ import {
   listBudgetsWithUsage,
   listCategories,
   getUpcomingProjection,
+  getUpcomingBills,
   type AuthContext,
   type UpcomingProjection,
 getProfileForDisplay,
@@ -56,7 +57,7 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
 
-  const [accounts, categories, profile, comparison, expenseByCategory, incomeByCategory, recentTransactions, upcomingProjection, budgetUsages] =
+  const [accounts, categories, profile, comparison, expenseByCategory, incomeByCategory, recentTransactions, upcomingProjection, budgetUsages, bills] =
     await Promise.all([
       listAccounts(ctx),
       listCategories(ctx),
@@ -71,6 +72,7 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
       getRecentTransactions(ctx, { accountId, limit: 25 }),
       getUpcomingProjection(ctx, { startDate: periodStart, endDate: periodEnd }),
       listBudgetsWithUsage(ctx, periodStart),
+      getUpcomingBills(ctx),
     ]);
 
   const selectedAccount = accountId ? (accounts.find((a) => a.id === accountId) ?? null) : null;
@@ -105,6 +107,7 @@ export default async function CashFlowOverviewPage(props: PageProps<"/cash-flow"
           recentTransactions={recentTransactions}
           upcomingProjection={upcomingProjection}
           budgetUsages={budgetUsages}
+          bills={bills}
         />
       </div>
     </AppShell>

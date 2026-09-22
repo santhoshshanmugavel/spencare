@@ -14,6 +14,8 @@ import type {
   TransactionRow,
   UpcomingEvent,
   UpcomingProjection,
+  BillPredictionWithDefinition,
+  BillDefinitionRow,
 } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +40,10 @@ import {
 import { AddTransactionSheet } from "./transactions/add-transaction-sheet";
 import { TransactionDetailDialog } from "./transactions/transaction-detail-dialog";
 import { DeleteTransactionDialog } from "./transactions/delete-transaction-dialog";
+import { BillNowSheet } from "./bills/bill-now-sheet";
+import { EditBillSheet } from "./bills/edit-bill-sheet";
+import { getBillAction } from "./bills/actions";
+import { toastError } from "@/lib/toast";
 
 /**
  * The Cash Flow workspace (SP-081 base, Phase 30B reference-fidelity
@@ -116,6 +122,7 @@ export function CashFlowOverview({
   recentTransactions,
   upcomingProjection,
   budgetUsages,
+  bills = [],
 }: {
   periodStart: string;
   accounts: AccountRow[];
@@ -129,6 +136,7 @@ export function CashFlowOverview({
   recentTransactions: TransactionRow[];
   upcomingProjection: UpcomingProjection;
   budgetUsages: BudgetWithUsage[];
+  bills?: BillPredictionWithDefinition[];
 }) {
   const router = useRouter();
   const [previewTab, setPreviewTab] = useState<"transactions" | "upcoming">("transactions");
@@ -138,6 +146,8 @@ export function CashFlowOverview({
   const [quickDeleting, setQuickDeleting] = useState<TransactionRow | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [payingBill, setPayingBill] = useState<BillPredictionWithDefinition | null>(null);
+  const [editingBill, setEditingBill] = useState<BillDefinitionRow | null>(null);
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const accountById = new Map(accounts.map((a) => [a.id, a]));
@@ -203,6 +213,21 @@ export function CashFlowOverview({
 
   function handleMutated() {
     router.refresh();
+  }
+
+  // Bills for the current overview period (open/overdue, date within this month or overdue)
+  const periodBills = useMemo(
+    () => bills.filter((b) => b.expected_date <= periodStart.slice(0, 7) + "-31"),
+    [bills, periodStart],
+  );
+
+  async function openBillEdit(billDefinitionId: string) {
+    const bill = await getBillAction(billDefinitionId);
+    if (!bill) {
+      toastError("That bill no longer exists.");
+      return;
+    }
+    setEditingBill(bill);
   }
 
   // Honest, source-supported empty state (system-model.md §25: "No
@@ -446,13 +471,13 @@ export function CashFlowOverview({
             </TabsContent>
 
             <TabsContent value="upcoming" className="space-y-3">
-              {filteredUpcoming.length === 0 ? (
+              {filteredUpcoming.length === 0 && periodBills.length === 0 ? (
                 <Card>
                   <CardContent className="p-0">
                     <EmptyState
-                      title={upcomingProjection.events.length === 0 ? "Nothing upcoming this month" : "No matches"}
+                      title={upcomingProjection.events.length === 0 && bills.length === 0 ? "Nothing upcoming this month" : "No matches"}
                       description={
-                        upcomingProjection.events.length === 0
+                        upcomingProjection.events.length === 0 && bills.length === 0
                           ? "Add a commitment or goal to see upcoming payments here."
                           : "No upcoming events match your search."
                       }
@@ -461,60 +486,113 @@ export function CashFlowOverview({
                   </CardContent>
                 </Card>
               ) : (
-                upcomingGroups.map((group) => {
-                  const groupTotal = group.items
-                    .filter((e) => e.kind === "commitment_payment" || e.kind === "loan" || e.kind === "goal_contribution")
-                    .reduce((sum, e) => sum + e.amountMinor, 0);
-                  const groupTotalMoney = DomainMoney.fromMinorUnits(BigInt(groupTotal), CURRENCY as never);
-                  return (
-                    <div key={group.date} className="space-y-1.5">
+                <>
+                  {upcomingGroups.map((group) => {
+                    const groupTotal = group.items
+                      .filter((e) => e.kind === "commitment_payment" || e.kind === "loan" || e.kind === "goal_contribution")
+                      .reduce((sum, e) => sum + e.amountMinor, 0);
+                    const groupTotalMoney = DomainMoney.fromMinorUnits(BigInt(groupTotal), CURRENCY as never);
+                    return (
+                      <div key={group.date} className="space-y-1.5">
+                        <div className="flex items-center gap-3 px-1">
+                          <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{formatGroupDate(group.date)}</h2>
+                          <div className="flex-1 h-px bg-border" />
+                          {groupTotal > 0 ? (
+                            <span className="text-xs text-muted-foreground">
+                              Due{" "}
+                              <Money value={groupTotalMoney} masked={masked} size="body" tone="neutral" className="inline" />
+                            </span>
+                          ) : null}
+                        </div>
+                        <Card>
+                          <CardContent className="px-2 py-1.5 space-y-0.5">
+                            {group.items.map((e: UpcomingEvent) => {
+                              const isPrepEvent = e.kind === "commitment_preparation";
+                              return (
+                                <ListRow
+                                  key={e.id}
+                                  icon={
+                                    <div className="flex size-9 items-center justify-center rounded-xl bg-muted" aria-hidden="true">
+                                      {isPrepEvent
+                                        ? <Sparkles className="size-4 text-muted-foreground" />
+                                        : <CalendarClock className="size-4 text-muted-foreground" />}
+                                    </div>
+                                  }
+                                  title={e.title}
+                                  subtitle={e.subtitle ?? undefined}
+                                  metadata={[
+                                    e.categoryId ? (
+                                      <span key="cat">{categoryById.get(e.categoryId)?.name}</span>
+                                    ) : null,
+                                  ].filter(Boolean)}
+                                  trailing={
+                                    <Money
+                                      value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)}
+                                      masked={masked}
+                                      size="numeric"
+                                      tone={isPrepEvent ? "positive" : "neutral"}
+                                    />
+                                  }
+                                />
+                              );
+                            })}
+                          </CardContent>
+                        </Card>
+                      </div>
+                    );
+                  })}
+                  {periodBills.length > 0 && (
+                    <div className="space-y-1.5">
                       <div className="flex items-center gap-3 px-1">
-                        <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{formatGroupDate(group.date)}</h2>
+                        <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bills</h2>
                         <div className="flex-1 h-px bg-border" />
-                        {groupTotal > 0 ? (
-                          <span className="text-xs text-muted-foreground">
-                            Due{" "}
-                            <Money value={groupTotalMoney} masked={masked} size="body" tone="neutral" className="inline" />
-                          </span>
-                        ) : null}
                       </div>
                       <Card>
                         <CardContent className="px-2 py-1.5 space-y-0.5">
-                          {group.items.map((e: UpcomingEvent) => {
-                            const isPrepEvent = e.kind === "commitment_preparation";
-                            return (
+                          {periodBills.map((b) => (
+                            <div key={b.id} className="space-y-1">
                               <ListRow
-                                key={e.id}
                                 icon={
                                   <div className="flex size-9 items-center justify-center rounded-xl bg-muted" aria-hidden="true">
-                                    {isPrepEvent
-                                      ? <Sparkles className="size-4 text-muted-foreground" />
-                                      : <CalendarClock className="size-4 text-muted-foreground" />}
+                                    <CalendarClock className="size-4 text-muted-foreground" />
                                   </div>
                                 }
-                                title={e.title}
-                                subtitle={e.subtitle ?? undefined}
-                                metadata={[
-                                  e.categoryId ? (
-                                    <span key="cat">{categoryById.get(e.categoryId)?.name}</span>
-                                  ) : null,
-                                ].filter(Boolean)}
+                                title={b.bill_definitions.merchant_pattern}
+                                subtitle={`Due ${new Date(b.expected_date + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}`}
                                 trailing={
-                                  <Money
-                                    value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)}
-                                    masked={masked}
-                                    size="numeric"
-                                    tone={isPrepEvent ? "positive" : "neutral"}
-                                  />
+                                  <div className="flex flex-col items-end gap-1">
+                                    {b.expected_amount_minor != null ? (
+                                      <Money
+                                        value={DomainMoney.fromMinorUnits(BigInt(b.expected_amount_minor), CURRENCY as never)}
+                                        masked={masked}
+                                        size="numeric"
+                                        tone="neutral"
+                                      />
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">Amount varies</span>
+                                    )}
+                                  </div>
+                                }
+                                hoverActions={
+                                  <>
+                                    <Button variant="ghost" size="sm" onClick={() => openBillEdit(b.bill_definition_id)}>
+                                      Edit
+                                    </Button>
+                                  </>
                                 }
                               />
-                            );
-                          })}
+                              <div className="flex justify-end px-3">
+                                <Button size="sm" variant="outline" onClick={() => setPayingBill(b)}>
+                                  Bill Now
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
                         </CardContent>
                       </Card>
                     </div>
-                  );
-                })
+                  )}
+                </>
               )}
               <div className="text-right">
                 <Link href="/cash-flow/upcoming" className="text-sm font-medium text-primary hover:underline">
@@ -710,6 +788,27 @@ export function CashFlowOverview({
           }}
         />
       ) : null}
+
+      {payingBill && (
+        <BillNowSheet
+          prediction={payingBill}
+          accounts={accounts}
+          categories={categories}
+          open={!!payingBill}
+          onOpenChange={(v) => { if (!v) setPayingBill(null); }}
+          onPaid={() => { setPayingBill(null); handleMutated(); }}
+        />
+      )}
+
+      {editingBill && (
+        <EditBillSheet
+          bill={editingBill}
+          categories={categories}
+          open={!!editingBill}
+          onOpenChange={(v) => { if (!v) setEditingBill(null); }}
+          onUpdated={() => { setEditingBill(null); handleMutated(); }}
+        />
+      )}
 
     </div>
   );
