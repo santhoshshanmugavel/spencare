@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, CalendarClock, Search, Sparkles } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, CalendarClock, CreditCard, Landmark, PiggyBank, Search, Sparkles, Target } from "lucide-react";
 import { Money as DomainMoney, ACCOUNT_TYPE_LABELS, filterByCapability, getSpendableMinor, getTransactionDisplay } from "@spencare/domain-core";
 import type {
   AccountRow,
@@ -16,6 +16,8 @@ import type {
   UpcomingProjection,
   BillPredictionWithDefinition,
   BillDefinitionRow,
+  PlannedCommitmentRow,
+  LoanRow,
 } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,6 +45,11 @@ import { DeleteTransactionDialog } from "./transactions/delete-transaction-dialo
 import { BillNowSheet } from "./bills/bill-now-sheet";
 import { EditBillSheet } from "./bills/edit-bill-sheet";
 import { getBillAction } from "./bills/actions";
+import { CommitmentActions } from "./upcoming/commitment-actions";
+import { LoanActions } from "./upcoming/loan-actions";
+import { CommitmentSheet } from "./upcoming/commitment-sheet";
+import { LoanSheet } from "./upcoming/loan-sheet";
+import { getCategoryIcon } from "@/lib/category-icons";
 import { toastError } from "@/lib/toast";
 
 /**
@@ -123,6 +130,8 @@ export function CashFlowOverview({
   upcomingProjection,
   budgetUsages,
   bills = [],
+  commitments = [],
+  loans = [],
 }: {
   periodStart: string;
   accounts: AccountRow[];
@@ -137,8 +146,11 @@ export function CashFlowOverview({
   upcomingProjection: UpcomingProjection;
   budgetUsages: BudgetWithUsage[];
   bills?: BillPredictionWithDefinition[];
+  commitments?: PlannedCommitmentRow[];
+  loans?: LoanRow[];
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [previewTab, setPreviewTab] = useState<"transactions" | "upcoming">("transactions");
   const [donutMode, setDonutMode] = useState<"expense" | "income">("expense");
   const [addOpen, setAddOpen] = useState(false);
@@ -148,9 +160,14 @@ export function CashFlowOverview({
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [payingBill, setPayingBill] = useState<BillPredictionWithDefinition | null>(null);
   const [editingBill, setEditingBill] = useState<BillDefinitionRow | null>(null);
+  const [commitmentSheetOpen, setCommitmentSheetOpen] = useState(false);
+  const [loanSheetOpen, setLoanSheetOpen] = useState(false);
+  const [editingLoan, setEditingLoan] = useState<LoanRow | undefined>(undefined);
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const accountById = new Map(accounts.map((a) => [a.id, a]));
+  const commitmentById = new Map(commitments.map((c) => [c.id, c]));
+  const loanById = new Map(loans.map((l) => [l.id, l]));
   // Bank/Cash/Credit Card are filterable here (Investment still excluded
   // -- no per-account decomposition the architecture supports for it).
   // Deliberately uses `expenseSource`, not `safeToSpendEligible` -- Phase
@@ -212,7 +229,7 @@ export function CashFlowOverview({
   }
 
   function handleMutated() {
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   // Bills for the current overview period (open/overdue, date within this month or overdue)
@@ -507,34 +524,116 @@ export function CashFlowOverview({
                         <Card>
                           <CardContent className="px-2 py-1.5 space-y-0.5">
                             {group.items.map((e: UpcomingEvent) => {
-                              const isPrepEvent = e.kind === "commitment_preparation";
-                              return (
-                                <ListRow
-                                  key={e.id}
-                                  icon={
-                                    <div className="flex size-9 items-center justify-center rounded-xl bg-muted" aria-hidden="true">
-                                      {isPrepEvent
-                                        ? <Sparkles className="size-4 text-muted-foreground" />
-                                        : <CalendarClock className="size-4 text-muted-foreground" />}
-                                    </div>
-                                  }
-                                  title={e.title}
-                                  subtitle={e.subtitle ?? undefined}
-                                  metadata={[
-                                    e.categoryId ? (
-                                      <span key="cat">{categoryById.get(e.categoryId)?.name}</span>
-                                    ) : null,
-                                  ].filter(Boolean)}
-                                  trailing={
-                                    <Money
-                                      value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)}
-                                      masked={masked}
-                                      size="numeric"
-                                      tone={isPrepEvent ? "positive" : "neutral"}
-                                    />
-                                  }
-                                />
-                              );
+                              if (e.kind === "commitment_payment") {
+                                const commitment = commitmentById.get(e.sourceId);
+                                const paymentAccount = e.paymentAccountId ? accountById.get(e.paymentAccountId) : null;
+                                const isCredit = paymentAccount?.type === "credit_card";
+                                const category = e.categoryId ? categoryById.get(e.categoryId) : null;
+                                const CategoryIcon = (category ? getCategoryIcon(category.icon) : null) ?? (isCredit ? CreditCard : CalendarClock);
+                                const fakeOcc = e.occurrenceId && commitment ? ({
+                                  id: e.occurrenceId,
+                                  commitment_id: e.sourceId,
+                                  due_date: e.date,
+                                  amount_minor: e.amountMinor,
+                                  reserved_minor: e.reservedMinor ?? 0,
+                                  status: e.occurrenceStatus ?? "upcoming",
+                                  planned_commitments: {
+                                    name: commitment.name,
+                                    category_id: commitment.category_id,
+                                    payment_frequency: commitment.payment_frequency,
+                                    payment_account_id: commitment.payment_account_id,
+                                    reserve_account_id: commitment.reserve_account_id,
+                                    funding_account_id: commitment.funding_account_id ?? null,
+                                    deleted_at: commitment.deleted_at,
+                                  },
+                                  user_id: "",
+                                  matched_transaction_id: null,
+                                  paid_at: null,
+                                  created_at: "",
+                                  updated_at: "",
+                                } as unknown as Parameters<typeof CommitmentActions>[0]["occ"]) : null;
+                                return (
+                                  <ListRow
+                                    key={e.id}
+                                    icon={<CategoryIcon className="size-4 text-muted-foreground" />}
+                                    title={e.title}
+                                    subtitle={e.subtitle ?? undefined}
+                                    metadata={[category ? <span key="cat">{category.name}</span> : null].filter(Boolean)}
+                                    trailing={
+                                      <div className="flex items-center gap-1">
+                                        <Money value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)} masked={masked} size="numeric" />
+                                        {fakeOcc && commitment ? (
+                                          <CommitmentActions occ={fakeOcc} commitment={commitment} accounts={accounts} categories={categories} onChanged={handleMutated} />
+                                        ) : null}
+                                      </div>
+                                    }
+                                  />
+                                );
+                              }
+
+                              if (e.kind === "loan") {
+                                const loan = loanById.get(e.sourceId);
+                                return (
+                                  <ListRow
+                                    key={e.id}
+                                    icon={<Landmark className="size-4 text-muted-foreground" />}
+                                    title={e.title}
+                                    subtitle={e.subtitle ?? undefined}
+                                    trailing={
+                                      <div className="flex items-center gap-1">
+                                        <Money value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)} masked={masked} size="numeric" />
+                                        {loan ? (
+                                          <LoanActions
+                                            loan={loan}
+                                            accounts={accounts}
+                                            categories={categories}
+                                            onChanged={handleMutated}
+                                            onEdit={(l) => { setEditingLoan(l); setLoanSheetOpen(true); }}
+                                          />
+                                        ) : null}
+                                      </div>
+                                    }
+                                  />
+                                );
+                              }
+
+                              if (e.kind === "goal_contribution") {
+                                return (
+                                  <ListRow
+                                    key={e.id}
+                                    icon={<Target className="size-4 text-muted-foreground" />}
+                                    title={e.title}
+                                    subtitle={e.subtitle ?? undefined}
+                                    trailing={<Money value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)} masked={masked} size="numeric" className="text-muted-foreground" />}
+                                  />
+                                );
+                              }
+
+                              if (e.kind === "commitment_preparation") {
+                                return (
+                                  <ListRow
+                                    key={e.id}
+                                    icon={<PiggyBank className="size-4 text-muted-foreground opacity-60" />}
+                                    title={e.title}
+                                    subtitle={e.subtitle ?? undefined}
+                                    trailing={<Money value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)} masked={masked} size="numeric" tone="positive" />}
+                                  />
+                                );
+                              }
+
+                              if (e.kind === "credit_card_statement" || e.kind === "credit_card_payment") {
+                                return (
+                                  <ListRow
+                                    key={e.id}
+                                    icon={<CreditCard className="size-4 text-muted-foreground" />}
+                                    title={e.title}
+                                    subtitle={e.subtitle ?? undefined}
+                                    trailing={<Money value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)} masked={masked} size="numeric" />}
+                                  />
+                                );
+                              }
+
+                              return null;
                             })}
                           </CardContent>
                         </Card>
@@ -809,6 +908,22 @@ export function CashFlowOverview({
           onUpdated={() => { setEditingBill(null); handleMutated(); }}
         />
       )}
+
+      <CommitmentSheet
+        open={commitmentSheetOpen}
+        onOpenChange={setCommitmentSheetOpen}
+        onSaved={() => { setCommitmentSheetOpen(false); handleMutated(); }}
+        accounts={accounts}
+        categories={categories}
+      />
+
+      <LoanSheet
+        open={loanSheetOpen}
+        onOpenChange={(v) => { setLoanSheetOpen(v); if (!v) setEditingLoan(undefined); }}
+        onSaved={() => { setLoanSheetOpen(false); setEditingLoan(undefined); handleMutated(); }}
+        accounts={accounts}
+        existing={editingLoan}
+      />
 
     </div>
   );
