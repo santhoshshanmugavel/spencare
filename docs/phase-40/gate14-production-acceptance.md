@@ -86,7 +86,16 @@ Direct database-level test (wrapped in `BEGIN`/`ROLLBACK`, no permanent data), c
 - `security_smoke.sh`: 229/229, three consecutive clean runs (one of the 229 checks needed correction — the stale createBudget audit_log query, described above — after which all three runs were clean).
 - Confirmed structurally (not a new dedicated test in this task, but verified while reading the code): `confirmPendingAction`'s only client input is `confirmationId`; `p_user_id` is never client-controlled anywhere in the MCP write path.
 - Cross-user pending-action confirmation: rejected (live MCP test).
-- Confirmation replay, malformed UUID, invalid enum, SQL-injection-shaped enum value: **not re-tested in this specific task** — these were covered in Gate 14B's own test matrix against the prior version of `confirm_command`; not re-run against today's further-corrected version. Documented as not re-verified rather than assumed.
+- **Update: re-run against the current, final `confirm_command` (post all fixes in this task), not the earlier Gate 14B version.** 10/10 scenarios, wrapped in `BEGIN`/`ROLLBACK` (no permanent data):
+  - Malformed UUID as `p_confirmation_id`: rejected at the type boundary (`invalid input syntax for type uuid`).
+  - Malformed UUID as `p_user_id`: rejected at the type boundary.
+  - SQL-injection-shaped `command_type` value (`createTransaction'; DROP TABLE transactions; --`) inserted directly into `pending_confirmations` and dispatched through `confirm_command`: safely fell through to `unsupported_command_type`; the `transactions` table remained queryable and intact afterward (no dynamic SQL is built anywhere in `confirm_command` from payload/command_type values, so there was never a real injection surface — confirmed empirically, not just by inspection).
+  - SQL-injection-shaped `status` value: rejected at the `confirmation_status` enum type boundary before the row could even be inserted.
+  - Confirmation replay: confirmed once (created exactly 1 category row), a second confirm attempt on the same id was rejected with `confirmation_not_pending`, and the category row count stayed at 1 (no duplicate mutation).
+  - Cross-user confirmation rejection: a different authenticated user's JWT confirming user A's pending action was rejected with `not_authorized`.
+  - Authenticated, same user: succeeded.
+  - Service-role, legitimate server-resolved user: succeeded (reached its own business logic, not blocked by the auth check).
+  - Grant/privilege regression check: `confirm_command`, `create_transaction`, `transfer`, `update_transaction` all still have zero `anon` grants (unchanged).
 
 ## Migration Integrity
 
@@ -166,7 +175,14 @@ Clean. 7/7 tasks successful, exit 0.
 
 ## Release Candidate
 
-**Not created.** The working tree carries a very large amount of accumulated, never-committed change across many files spanning this entire multi-gate program (confirmed via `git status`), most of which predates this specific task and has not been individually re-reviewed here. Per this task's own instruction ("only after all previous phases pass") and since several phases above are explicitly incomplete, no commit was made.
+**Created**, per explicit instruction to freeze the verified work while Spensa/browser/Clarity/accessibility/environment-audit remain open (those are tracked as remaining blockers below, not treated as reasons to withhold the commit).
+
+- **Commit SHA:** `1fa5e322e63efe111308b3128ab6f13efbce1bd9`
+- **Files changed:** 115 (37 modified, 78 new), +22,975 / -31 lines.
+- **Migration files included (11, all new, zero historical migrations edited):** `20260926000001_financial_plans_schema.sql`, `20260927000001_drop_stale_pay_commitment_occurrence_atomic_overload.sql`, `20260927000002_enable_moddatetime_extension.sql`, `20260928000001_confirm_command_financial_plan_commands.sql` (superseded, kept for history), `20260928000002_transaction_plan_item_consistency_trigger.sql`, `20260928000003_fix_anon_auth_bypass_transaction_functions.sql` (already applied to production), `20260928000004_reconcile_transactions_occurred_at_timestamptz.sql`, `20260928000005_pin_search_path_security_definer_functions.sql`, `20260928000006_drop_stale_date_typed_transaction_overloads.sql`, `20260928000007_fix_confirm_command_stale_branches_and_add_plans.sql`, `20260928000008_fix_service_role_auth_check_regression.sql`.
+- Pre-commit checks performed: `git status`/`git diff --stat` reviewed in full; grepped the entire diff for secret-shaped strings (API keys, service-role JWTs, private keys) — none found; grepped for `console.log`/`debugger`/new `TODO`/`FIXME` — none found; confirmed zero tracked (historical) migration files were modified, only new files added; confirmed no `.env`/credential-shaped files staged; confirmed the throwaway MCP test script (`gate14-live-mcp-check.ts`) was deleted before staging.
+- Regression re-run immediately before commit, on the exact final working tree: `financial_plans_schema_smoke.sh` 216/216, `security_smoke.sh` 229/229, `credit_card_transactions_smoke.sh` 17/17, `credit_card_import_smoke.sh` 5/5, `pnpm -w typecheck` 13/13 tasks clean, `pnpm -w build` 7/7 tasks clean.
+- Working tree is clean after the commit (`git status --porcelain` returns nothing).
 
 ## Production Changes
 
