@@ -287,6 +287,36 @@ function guessCommandType(toolName: string): ConfirmationCommandType {
       return "createBudget";
     case "proposeCreateGoal":
       return "createGoal";
+    case "proposeCreatePlan":
+      return "createPlan";
+    case "proposeUpdatePlan":
+      return "updatePlan";
+    case "proposeUpdatePlanBudget":
+      return "updatePlanBudget";
+    case "proposeUpdatePlanStatus":
+      return "updatePlanStatus";
+    case "proposeDeletePlan":
+      return "deletePlan";
+    case "proposeCreatePlanItem":
+      return "addPlanItem";
+    case "proposeUpdatePlanItem":
+      return "updatePlanItem";
+    case "proposeUpdatePlanItemStatus":
+      return "updatePlanItemStatus";
+    case "proposeAssociatePlanGoal":
+      return "associatePlanGoal";
+    case "proposeDissociatePlanGoal":
+      return "dissociatePlanGoal";
+    case "proposeAssociatePlanCommitment":
+      return "associatePlanCommitment";
+    case "proposeDissociatePlanCommitment":
+      return "dissociatePlanCommitment";
+    case "proposeAssociatePlanAccount":
+      return "associatePlanAccount";
+    case "proposeDissociatePlanAccount":
+      return "dissociatePlanAccount";
+    case "proposeUpdateTransactionPlan":
+      return "setTransactionPlan";
     default:
       return "createTransaction";
   }

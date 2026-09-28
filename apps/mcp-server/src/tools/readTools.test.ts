@@ -41,6 +41,8 @@ vi.mock("@spencare/domain-application", () => ({
   listCommitments: vi.fn(),
   listUpcoming: vi.fn(),
   listAllLoans: vi.fn(),
+  listPlansWithSummaries: vi.fn(),
+  getPlanDetail: vi.fn(),
 }));
 
 function fakeServer() {
@@ -198,6 +200,100 @@ describe("registerReadTools — getCreditCardBillingSummary canonical source", (
     expect(result.data.statementBalanceMinor).toBeNull();
     expect(result.data.currentOutstandingMinor).toBeNull();
     expect(JSON.stringify(result.data)).not.toContain("4183986");
+  });
+});
+
+describe("registerReadTools — financial Plan read tools (Gate 11)", () => {
+  it("getPlans returns a lightweight per-Plan summary sourced entirely from listPlansWithSummaries, labeled with source ACTUAL/USER_DEFINED", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
+    vi.mocked(domainApp.listPlansWithSummaries).mockResolvedValue([
+      {
+        plan: { id: "plan-1", name: "Thailand Trip", status: "active", base_currency: "INR", current_budget_minor: 2_000_000 },
+        calculations: { actualSpend: { amountMinorUnits: 500000n }, budgetStatus: { overBudget: false }, progress: { percentOfBudgetUsed: 25 } },
+      },
+    ] as never);
+
+    const { registerReadTools } = await import("./readTools.js");
+    const server = fakeServer();
+    registerReadTools(server as never, readCtx(["read"]));
+
+    const result = await server.call("getPlans");
+    expect(result.isError).toBeUndefined();
+    expect(result.data).toEqual([
+      {
+        id: "plan-1",
+        name: "Thailand Trip",
+        status: "active",
+        currency: "INR",
+        currentBudget: { amountMinor: 2_000_000, currency: "INR", source: "USER_DEFINED" },
+        actualSpend: { amountMinor: 500000, currency: "INR", source: "ACTUAL" },
+        overBudget: false,
+        percentOfBudgetUsed: 25,
+      },
+    ]);
+  });
+
+  it("getPlanDetail returns a clean not-found error for a nonexistent or another user's Plan, never leaking which case it is", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
+    vi.mocked(domainApp.getPlanDetail).mockResolvedValue(null as never);
+
+    const { registerReadTools } = await import("./readTools.js");
+    const server = fakeServer();
+    registerReadTools(server as never, readCtx(["read"]));
+
+    const result = await server.call("getPlanDetail", { planId: "someone-elses-plan" });
+    expect(result.data).toEqual({ error: "Plan not found." });
+  });
+
+  it("getPlanDetail labels actual spend ACTUAL, budget USER_DEFINED, and derived aggregates CALCULATED", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
+    vi.mocked(domainApp.listGoals).mockResolvedValue([] as never);
+    vi.mocked(domainApp.listCommitments).mockResolvedValue([] as never);
+    vi.mocked(domainApp.listAccounts).mockResolvedValue([] as never);
+    vi.mocked(domainApp.getPlanDetail).mockResolvedValue({
+      plan: { id: "plan-1", name: "Thailand Trip", status: "active", start_date: null, end_date: null, base_currency: "INR", original_budget_minor: 2_000_000, current_budget_minor: 2_000_000 },
+      items: [],
+      goalLinks: [],
+      commitmentLinks: [],
+      accountLinks: [],
+      transactions: [],
+      calculations: {
+        actualSpend: { amountMinorUnits: 500000n },
+        plannedSpend: { amountMinorUnits: 0n },
+        committedAmount: { amountMinorUnits: 0n },
+        upcomingAmount: { amountMinorUnits: 0n },
+        budgetStatus: { hasBudget: true, remaining: { amountMinorUnits: 1_500_000n }, overBudget: false },
+        variance: { variance: { amountMinorUnits: 500000n } },
+        progress: { percentOfBudgetUsed: 25, percentOfPlannedSpent: null },
+        excludedTransactions: [],
+        excludedItems: [],
+      },
+    } as never);
+
+    const { registerReadTools } = await import("./readTools.js");
+    const server = fakeServer();
+    registerReadTools(server as never, readCtx(["read"]));
+
+    const result = await server.call("getPlanDetail", { planId: "plan-1" });
+    expect(result.data.actualSpend).toEqual({ amountMinor: 500000, currency: "INR", source: "ACTUAL" });
+    expect(result.data.currentBudget).toEqual({ amountMinor: 2_000_000, currency: "INR", source: "USER_DEFINED" });
+    expect(result.data.plannedSpend).toEqual({ amountMinor: 0, currency: "INR", source: "CALCULATED" });
+    expect(result.data.dataConfidence).toBe("high");
+  });
+
+  it("a session with no scope cannot call getPlanDetail", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    const { registerReadTools } = await import("./readTools.js");
+    const server = fakeServer();
+    registerReadTools(server as never, readCtx([]));
+
+    const result = await server.call("getPlanDetail", { planId: "plan-1" });
+    expect(result.isError).toBe(true);
+    expect(result.data.code).toBe("INSUFFICIENT_SCOPE");
+    expect(vi.mocked(domainApp.getPlanDetail)).not.toHaveBeenCalled();
   });
 });
 

@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, CreditCard, Landmark, PiggyBank, Plus, ShieldCheck, Target, Zap } from "lucide-react";
+import Link from "next/link";
+import { CalendarClock, CreditCard, Landmark, MapPinned, PiggyBank, Plus, ShieldCheck, Target, Zap } from "lucide-react";
 import { Money as DomainMoney, type ReserveStatusResult } from "@spencare/domain-core";
 import type {
   PlannedCommitmentRow,
@@ -12,6 +13,7 @@ import type {
   UpcomingEvent,
   BillPredictionWithDefinition,
   BillDefinitionRow,
+  UpcomingPlanContextMaps,
 } from "@spencare/domain-application";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { Card, CardContent } from "@/components/ui/card";
@@ -97,6 +99,30 @@ function ReserveLabel({ rs, currency = CURRENCY }: { rs: ReserveStatusResult; cu
   }
 }
 
+/**
+ * Gate 8: read only navigation from an Upcoming event to the Plan(s) that
+ * link its underlying Commitment, Goal, or Account. This is a projected,
+ * forward looking event, never a transaction and never Plan actual spend
+ * (that distinction stays true no matter how many Plans it is linked to),
+ * so this renders as plain navigation text, not a status or amount.
+ */
+function PlanContextLinks({ plans }: { plans: { id: string; name: string }[] }) {
+  if (plans.length === 0) return null;
+  return (
+    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+      <MapPinned className="size-3" aria-hidden="true" />
+      {plans.map((p, i) => (
+        <span key={p.id}>
+          {i > 0 ? ", " : null}
+          <Link href={`/plans/${p.id}`} className="hover:text-foreground hover:underline">
+            {p.name}
+          </Link>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 // ── Month navigation ──────────────────────────────────────────────────────────
 
 interface MonthKey {
@@ -131,6 +157,7 @@ export function UpcomingDashboard({
   accounts,
   categories,
   masked,
+  planContext,
 }: {
   events: UpcomingEvent[];
   commitments: PlannedCommitmentRow[];
@@ -139,6 +166,8 @@ export function UpcomingDashboard({
   accounts: AccountRow[];
   categories: CategoryRow[];
   masked: boolean;
+  /** Gate 8: optional. Plan navigation is a pure UI enrichment, never required for this page to render correctly. */
+  planContext?: UpcomingPlanContextMaps;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -338,6 +367,7 @@ export function UpcomingDashboard({
                   Auto-record
                 </span>
               )}
+              <PlanContextLinks plans={planContext?.commitmentIdToPlans.get(ev.sourceId) ?? []} />
             </span>
           }
           trailing={
@@ -410,6 +440,7 @@ export function UpcomingDashboard({
                   {minorUnitsToDisplay(currentReserved, CURRENCY)} / {minorUnitsToDisplay(totalNeeded, CURRENCY)} protected
                 </span>
               )}
+              <PlanContextLinks plans={planContext?.commitmentIdToPlans.get(ev.sourceId) ?? []} />
             </span>
           }
           trailing={
@@ -446,11 +477,12 @@ export function UpcomingDashboard({
           icon={<Target className="size-4 text-muted-foreground" />}
           title={ev.title}
           subtitle={
-            <span className="flex items-center gap-2">
+            <span className="flex flex-wrap items-center gap-2">
               <DueDateLabel isoDate={ev.date} />
               {ev.subtitle && (
                 <span className="text-xs text-muted-foreground">{ev.subtitle}</span>
               )}
+              <PlanContextLinks plans={planContext?.goalIdToPlans.get(ev.sourceId) ?? []} />
             </span>
           }
           trailing={
@@ -514,11 +546,12 @@ export function UpcomingDashboard({
           icon={<CreditCard className="size-4 text-muted-foreground" />}
           title={ev.title}
           subtitle={
-            <span className="flex items-center gap-2">
+            <span className="flex flex-wrap items-center gap-2">
               <DueDateLabel isoDate={ev.date} />
               {ev.subtitle && (
                 <span className="text-xs text-muted-foreground">{ev.subtitle}</span>
               )}
+              <PlanContextLinks plans={planContext?.accountIdToPlans.get(ev.sourceId) ?? []} />
             </span>
           }
           trailing={

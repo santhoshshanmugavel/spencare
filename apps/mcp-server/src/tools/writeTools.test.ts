@@ -5,7 +5,18 @@ vi.mock("@spencare/domain-application", () => ({
   listCategories: vi.fn(),
   listGoals: vi.fn(),
   listBillPredictions: vi.fn(),
+  listMcpSessions: vi.fn(),
+  listCommitments: vi.fn(),
   getProfile: vi.fn(),
+  getTransaction: vi.fn(),
+  getAccount: vi.fn(),
+  getGoal: vi.fn(),
+  getBudget: vi.fn(),
+  getGmailCandidateQuery: vi.fn(),
+  getGoalContributionPlanById: vi.fn(),
+  calculateNextOccurrence: vi.fn(),
+  FREQUENCY_LABELS: {},
+  getPlan: vi.fn(),
   proposeCommand: vi.fn(),
   confirmCommand: vi.fn(),
   cancelPendingCommand: vi.fn(),
@@ -143,6 +154,131 @@ describe("registerWriteTools — confirmPendingAction", () => {
     const result = await server.call("confirmPendingAction", { confirmationId: undefined });
     expect(result.isError).toBe(true);
     expect(vi.mocked(domainApp.confirmCommand)).not.toHaveBeenCalled();
+  });
+});
+
+describe("registerWriteTools — financial Plan propose tools (Gate 11, write-scoped session)", () => {
+  it("proposeCreatePlan validates input, builds a preview, and calls proposeCommand with source='mcp' and commandType='createPlan' -- never mutating anything itself", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    vi.mocked(domainApp.proposeCommand).mockResolvedValue({ confirmationId: "conf-1", summary: "Create...", fields: [], expiresAt: "2026-09-05T00:10:00Z" });
+
+    const { registerWriteTools } = await import("./writeTools.js");
+    const server = fakeServer();
+    registerWriteTools(server as never, ctxWithScopes(["write"]));
+
+    const result = await server.call("proposeCreatePlan", { name: "Thailand Trip", baseCurrency: "INR" });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.data.confirmationId).toBe("conf-1");
+    expect(vi.mocked(domainApp.proposeCommand)).toHaveBeenCalledWith(
+      expect.anything(),
+      "mcp",
+      "createPlan",
+      expect.objectContaining({ name: "Thailand Trip", baseCurrency: "INR" }),
+      expect.objectContaining({ summary: expect.any(String) }),
+    );
+  });
+
+  it("proposeCreatePlan rejects invalid input via the shared Zod schema before ever calling proposeCommand", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    const { registerWriteTools } = await import("./writeTools.js");
+    const server = fakeServer();
+    registerWriteTools(server as never, ctxWithScopes(["write"]));
+
+    const result = await server.call("proposeCreatePlan", { baseCurrency: "INR" }); // missing required name
+
+    expect(result.isError).toBe(true);
+    expect(vi.mocked(domainApp.proposeCommand)).not.toHaveBeenCalled();
+  });
+
+  it("proposeUpdatePlanStatus calls proposeCommand with commandType='updatePlanStatus', never executing the transition itself", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    vi.mocked(domainApp.getPlan).mockResolvedValue({ id: "plan-1", name: "Thailand Trip" } as never);
+    vi.mocked(domainApp.proposeCommand).mockResolvedValue({ confirmationId: "conf-2", summary: "Move...", fields: [], expiresAt: "2026-09-05T00:10:00Z" });
+
+    const { registerWriteTools } = await import("./writeTools.js");
+    const server = fakeServer();
+    registerWriteTools(server as never, ctxWithScopes(["write"]));
+
+    const result = await server.call("proposeUpdatePlanStatus", { planId: "plan-1", targetStatus: "archived" });
+
+    expect(result.isError).toBeUndefined();
+    expect(vi.mocked(domainApp.proposeCommand)).toHaveBeenCalledWith(
+      expect.anything(),
+      "mcp",
+      "updatePlanStatus",
+      { planId: "plan-1", targetStatus: "archived" },
+      expect.objectContaining({ summary: expect.any(String) }),
+    );
+  });
+
+  it("proposeDeletePlan calls proposeCommand with commandType='deletePlan', never deleting anything itself", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    vi.mocked(domainApp.getPlan).mockResolvedValue({ id: "plan-1", name: "Empty Draft" } as never);
+    vi.mocked(domainApp.proposeCommand).mockResolvedValue({ confirmationId: "conf-3", summary: "Delete...", fields: [], expiresAt: "2026-09-05T00:10:00Z" });
+
+    const { registerWriteTools } = await import("./writeTools.js");
+    const server = fakeServer();
+    registerWriteTools(server as never, ctxWithScopes(["write"]));
+
+    const result = await server.call("proposeDeletePlan", { planId: "plan-1" });
+
+    expect(result.isError).toBeUndefined();
+    expect(vi.mocked(domainApp.proposeCommand)).toHaveBeenCalledWith(expect.anything(), "mcp", "deletePlan", { planId: "plan-1" }, expect.anything());
+  });
+
+  it("proposeAssociatePlanGoal calls proposeCommand with commandType='associatePlanGoal', never writing the link itself", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    const planId = "8cad1f12-3b01-4a55-9aa9-3ce1fef58491";
+    const goalId = "289f5e56-21a8-4ee0-865f-c02c11f4d874";
+    vi.mocked(domainApp.getPlan).mockResolvedValue({ id: planId, name: "Thailand Trip" } as never);
+    vi.mocked(domainApp.listGoals).mockResolvedValue([{ id: goalId, name: "Travel Fund" }] as never);
+    vi.mocked(domainApp.proposeCommand).mockResolvedValue({ confirmationId: "conf-4", summary: "Link...", fields: [], expiresAt: "2026-09-05T00:10:00Z" });
+
+    const { registerWriteTools } = await import("./writeTools.js");
+    const server = fakeServer();
+    registerWriteTools(server as never, ctxWithScopes(["write"]));
+
+    const result = await server.call("proposeAssociatePlanGoal", { planId, goalId });
+
+    expect(result.isError).toBeUndefined();
+    expect(vi.mocked(domainApp.proposeCommand)).toHaveBeenCalledWith(expect.anything(), "mcp", "associatePlanGoal", { planId, goalId }, expect.anything());
+  });
+
+  it("proposeUpdateTransactionPlan calls proposeCommand with commandType='setTransactionPlan', never touching the transaction's own amount/type/account", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    const planId = "8cad1f12-3b01-4a55-9aa9-3ce1fef58491";
+    const transactionId = "6a0f2b9a-1111-4a11-8b11-000000000001";
+    vi.mocked(domainApp.getPlan).mockResolvedValue({ id: planId, name: "Thailand Trip" } as never);
+    vi.mocked(domainApp.proposeCommand).mockResolvedValue({ confirmationId: "conf-5", summary: "Attach...", fields: [], expiresAt: "2026-09-05T00:10:00Z" });
+
+    const { registerWriteTools } = await import("./writeTools.js");
+    const server = fakeServer();
+    registerWriteTools(server as never, ctxWithScopes(["write"]));
+
+    const result = await server.call("proposeUpdateTransactionPlan", { transactionId, planId, planItemId: null });
+
+    expect(result.isError).toBeUndefined();
+    expect(vi.mocked(domainApp.proposeCommand)).toHaveBeenCalledWith(
+      expect.anything(),
+      "mcp",
+      "setTransactionPlan",
+      { transactionId, planId, planItemId: null },
+      expect.anything(),
+    );
+  });
+
+  it("a read-only session cannot call any financial Plan propose tool", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    const { registerWriteTools } = await import("./writeTools.js");
+    const server = fakeServer();
+    registerWriteTools(server as never, ctxWithScopes(["read"]));
+
+    const result = await server.call("proposeCreatePlan", { name: "Thailand Trip", baseCurrency: "INR" });
+
+    expect(result.isError).toBe(true);
+    expect(result.data.code).toBe("INSUFFICIENT_SCOPE");
+    expect(vi.mocked(domainApp.proposeCommand)).not.toHaveBeenCalled();
   });
 });
 

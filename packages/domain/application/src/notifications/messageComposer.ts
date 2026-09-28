@@ -30,6 +30,8 @@ export type NotificationEventType =
   | "LOAN_7_DAYS" | "LOAN_3_DAYS" | "LOAN_1_DAY" | "LOAN_DUE_TODAY" | "LOAN_OVERDUE"
   | "CC_STATEMENT_7_DAYS" | "CC_STATEMENT_TODAY"
   | "CC_PAYMENT_7_DAYS" | "CC_PAYMENT_3_DAYS" | "CC_PAYMENT_1_DAY" | "CC_PAYMENT_TODAY" | "CC_PAYMENT_OVERDUE"
+  | "PLAN_ITEM_7_DAYS" | "PLAN_ITEM_3_DAYS" | "PLAN_ITEM_1_DAY" | "PLAN_ITEM_DUE_TODAY" | "PLAN_ITEM_OVERDUE"
+  | "PLAN_BUDGET_80" | "PLAN_BUDGET_OVER" | "PLAN_COMPLETED"
   | "TRANSACTION_LARGE" | "TRANSACTION_UNUSUAL"
   | "SECURITY_PASSWORD_CHANGED" | "SECURITY_NEW_LOGIN" | "SECURITY_2FA_CHANGED"
   | "GMAIL_CONNECTED" | "GMAIL_CONNECTION_ERROR" | "MCP_CONNECTED" | "MCP_REVOKED"
@@ -56,7 +58,37 @@ function daysLabel(days: number): string {
   return `in ${days} days`;
 }
 
+/**
+ * Appends a short "Part of your X plan" clause when the rule layer attached
+ * Plan context to an otherwise unrelated Commitment, Goal, or Account event
+ * (Gate 9, mirroring Gate 8's read-only Plan-context composition). This
+ * never changes which event fired or the financial values already in the
+ * message -- it only adds context about which Plan the underlying entity
+ * belongs to.
+ */
+function planContextSuffix(planNames: string[] | undefined): string {
+  if (!planNames || planNames.length === 0) return "";
+  if (planNames.length === 1) return ` Part of your ${planNames[0]} plan.`;
+  const last = planNames[planNames.length - 1];
+  const rest = planNames.slice(0, -1).join(", ");
+  return ` Part of your ${rest} and ${last} plans.`;
+}
+
 export function composeNotificationMessage(
+  eventType: NotificationEventType,
+  context: Record<string, unknown>,
+): NotificationMessage {
+  const message = composeCore(eventType, context);
+  const suffix = planContextSuffix(context.planNames as string[] | undefined);
+  if (!suffix) return message;
+  return {
+    ...message,
+    body: message.body + suffix,
+    telegramBody: (message.telegramBody ?? message.body) + suffix,
+  };
+}
+
+function composeCore(
   eventType: NotificationEventType,
   context: Record<string, unknown>,
 ): NotificationMessage {
@@ -484,6 +516,84 @@ export function composeNotificationMessage(
       return {
         title: `${accountName} payment overdue`,
         body: `Your ${accountName} credit card payment of ${fmt(outstandingMinor, currency)} is ${daysOverdue} day${daysOverdue === 1 ? "" : "s"} overdue.`,
+      };
+    }
+
+    // ---- Plan Item reminders ----
+    case "PLAN_ITEM_7_DAYS": {
+      const { planName, itemName, amountMinor, isCommitted } = c as {
+        planName: string; itemName: string; amountMinor: number | null; isCommitted: boolean;
+      };
+      const amountPart = amountMinor ? ` of ${fmt(amountMinor, currency)}` : "";
+      const statusWord = isCommitted ? "committed" : "planned";
+      return {
+        title: `${itemName} due in 7 days`,
+        body: `Your ${statusWord} ${planName} item${amountPart} is expected in 7 days.`,
+      };
+    }
+    case "PLAN_ITEM_3_DAYS": {
+      const { planName, itemName, amountMinor, isCommitted } = c as {
+        planName: string; itemName: string; amountMinor: number | null; isCommitted: boolean;
+      };
+      const amountPart = amountMinor ? ` of ${fmt(amountMinor, currency)}` : "";
+      const statusWord = isCommitted ? "committed" : "planned";
+      return {
+        title: `${itemName} due in 3 days`,
+        body: `Your ${statusWord} ${planName} item${amountPart} is expected in 3 days.`,
+      };
+    }
+    case "PLAN_ITEM_1_DAY": {
+      const { planName, itemName, amountMinor, isCommitted } = c as {
+        planName: string; itemName: string; amountMinor: number | null; isCommitted: boolean;
+      };
+      const amountPart = amountMinor ? ` of ${fmt(amountMinor, currency)}` : "";
+      const statusWord = isCommitted ? "committed" : "planned";
+      return {
+        title: `${itemName} due tomorrow`,
+        body: `Your ${statusWord} ${planName} item${amountPart} is expected tomorrow.`,
+      };
+    }
+    case "PLAN_ITEM_DUE_TODAY": {
+      const { planName, itemName, amountMinor, isCommitted } = c as {
+        planName: string; itemName: string; amountMinor: number | null; isCommitted: boolean;
+      };
+      const amountPart = amountMinor ? ` of ${fmt(amountMinor, currency)}` : "";
+      const statusWord = isCommitted ? "committed" : "planned";
+      return {
+        title: `${itemName} due today`,
+        body: `Your ${statusWord} ${planName} item${amountPart} is expected today.`,
+      };
+    }
+    case "PLAN_ITEM_OVERDUE": {
+      const { planName, itemName, daysPast } = c as { planName: string; itemName: string; daysPast: number };
+      return {
+        title: `${itemName} may be overdue`,
+        body: `${itemName} in your ${planName} plan was expected ${daysPast} day${daysPast === 1 ? "" : "s"} ago and hasn't been recorded yet.`,
+      };
+    }
+
+    // ---- Plan budget risk ----
+    case "PLAN_BUDGET_80": {
+      const { planName, actualSpendMinor, budgetMinor } = c as {
+        planName: string; actualSpendMinor: number; budgetMinor: number;
+      };
+      return {
+        title: `${planName} budget getting close`,
+        body: `You've used ${fmt(actualSpendMinor, currency)} of your ${fmt(budgetMinor, currency)} ${planName} budget.`,
+      };
+    }
+    case "PLAN_BUDGET_OVER": {
+      const { planName, overByMinor } = c as { planName: string; overByMinor: number };
+      return {
+        title: `${planName} budget exceeded`,
+        body: `Your ${planName} spending is ${fmt(overByMinor, currency)} over the plan's budget.`,
+      };
+    }
+    case "PLAN_COMPLETED": {
+      const { planName } = c as { planName: string };
+      return {
+        title: `${planName} complete`,
+        body: `You completed your ${planName} plan.`,
       };
     }
 

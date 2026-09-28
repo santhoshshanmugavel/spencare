@@ -82,4 +82,29 @@ describe("SPENSA_SYSTEM_PROMPT — required content", () => {
     expect(SPENSA_SYSTEM_PROMPT).toMatch(/Privacy Mode/);
     expect(SPENSA_SYSTEM_PROMPT).toMatch(/never attempt to guess, reconstruct/i);
   });
+
+  it("Gate 10: distinguishes a Plan from a Budget, a Goal, and a Commitment", () => {
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/real-life purpose container/i);
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/different from a Budget/i);
+  });
+
+  it("Gate 10: requires the ACTUAL / USER_DEFINED / CALCULATED labels to never be collapsed", () => {
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/ACTUAL means the figure comes from real transactions/);
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/USER_DEFINED means the user typed it in themselves/);
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/CALCULATED means a canonical aggregate/);
+  });
+
+  it("Gate 10: a Plan-linked Commitment is never described as paid without a real transaction", () => {
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/never say a Commitment linked to a Plan has been paid/i);
+  });
+
+  it("Gate 10: states Spensa cannot create or price Plan Items through chat yet", () => {
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/cannot create, update, or price a Plan Item/i);
+  });
+
+  it("Gate 10: requires external cost estimates to be labeled ESTIMATE, never RESEARCHED, with no invented sources", () => {
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/no live web search or pricing connector today/i);
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/Call it an ESTIMATE, never a RESEARCHED price/);
+    expect(SPENSA_SYSTEM_PROMPT).toMatch(/Never invent a URL, a booking site name, an airline, or a hotel/);
+  });
 });

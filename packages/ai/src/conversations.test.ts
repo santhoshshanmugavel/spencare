@@ -50,6 +50,7 @@ async function setupBaseMocks() {
     amount: { amountMinorUnits: 0n, currencyCode: "INR" },
     ownedSpendableTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
     creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
+    commitmentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
   } as never);
   vi.mocked(app.getNetWorth).mockResolvedValue({
     netWorth: { amountMinorUnits: 0n, currencyCode: "INR" },

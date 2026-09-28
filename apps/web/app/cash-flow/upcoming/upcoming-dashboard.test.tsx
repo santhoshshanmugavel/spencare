@@ -391,3 +391,73 @@ describe("UpcomingDashboard -- date grouping", () => {
     expect(screen.queryByText(/3 November/)).not.toBeInTheDocument();
   });
 });
+
+describe("UpcomingDashboard -- Plan context navigation (Gate 8)", () => {
+  async function openNovTab() {
+    const user = userEvent.setup();
+    const novTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Nov"));
+    if (novTab) await user.click(novTab);
+    return user;
+  }
+
+  it("shows a link to the linked Plan for a commitment_payment event", async () => {
+    const commitment = makeCommitment();
+    const ev = makeProjectedPaymentEvent(commitment, "2026-11-02");
+    const planContext = {
+      commitmentIdToPlans: new Map([["c1", [{ id: "plan-1", name: "Thailand Trip" }]]]),
+      goalIdToPlans: new Map(),
+      accountIdToPlans: new Map(),
+    };
+
+    render(<UpcomingDashboard {...emptyProps} events={[ev]} commitments={[commitment]} planContext={planContext} />);
+    await openNovTab();
+
+    const link = screen.getByRole("link", { name: "Thailand Trip" });
+    expect(link).toHaveAttribute("href", "/plans/plan-1");
+  });
+
+  it("shows no Plan link when the commitment is not linked to any Plan", async () => {
+    const commitment = makeCommitment();
+    const ev = makeProjectedPaymentEvent(commitment, "2026-11-02");
+
+    render(<UpcomingDashboard {...emptyProps} events={[ev]} commitments={[commitment]} />);
+    await openNovTab();
+
+    expect(screen.queryByRole("link", { name: "Thailand Trip" })).not.toBeInTheDocument();
+  });
+
+  it("shows a link to the linked Plan for a goal_contribution event via the Goal's own link, never implying the projection itself is Plan spending", async () => {
+    const ev: UpcomingEvent = {
+      id: "proj:goal:goal-1:2026-11-05",
+      kind: "goal_contribution",
+      date: "2026-11-05",
+      title: "Emergency Fund",
+      subtitle: "Goal contribution",
+      amountMinor: 500000,
+      currency: "INR",
+      sourceId: "goal-1",
+      projected: true,
+    };
+    const planContext = {
+      commitmentIdToPlans: new Map(),
+      goalIdToPlans: new Map([["goal-1", [{ id: "plan-2", name: "Home Renovation" }]]]),
+      accountIdToPlans: new Map(),
+    };
+
+    render(<UpcomingDashboard {...emptyProps} events={[ev]} planContext={planContext} />);
+    await openNovTab();
+
+    const link = screen.getByRole("link", { name: "Home Renovation" });
+    expect(link).toHaveAttribute("href", "/plans/plan-2");
+    // Still just a projected contribution -- no amount label claims it is already spent.
+    expect(screen.queryByText(/spent/i)).not.toBeInTheDocument();
+  });
+
+  it("renders correctly when planContext is entirely omitted (a pure UI enrichment, never required)", async () => {
+    const commitment = makeCommitment();
+    const ev = makeProjectedPaymentEvent(commitment, "2026-11-02");
+    render(<UpcomingDashboard {...emptyProps} events={[ev]} commitments={[commitment]} />);
+    await openNovTab();
+    expect(screen.getByText("Netflix")).toBeInTheDocument();
+  });
+});

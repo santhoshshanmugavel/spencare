@@ -207,6 +207,12 @@ export type {
   ImportSourceType,
   ImportStatus,
   StagedTransactionRow,
+  FinancialPlanRow,
+  PlanItemRow,
+  PlanGoalLinkRow,
+  PlanCommitmentLinkRow,
+  PlanAccountLinkRow,
+  ListFinancialPlansOptions,
 } from "@spencare/domain-infra";
 export type { BudgetStatus, BudgetUsage, GoalProgress } from "@spencare/domain-core";
 export { BUDGET_STATUS_THRESHOLDS } from "@spencare/domain-core";
@@ -431,6 +437,83 @@ export type {
   LoanType,
   LoanStatus,
 } from "@spencare/domain-infra";
+export {
+  createFinancialPlan,
+  createPlanItem,
+  setPlanBudget,
+  transitionPlanStatus,
+  transitionPlanItemStatus,
+  attachTransactionToPlan,
+  detachTransactionFromPlan,
+  moveTransactionBetweenPlans,
+  linkGoalToPlan,
+  unlinkGoalFromPlan,
+  linkCommitmentToPlan,
+  unlinkCommitmentFromPlan,
+  linkAccountToPlan,
+  unlinkAccountFromPlan,
+  type CreateFinancialPlanInput,
+  type CreatePlanItemInput,
+  type PlanBudgetChangeKind,
+  type SetPlanBudgetInput,
+  type SetPlanBudgetOutput,
+  type TransitionPlanStatusInput,
+  type TransitionPlanItemStatusInput,
+  type PlanTransactionAssociationInput,
+  type PlanTransactionAssociationChange,
+  type PlanGoalLink,
+  type PlanCommitmentLink,
+  type PlanAccountLink,
+} from "./commands/financialPlans.js";
+export { summarizePlan, type PlanSummaryInput, type PlanCalculationResult } from "./queries/financialPlans.js";
+
+// Gate 3 — repo-backed Plans commands/queries (docs/phase-40/
+// plans-gate3-application-layer.md). Distinct names from the pure block
+// above by design (see commands/plans.ts's header comment) — no collision.
+export {
+  createPlan,
+  updatePlan,
+  updatePlanBudget,
+  updatePlanStatus,
+  archivePlan,
+  reopenPlan,
+  deletePlan,
+  addPlanItem,
+  updatePlanItem,
+  updatePlanItemStatus,
+  associatePlanGoal,
+  dissociatePlanGoal,
+  associatePlanCommitment,
+  dissociatePlanCommitment,
+  associatePlanAccount,
+  dissociatePlanAccount,
+  setTransactionPlan,
+  type UpdatePlanCommandInput,
+  type SetPlanBudgetCommandInput,
+  type UpdatePlanStatusCommandInput,
+  type FinancialPlanIdInput,
+  type AddPlanItemCommandInput,
+  type UpdatePlanItemCommandInput,
+  type UpdatePlanItemStatusCommandInput,
+  type AssociatePlanGoalInput,
+  type AssociatePlanCommitmentInput,
+  type AssociatePlanAccountInput,
+  type SetTransactionPlanCommandInput,
+} from "./commands/plans.js";
+export {
+  listPlans,
+  getPlan,
+  getPlanDetail,
+  listPlansWithSummaries,
+  calculatePlanCategoryBreakdown,
+  getPlanContextForUpcomingSources,
+  type PlanDetail,
+  type PlanWithSummary,
+  type PlanCategoryBreakdownEntry,
+  type UpcomingEventPlanContext,
+  type UpcomingPlanContextMaps,
+} from "./queries/plans.js";
+
 export {
   upsertCreditCardObligation,
   getCreditCardObligation,

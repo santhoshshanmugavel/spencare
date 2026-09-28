@@ -85,6 +85,35 @@ export {
 } from "./goals.js";
 
 export {
+  planStatusSchema,
+  planItemStatusSchema,
+  createFinancialPlanSchema,
+  updateFinancialPlanSchema,
+  setPlanBudgetSchema,
+  transitionPlanStatusSchema,
+  createPlanItemSchema,
+  updatePlanItemSchema,
+  transitionPlanItemStatusSchema,
+  planGoalLinkSchema,
+  planCommitmentLinkSchema,
+  planAccountLinkSchema,
+  setTransactionPlanSchema,
+  type PlanStatusInput,
+  type PlanItemStatusInput,
+  type CreateFinancialPlanInput,
+  type UpdateFinancialPlanInput,
+  type SetPlanBudgetInput,
+  type TransitionPlanStatusInput,
+  type CreatePlanItemInput,
+  type UpdatePlanItemInput,
+  type TransitionPlanItemStatusInput,
+  type PlanGoalLinkInput,
+  type PlanCommitmentLinkInput,
+  type PlanAccountLinkInput,
+  type SetTransactionPlanInput,
+} from "./financialPlans.js";
+
+export {
   RECURRENCE_INTERVALS,
   createBillSchema,
   updateBillSchema,

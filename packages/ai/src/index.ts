@@ -34,7 +34,10 @@ export { proposeCommand, confirmCommand, cancelPendingCommand, getProposal, type
 export { getToolDefinitions, executeTool, type ToolExecutionResult } from "./tools/registry.js";
 export { READ_TOOLS } from "./tools/readTools.js";
 export { WRITE_TOOLS } from "./tools/writeTools.js";
+export { PLAN_TOOLS, PLAN_WRITE_TOOLS } from "./tools/planTools.js";
 export type { ToolHandlerContext } from "./tools/readTools.js";
+
+export { buildPlanContext, type PlanContext, type PlanAmount, type PlanAmountSource, type PlanContextItem, type PlanContextLink, type PlanContextTransaction } from "./planContext.js";
 
 export { sendMessage, type OrchestratorEvent, type SendMessageOptions, RATE_LIMIT_RETRY_BACKOFF_MS } from "./orchestrator.js";
 export { extractReceiptFromImage, ReceiptExtractionCapabilityError, type ReceiptExtraction } from "./receiptExtraction.js";

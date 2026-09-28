@@ -53,6 +53,8 @@ function expense(overrides: Partial<TransactionRow> = {}): TransactionRow {
     transfer_pair_id: null,
     goal_id: null,
     bill_prediction_id: null,
+    plan_id: null,
+    plan_item_id: null,
     created_at: "2026-08-25T00:00:00Z",
     updated_at: "2026-08-25T00:00:00Z",
     ...overrides,

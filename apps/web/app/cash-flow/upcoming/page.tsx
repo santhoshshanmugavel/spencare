@@ -6,6 +6,7 @@ import {
   listAllLoans,
   getUpcomingProjection,
   getUpcomingBills,
+  getPlanContextForUpcomingSources,
   type AuthContext,
   type UpcomingEvent,
   type BillPredictionWithDefinition,
@@ -45,7 +46,7 @@ export default async function UpcomingPage() {
   const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   const windowEnd = new Date(Date.now() + 395 * 86_400_000).toISOString().slice(0, 10);
 
-  const [accounts, categories, profile, projection, commitments, loans, bills, _displayProfile] = await Promise.all([
+  const [accounts, categories, profile, projection, commitments, loans, bills, planContext, _displayProfile] = await Promise.all([
     listAccounts(ctx),
     listCategories(ctx),
     getProfile(ctx),
@@ -53,6 +54,7 @@ export default async function UpcomingPage() {
     listCommitments(ctx),
     listAllLoans(ctx),
     getUpcomingBills(ctx),
+    getPlanContextForUpcomingSources(ctx),
     getProfileForDisplay(ctx).catch(() => null),
   ]);
 
@@ -87,6 +89,7 @@ export default async function UpcomingPage() {
           accounts={accounts}
           categories={categories}
           masked={profile?.privacy_mode_enabled ?? false}
+          planContext={planContext}
         />
       </div>
     </AppShell>

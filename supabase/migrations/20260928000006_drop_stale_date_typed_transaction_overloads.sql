@@ -1,0 +1,45 @@
+-- Spencare -- Gate 14A fix: drop three stale, duplicate function overloads
+-- left behind by Gate 13's own security migration.
+--
+-- THE BUG: Gate 13's 20260928000003_fix_anon_auth_bypass_transaction_
+-- functions.sql used CREATE OR REPLACE FUNCTION for create_transaction,
+-- transfer, and update_transaction, with p_occurred_at typed as
+-- `timestamp with time zone`. That signature was copied directly from
+-- production (verified live at the time, via pg_get_functiondef), which
+-- already had it. Locally, at that exact point in migration history, all
+-- three functions still had p_occurred_at typed as `date` (the type
+-- 20260909000001_credit_card_transactions.sql and 20260912000001_item_
+-- name.sql last set it to). CREATE OR REPLACE FUNCTION only replaces a
+-- function with the identical argument signature; a different signature
+-- creates a second overload instead, exactly the same class of bug this
+-- program has already found and fixed once before, for pay_commitment_
+-- occurrence_atomic (20260927000001). A fresh local replay of the full
+-- migration history therefore ends up with two overloads of each of these
+-- three functions: the original, stale, date-typed one, and the correct,
+-- timestamptz-typed one Gate 13 actually intended to fix.
+--
+-- WHY THIS WAS NOT CAUGHT AT THE TIME: Gate 13's own local verification
+-- reused an already-running local database that had already accumulated
+-- state from earlier gates and never went through a genuinely fresh
+-- `supabase db reset`. The duplicate overload only surfaces on a true
+-- from-zero replay, which this program did not perform until Gate 14A.
+--
+-- PRODUCTION IMPACT: none. Production's own occurred_at_date_to_
+-- timestamptz migration (applied out of band, untracked, see Gate 14A's
+-- report) changed the column type and the three functions' signatures
+-- together, so production has only ever had the single, correct,
+-- timestamptz-typed overload of each function. This migration exists to
+-- bring a fresh local replay in line with that same, already-correct
+-- production reality; it is not applied to production, since production
+-- never had the stale overload to begin with.
+--
+-- SAFETY: the stale, date-typed overloads are confirmed unreachable by any
+-- current application code path (every caller in this repository passes a
+-- full timestamp, matching the corrected, timestamptz-typed overload) and
+-- confirmed, on the current local database, to never have been granted to
+-- anon. Dropping them removes dead, confusing duplicate code; it changes
+-- no live behavior.
+
+drop function if exists create_transaction(uuid, uuid, transaction_type, bigint, uuid, date, text, text, text, audit_actor);
+drop function if exists transfer(uuid, uuid, uuid, bigint, date, text, audit_actor);
+drop function if exists update_transaction(uuid, uuid, uuid, bigint, uuid, date, text, text, text, audit_actor);

@@ -44,6 +44,17 @@ import {
   proposeMarkLoanPaidSchema,
   confirmCommandSchema,
   cancelCommandSchema,
+  createFinancialPlanSchema,
+  updateFinancialPlanSchema,
+  setPlanBudgetSchema,
+  transitionPlanStatusSchema,
+  createPlanItemSchema,
+  updatePlanItemSchema,
+  transitionPlanItemStatusSchema,
+  planGoalLinkSchema,
+  planCommitmentLinkSchema,
+  planAccountLinkSchema,
+  setTransactionPlanSchema,
 } from "@spencare/validation";
 import {
   listAccounts,
@@ -64,6 +75,7 @@ import {
   calculateNextOccurrence,
   FREQUENCY_LABELS,
   listCommitments,
+  getPlan,
   type McpAuthContext,
   type ProposalPreviewField,
 } from "@spencare/domain-application";
@@ -92,6 +104,16 @@ async function categoryName(ctx: McpAuthContext, categoryId: string): Promise<st
 async function goalName(ctx: McpAuthContext, goalId: string): Promise<string> {
   const goals = await listGoals(ctx);
   return goals.find((g) => g.id === goalId)?.name ?? "the selected goal";
+}
+
+async function planName(ctx: McpAuthContext, planId: string): Promise<string> {
+  const plan = await getPlan(ctx, planId);
+  return plan?.name ?? "the selected Plan";
+}
+
+async function commitmentName(ctx: McpAuthContext, commitmentId: string): Promise<string> {
+  const commitments = await listCommitments(ctx);
+  return commitments.find((c) => c.id === commitmentId)?.name ?? "the selected commitment";
 }
 
 function buildExpenseIncomePreview(kind: "expense" | "income", accName: string, catName: string, amountMinor: number, occurredAt: string, privacyModeEnabled: boolean): { summary: string; fields: ProposalPreviewField[] } {
@@ -621,7 +643,7 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
         const privacyModeEnabled = await isPrivacyModeEnabled(ctx);
         const [accName, catName] = await Promise.all([accountName(ctx, candidate.accountId), categoryName(ctx, candidate.suggestedCategoryId)]);
         const amountText = describeAmountForProvider(candidate.normalizedAmountMinor, "INR", privacyModeEnabled);
-        return proposeCommand(ctx, "mcp", "acceptGmailCandidate", input, {
+        return proposeCommand(ctx, "mcp", "acceptGmailCandidate", { ...input, accountId: candidate.accountId, categoryId: candidate.suggestedCategoryId }, {
           summary: `Accept Gmail candidate as a ${candidate.direction}${candidate.normalizedMerchant ? ` at "${candidate.normalizedMerchant}"` : ""}: ${amountText} on ${accName}, category ${catName}.`,
           fields: [
             { label: "Type", value: candidate.direction },
@@ -855,7 +877,7 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
           const saveText = input.savingAmountMinor ? describeAmountForProvider(input.savingAmountMinor, input.currency ?? "INR", privacyMode) : "?";
           fields.push({ label: "Saving schedule", value: `${saveText} ${input.savingCadence} from ${input.firstSavingDate ?? "?"}` });
         }
-        return proposeCommand(ctx, "mcp", "createCommitment", input as unknown as Record<string, unknown>, {
+        return proposeCommand(ctx, "mcp", "createCommitment", { ...input, initialOccurrenceDate: input.nextPaymentDate } as unknown as Record<string, unknown>, {
           summary: `Create commitment "${input.name}" for ${amountText} ${input.paymentFrequency}. Planning only — no automatic transfers.`,
           fields,
         });
@@ -1066,6 +1088,322 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
             { label: "Amount", value: amountText },
             { label: "Date", value: input.paidDate },
             { label: "Loan ID", value: input.loanId },
+          ],
+        });
+      }),
+  );
+
+  // ── Financial Plan write tools (Gate 11) ──────────────────────────────
+  // Every tool here is propose-only, exactly like every other write tool
+  // in this file. Confirming one dispatches through the exact same
+  // confirm_command SQL function every other command type already uses
+  // (Gate 11's migration extends it with matching Plan branches) -- there
+  // is no separate Plan-specific mutation path, and no tool here can move
+  // money, change an account balance, or change a Goal's saved amount.
+  // "Plan" means financial_plans (a real-life purpose container: a trip,
+  // a wedding), never goal_contribution_plans (the unrelated feature
+  // above this section).
+
+  server.registerTool(
+    "proposeCreatePlan",
+    {
+      description: "Propose creating a new financial Plan -- a real-life purpose container such as a trip, wedding, or renovation. Different from a Budget (a spending limit), a Goal (a savings target), or a Commitment (an obligated future payment). Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: createFinancialPlanSchema.shape,
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeCreatePlan", "write", async () => {
+        const input = createFinancialPlanSchema.parse(rawInput);
+        return proposeCommand(ctx, "mcp", "createPlan", input as unknown as Record<string, unknown>, {
+          summary: `Create a new Plan "${input.name}" in ${input.baseCurrency}.`,
+          fields: [
+            { label: "Name", value: input.name },
+            { label: "Currency", value: input.baseCurrency },
+            ...(input.startDate ? [{ label: "Start date", value: input.startDate }] : []),
+            ...(input.endDate ? [{ label: "End date", value: input.endDate }] : []),
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeUpdatePlan",
+    {
+      description: "Propose updating a Plan's name, description, or dates. Does not touch budget or status -- use proposeUpdatePlanBudget or proposeUpdatePlanStatus for those. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), ...updateFinancialPlanSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeUpdatePlan", "write", async () => {
+        const { planId, ...rest } = rawInput as { planId: string; [k: string]: unknown };
+        const input = updateFinancialPlanSchema.parse(rest);
+        const pName = await planName(ctx, planId);
+        return proposeCommand(ctx, "mcp", "updatePlan", { planId, ...input } as Record<string, unknown>, {
+          summary: `Update "${pName}".`,
+          fields: [{ label: "Plan", value: pName }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeUpdatePlanBudget",
+    {
+      description: "Propose setting or clearing a Plan's budget. Pass null to remove the budget. This never touches actual spend, account balances, or transactions -- it only sets the target the Plan is measured against. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), ...setPlanBudgetSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeUpdatePlanBudget", "write", async () => {
+        const { planId, budgetMinor } = rawInput as { planId: string; budgetMinor: number | null };
+        const parsed = setPlanBudgetSchema.parse({ budgetMinor });
+        const pName = await planName(ctx, planId);
+        const privacyMode = await isPrivacyModeEnabled(ctx);
+        const amountText = parsed.budgetMinor == null ? "no budget" : describeAmountForProvider(parsed.budgetMinor, "INR", privacyMode);
+        return proposeCommand(ctx, "mcp", "updatePlanBudget", { planId, budgetMinor: parsed.budgetMinor }, {
+          summary: `Set "${pName}"'s budget to ${amountText}.`,
+          fields: [
+            { label: "Plan", value: pName },
+            { label: "Budget", value: amountText },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeUpdatePlanStatus",
+    {
+      description: "Propose moving a Plan to a new lifecycle status (active, paused, postponed, completed, archived). A completed or archived Plan can be reopened back to active. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), ...transitionPlanStatusSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeUpdatePlanStatus", "write", async () => {
+        const { planId, targetStatus } = rawInput as { planId: string; targetStatus: string };
+        const parsed = transitionPlanStatusSchema.parse({ targetStatus });
+        const pName = await planName(ctx, planId);
+        return proposeCommand(ctx, "mcp", "updatePlanStatus", { planId, targetStatus: parsed.targetStatus }, {
+          summary: `Move "${pName}" to ${parsed.targetStatus}.`,
+          fields: [
+            { label: "Plan", value: pName },
+            { label: "New status", value: parsed.targetStatus },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeDeletePlan",
+    {
+      description: "Propose permanently deleting a Plan. Only an empty draft Plan (no items, no linked Goal/Commitment/Account, no transactions) can be deleted -- archive a Plan with content instead using proposeUpdatePlanStatus. Never deletes a transaction, Goal, Commitment, or Account. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid() },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeDeletePlan", "write", async () => {
+        const { planId } = rawInput as { planId: string };
+        const pName = await planName(ctx, planId);
+        return proposeCommand(ctx, "mcp", "deletePlan", { planId }, {
+          summary: `Delete the empty Plan "${pName}". This cannot be undone.`,
+          fields: [{ label: "Plan", value: pName }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeCreatePlanItem",
+    {
+      description: "Propose adding a Plan Item (a line in a Plan such as a flight, hotel, or activity) with an optional estimated amount. This does NOT create a transaction and does NOT change any account balance -- it is a planning line only. An item with no price is a valid, uncategorized state. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), ...createPlanItemSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeCreatePlanItem", "write", async () => {
+        const { planId, ...rest } = rawInput as { planId: string; [k: string]: unknown };
+        const input = createPlanItemSchema.parse(rest);
+        const pName = await planName(ctx, planId);
+        const privacyMode = await isPrivacyModeEnabled(ctx);
+        const amountText = input.estimatedAmountMinor != null ? describeAmountForProvider(input.estimatedAmountMinor, input.estimatedCurrency ?? "INR", privacyMode) : "no amount yet";
+        return proposeCommand(ctx, "mcp", "addPlanItem", { planId, ...input } as Record<string, unknown>, {
+          summary: `Add "${input.name}" (${amountText}) to "${pName}".`,
+          fields: [
+            { label: "Plan", value: pName },
+            { label: "Item", value: input.name },
+            { label: "Estimated amount", value: amountText },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeUpdatePlanItem",
+    {
+      description: "Propose updating a Plan Item's name, amount, category, date, or notes. Does not create a transaction, does not change any account balance, and never touches an existing transaction's own amount. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planItemId: z.string().uuid(), ...updatePlanItemSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeUpdatePlanItem", "write", async () => {
+        const { planItemId, ...rest } = rawInput as { planItemId: string; [k: string]: unknown };
+        const input = updatePlanItemSchema.parse(rest);
+        return proposeCommand(ctx, "mcp", "updatePlanItem", { planItemId, ...input } as Record<string, unknown>, {
+          summary: "Update this Plan Item.",
+          fields: [{ label: "Plan Item ID", value: planItemId }],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeUpdatePlanItemStatus",
+    {
+      description: "Propose moving a Plan Item to a new status (planned, booked, committed, partially_paid, paid, cancelled, skipped). This only changes the item's own status label -- it never creates, verifies, or implies a transaction. A status of 'paid' here is the user's own planning label, not evidence that a transaction exists. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planItemId: z.string().uuid(), ...transitionPlanItemStatusSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeUpdatePlanItemStatus", "write", async () => {
+        const { planItemId, targetStatus } = rawInput as { planItemId: string; targetStatus: string };
+        const parsed = transitionPlanItemStatusSchema.parse({ targetStatus });
+        return proposeCommand(ctx, "mcp", "updatePlanItemStatus", { planItemId, targetStatus: parsed.targetStatus }, {
+          summary: `Move this Plan Item to ${parsed.targetStatus}.`,
+          fields: [
+            { label: "Plan Item ID", value: planItemId },
+            { label: "New status", value: parsed.targetStatus },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeAssociatePlanGoal",
+    {
+      description: "Propose linking a savings Goal to a Plan for context. This never moves money, changes the Goal's saved amount, or makes a Goal contribution count as Plan spending. Re-linking an already-linked Goal is a harmless no-op. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), ...planGoalLinkSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeAssociatePlanGoal", "write", async () => {
+        const { planId, goalId } = rawInput as { planId: string; goalId: string };
+        planGoalLinkSchema.parse({ goalId });
+        const [pName, gName] = await Promise.all([planName(ctx, planId), goalName(ctx, goalId)]);
+        return proposeCommand(ctx, "mcp", "associatePlanGoal", { planId, goalId }, {
+          summary: `Link Goal "${gName}" to Plan "${pName}".`,
+          fields: [
+            { label: "Plan", value: pName },
+            { label: "Goal", value: gName },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeDissociatePlanGoal",
+    {
+      description: "Propose removing the link between a Goal and a Plan. Never affects the Goal's saved amount or contribution history. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), goalId: z.string().uuid() },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeDissociatePlanGoal", "write", async () => {
+        const { planId, goalId } = rawInput as { planId: string; goalId: string };
+        const [pName, gName] = await Promise.all([planName(ctx, planId), goalName(ctx, goalId)]);
+        return proposeCommand(ctx, "mcp", "dissociatePlanGoal", { planId, goalId }, {
+          summary: `Unlink Goal "${gName}" from Plan "${pName}".`,
+          fields: [
+            { label: "Plan", value: pName },
+            { label: "Goal", value: gName },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeAssociatePlanCommitment",
+    {
+      description: "Propose linking a planned commitment to a Plan for context. This never changes the commitment's own amount, schedule, or reserve, and never marks it paid. Re-linking an already-linked commitment is a harmless no-op. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), ...planCommitmentLinkSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeAssociatePlanCommitment", "write", async () => {
+        const { planId, commitmentId } = rawInput as { planId: string; commitmentId: string };
+        planCommitmentLinkSchema.parse({ commitmentId });
+        const [pName, cName] = await Promise.all([planName(ctx, planId), commitmentName(ctx, commitmentId)]);
+        return proposeCommand(ctx, "mcp", "associatePlanCommitment", { planId, commitmentId }, {
+          summary: `Link commitment "${cName}" to Plan "${pName}".`,
+          fields: [
+            { label: "Plan", value: pName },
+            { label: "Commitment", value: cName },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeDissociatePlanCommitment",
+    {
+      description: "Propose removing the link between a planned commitment and a Plan. Never affects the commitment itself. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), commitmentId: z.string().uuid() },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeDissociatePlanCommitment", "write", async () => {
+        const { planId, commitmentId } = rawInput as { planId: string; commitmentId: string };
+        const [pName, cName] = await Promise.all([planName(ctx, planId), commitmentName(ctx, commitmentId)]);
+        return proposeCommand(ctx, "mcp", "dissociatePlanCommitment", { planId, commitmentId }, {
+          summary: `Unlink commitment "${cName}" from Plan "${pName}".`,
+          fields: [
+            { label: "Plan", value: pName },
+            { label: "Commitment", value: cName },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeAssociatePlanAccount",
+    {
+      description: "Propose linking an account to a Plan for context (for example, 'paid using this card'). This never changes the account's balance and is never treated as a reserve against Safe-to-Spend. Re-linking an already-linked account is a harmless no-op. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), ...planAccountLinkSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeAssociatePlanAccount", "write", async () => {
+        const { planId, accountId } = rawInput as { planId: string; accountId: string };
+        planAccountLinkSchema.parse({ accountId });
+        const [pName, aName] = await Promise.all([planName(ctx, planId), accountName(ctx, accountId)]);
+        return proposeCommand(ctx, "mcp", "associatePlanAccount", { planId, accountId }, {
+          summary: `Link account "${aName}" to Plan "${pName}".`,
+          fields: [
+            { label: "Plan", value: pName },
+            { label: "Account", value: aName },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeDissociatePlanAccount",
+    {
+      description: "Propose removing the link between an account and a Plan. Never affects the account's balance. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { planId: z.string().uuid(), accountId: z.string().uuid() },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeDissociatePlanAccount", "write", async () => {
+        const { planId, accountId } = rawInput as { planId: string; accountId: string };
+        const [pName, aName] = await Promise.all([planName(ctx, planId), accountName(ctx, accountId)]);
+        return proposeCommand(ctx, "mcp", "dissociatePlanAccount", { planId, accountId }, {
+          summary: `Unlink account "${aName}" from Plan "${pName}".`,
+          fields: [
+            { label: "Plan", value: pName },
+            { label: "Account", value: aName },
+          ],
+        });
+      }),
+  );
+
+  server.registerTool(
+    "proposeUpdateTransactionPlan",
+    {
+      description: "Propose attaching a transaction to a Plan (and optionally to one specific Plan Item), moving it to a different Plan, or detaching it entirely (pass planId null). This is the ONLY way a transaction ever counts as Plan actual spend -- it never creates a transaction, and never changes the transaction's own amount, currency, type, account, category, or date. Returns a proposal the user must confirm via confirmPendingAction.",
+      inputSchema: { transactionId: z.string().uuid(), ...setTransactionPlanSchema.shape },
+    },
+    async (rawInput: unknown) =>
+      runScopedTool(ctx, "proposeUpdateTransactionPlan", "write", async () => {
+        const { transactionId, planId, planItemId } = rawInput as { transactionId: string; planId: string | null; planItemId?: string | null };
+        const parsed = setTransactionPlanSchema.parse({ planId, planItemId: planItemId ?? null });
+        const pName = parsed.planId ? await planName(ctx, parsed.planId) : null;
+        return proposeCommand(ctx, "mcp", "setTransactionPlan", { transactionId, planId: parsed.planId, planItemId: parsed.planItemId ?? null }, {
+          summary: pName ? `Attach this transaction to Plan "${pName}".` : "Detach this transaction from its Plan.",
+          fields: [
+            { label: "Transaction ID", value: transactionId },
+            { label: "Plan", value: pName ?? "None (detach)" },
           ],
         });
       }),

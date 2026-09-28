@@ -51,10 +51,25 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  // See the identical comment in components/ui/sheet.tsx: Radix only
+  // restores focus to the trigger on close when the dialog was opened via
+  // <DialogTrigger>. Several dialogs in this app open from controlled
+  // state instead, which leaves focus falling back to document.body on
+  // close instead of the element the user actually opened the dialog from.
+  // <Dialog> (DialogPrimitive.Root) stays mounted for the caller's entire
+  // lifetime, only Content's visibility toggles, so a ref captured once at
+  // mount time goes stale after the first open/close cycle.
+  // onOpenAutoFocus fires fresh on every open, before Radix moves focus
+  // into the content, so it is read here (not prevented) purely to capture
+  // that moment's real opener for later.
+  const openerRef = React.useRef<HTMLElement | null>(null)
+
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -64,6 +79,19 @@ function DialogContent({
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
+        onOpenAutoFocus={(event) => {
+          openerRef.current = document.activeElement as HTMLElement | null
+          onOpenAutoFocus?.(event)
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event)
+          if (event.defaultPrevented) return
+          const opener = openerRef.current
+          if (opener && document.contains(opener)) {
+            event.preventDefault()
+            opener.focus()
+          }
+        }}
         {...props}
       >
         {children}

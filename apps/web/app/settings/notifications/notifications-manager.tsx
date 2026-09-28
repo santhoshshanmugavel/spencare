@@ -493,6 +493,12 @@ const ALERT_CATEGORIES = [
     eventTypePrefix: "GOAL",
   },
   {
+    key: "plan",
+    label: "Plan alerts",
+    description: "Upcoming and overdue Plan items, budget risk, and Plan completion",
+    eventTypePrefix: "PLAN",
+  },
+  {
     key: "daily_summary",
     label: "Daily summary",
     description: "A brief look at your day's spending and income, sent each evening",

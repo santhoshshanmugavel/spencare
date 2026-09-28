@@ -1,0 +1,41 @@
+-- Spencare -- Gate 14A reconciliation: bring the tracked local schema in
+-- line with a change production already has.
+--
+-- THE DRIFT: production's transactions.occurred_at column is
+-- `timestamp with time zone`. The tracked local migration history never
+-- applied that change; local's own schema still has occurred_at as `date`.
+-- Direct, read-only inspection of production (project wjaxxoselhlbjrtuhqlq)
+-- found three migrations recorded in its own history with no corresponding
+-- file anywhere in this repository: confirm_command_item_name,
+-- backfill_item_name_from_description, and occurred_at_date_to_timestamptz.
+-- The first two turned out, on direct schema comparison, to already match
+-- what this repository's own 20260912000001_item_name.sql produces (the
+-- item_name column and its confirm_command/create_transaction/
+-- update_transaction wiring are byte-identical between local and
+-- production); they needed no repository change. occurred_at_date_to_
+-- timestamptz is the one genuine, unreconciled drift: production's column
+-- type does not match what a fresh local replay produces.
+--
+-- WHY THIS IS SAFE TO APPLY LOCALLY, NEVER TO PRODUCTION: production
+-- already has this exact column type. This migration exists so a fresh
+-- local replay (or any new environment built from this repository) ends
+-- up with the same column type production has always actually had, not
+-- to change anything production itself. It is intentionally NOT applied
+-- to production by this task.
+--
+-- date -> timestamptz is a lossless widening cast (a date has no time-of-
+-- day to lose; it becomes midnight in whatever timezone the cast resolves
+-- against). No existing row's calendar date changes.
+--
+-- This migration does not touch any function signature. Gate 13's own
+-- security migration (20260928000003) already defined create_transaction,
+-- transfer, and update_transaction with a `timestamp with time zone`
+-- p_occurred_at parameter, matching production's real, live signatures
+-- (verified via pg_get_functiondef at the time). Before this migration,
+-- a fresh local replay had those timestamptz-typed parameters writing into
+-- a `date`-typed column, silently truncating time-of-day on every insert
+-- -- itself a symptom of the same drift, now closed by aligning the
+-- column with the parameter types that already existed.
+alter table transactions
+  alter column occurred_at type timestamp with time zone
+  using occurred_at::timestamp with time zone;

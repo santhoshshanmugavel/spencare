@@ -1,4 +1,5 @@
 import { READ_TOOLS } from "./readTools.js";
+import { PLAN_TOOLS, PLAN_WRITE_TOOLS } from "./planTools.js";
 import { WRITE_TOOLS } from "./writeTools.js";
 import type { ToolDefinition } from "../provider.js";
 import type { ToolHandlerContext } from "./readTools.js";
@@ -9,16 +10,25 @@ import type { ToolHandlerContext } from "./readTools.js";
  * what's registered here). Fixed per-request, computed before the model
  * ever sees a tool list -- nothing in a model's output can add to or
  * remove from this set.
+ *
+ * ALL_READ_TOOLS/ALL_WRITE_TOOLS merge the original tools with Gate 10/11's
+ * Plan tools -- a separate file (tools/planTools.ts) keeps Plan-specific
+ * logic grouped rather than growing readTools.ts/writeTools.ts further, but
+ * they share the exact same ReadToolHandler/WriteToolHandler shape and the
+ * exact same lookup/execute path below, so there is still only one read
+ * allowlist and one write allowlist, never a second registry.
  */
+const ALL_READ_TOOLS = [...READ_TOOLS, ...PLAN_TOOLS];
+const ALL_WRITE_TOOLS = [...WRITE_TOOLS, ...PLAN_WRITE_TOOLS];
 
 export function getToolDefinitions(): ToolDefinition[] {
-  return [...READ_TOOLS.map((t) => t.definition), ...WRITE_TOOLS.map((t) => t.definition)];
+  return [...ALL_READ_TOOLS.map((t) => t.definition), ...ALL_WRITE_TOOLS.map((t) => t.definition)];
 }
 
 export type ToolExecutionResult = { toolName: string; isWrite: boolean; isError: boolean; result: unknown };
 
 export async function executeTool(handlerCtx: ToolHandlerContext, toolName: string, args: unknown): Promise<ToolExecutionResult> {
-  const readTool = READ_TOOLS.find((t) => t.definition.name === toolName);
+  const readTool = ALL_READ_TOOLS.find((t) => t.definition.name === toolName);
   if (readTool) {
     try {
       const result = await readTool.execute(handlerCtx, args);
@@ -28,7 +38,7 @@ export async function executeTool(handlerCtx: ToolHandlerContext, toolName: stri
     }
   }
 
-  const writeTool = WRITE_TOOLS.find((t) => t.definition.name === toolName);
+  const writeTool = ALL_WRITE_TOOLS.find((t) => t.definition.name === toolName);
   if (writeTool) {
     try {
       const result = await writeTool.execute(handlerCtx, args);

@@ -5,10 +5,14 @@
  */
 
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
-import { checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder, checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder, checkCreditCardBillingReminder } from "./eventRules";
+import {
+  checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder,
+  checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder,
+  checkCreditCardBillingReminder, checkPlanItemReminder, checkPlanBudgetRisk, checkPlanCompletion,
+} from "./eventRules";
 import { resolveRecurringDay, getCreditCardBillingCycleForMonth } from "@spencare/domain-core";
 import { savingDatesForOccurrence } from "@spencare/domain-core";
-import { getCreditCardStatementSummary, upsertCreditCardObligation } from "@spencare/domain-application";
+import { getCreditCardStatementSummary, upsertCreditCardObligation, listPlansWithSummaries, getPlanContextForUpcomingSources, type UpcomingPlanContextMaps } from "@spencare/domain-application";
 import type { NotificationRunStats } from "./engine";
 
 interface CheckOutcome {
@@ -106,6 +110,20 @@ async function runChecksForUser(
     day: "2-digit",
   }).format(now);
   const today = new Date(todayIso + "T00:00:00Z");
+
+  // Service-role ctx for domain-application queries (no user session available in cron).
+  const svcCtx = { userId, email: userEmail, supabase: serviceRoleSupabase, serviceRoleSupabase };
+
+  // Which Commitments/Goals/Accounts belong to a financial Plan, for attaching
+  // "part of your X plan" context to their reminders below (Gate 9, reusing
+  // Gate 8's read-only Plan-context composition). Never used to compute a
+  // financial value -- only to look up a Plan's name for display.
+  let planContext: UpcomingPlanContextMaps;
+  try {
+    planContext = await getPlanContextForUpcomingSources(svcCtx);
+  } catch {
+    planContext = { commitmentIdToPlans: new Map(), goalIdToPlans: new Map(), accountIdToPlans: new Map() };
+  }
 
   // ---- Budget checks ----
   // Budgets are category-based; find all active budgets covering today
@@ -300,6 +318,7 @@ async function runChecksForUser(
           amountMinor: plan.amount_minor,
           frequency: plan.frequency,
           nextDueAtIso: plan.next_due_at,
+          financialPlanNames: planContext.goalIdToPlans.get(plan.goal_id)?.map((p) => p.name),
         }, stats);
         checksRun++;
       } catch {
@@ -349,6 +368,7 @@ async function runChecksForUser(
           reservedMinor: occ.reserved_minor,
           currency: commitment.currency,
           todayIso,
+          financialPlanNames: planContext.commitmentIdToPlans.get(occ.commitment_id)?.map((p) => p.name),
         }, stats);
         checksRun++;
       } catch {
@@ -417,6 +437,7 @@ async function runChecksForUser(
           nextPaymentDateIso: nextOcc.due_date,
           todayIso,
           currency: pc.currency,
+          financialPlanNames: planContext.commitmentIdToPlans.get(pc.id)?.map((p) => p.name),
         }, stats);
         checksRun++;
       }
@@ -460,9 +481,6 @@ async function runChecksForUser(
   }
 
   // ---- Credit card billing reminders (statement cut day + payment due day) ----
-  // Service-role ctx for obligation queries (no user session available in cron)
-  const svcCtx = { userId, email: userEmail, supabase: serviceRoleSupabase, serviceRoleSupabase };
-
   for (const account of accounts ?? []) {
     if (account.type !== "credit_card") continue;
     const stmtDay: number | null = (account as { statement_close_day?: number | null }).statement_close_day ?? null;
@@ -521,6 +539,7 @@ async function runChecksForUser(
             outstandingMinor: outstanding,
             currency: account.currency ?? "INR",
             todayIso,
+            financialPlanNames: planContext.accountIdToPlans.get(account.id)?.map((p) => p.name),
           }, stats);
           checksRun++;
         }
@@ -549,12 +568,113 @@ async function runChecksForUser(
             outstandingMinor: outstanding,
             currency: account.currency ?? "INR",
             todayIso,
+            financialPlanNames: planContext.accountIdToPlans.get(account.id)?.map((p) => p.name),
           }, stats);
           checksRun++;
         }
       } catch {
         notificationsFailed++;
       }
+    }
+  }
+
+  // ---- Plan Item due-date reminders (Gate 9) ----
+  // Only active Plans are eligible -- a draft, paused, postponed, completed,
+  // or archived Plan never generates an item reminder. Item eligibility
+  // mirrors the domain-core PLAN_ITEM_EXCLUDED_FROM_UPCOMING set (paid,
+  // cancelled, and skipped items are never "coming up").
+  const { data: activePlans } = await serviceRoleSupabase
+    .from("financial_plans")
+    .select("id, name, status, base_currency, current_budget_minor")
+    .eq("user_id", userId)
+    .eq("status", "active");
+
+  if ((activePlans ?? []).length > 0) {
+    const activePlanIds = (activePlans ?? []).map((p) => p.id);
+    const activePlanMap: Record<string, { name: string; base_currency: string }> = {};
+    for (const p of activePlans ?? []) {
+      activePlanMap[p.id] = { name: p.name, base_currency: p.base_currency };
+    }
+
+    const { data: planItems } = await serviceRoleSupabase
+      .from("financial_plan_items")
+      .select("id, plan_id, name, estimated_amount_minor, estimated_currency, status, expected_date")
+      .in("plan_id", activePlanIds)
+      .not("expected_date", "is", null)
+      .in("status", ["suggested", "planned", "booked", "committed", "partially_paid"]);
+
+    for (const item of planItems ?? []) {
+      try {
+        const plan = activePlanMap[item.plan_id];
+        if (!plan || !item.expected_date) continue;
+        const isCommitted = item.status === "booked" || item.status === "committed" || item.status === "partially_paid";
+        await checkPlanItemReminder({
+          serviceRoleSupabase, userId, userEmail,
+          itemId: item.id,
+          planId: item.plan_id,
+          planName: plan.name,
+          itemName: item.name,
+          amountMinor: item.estimated_amount_minor,
+          currency: item.estimated_currency ?? plan.base_currency,
+          isCommitted,
+          expectedDateIso: item.expected_date,
+          todayIso,
+        }, stats);
+        checksRun++;
+      } catch {
+        notificationsFailed++;
+      }
+    }
+
+    // ---- Plan budget risk (Gate 9) ----
+    // Reuses the canonical listPlansWithSummaries composition (Gate 4) --
+    // actualSpend and budgetStatus are never recomputed here, only read.
+    try {
+      const plansWithSummaries = await listPlansWithSummaries(svcCtx, todayIso);
+      for (const { plan, calculations } of plansWithSummaries) {
+        if (plan.status !== "active") continue;
+        if (!calculations.budgetStatus.hasBudget || !calculations.budgetStatus.currentBudget) continue;
+        try {
+          await checkPlanBudgetRisk({
+            serviceRoleSupabase, userId, userEmail,
+            planId: plan.id,
+            planName: plan.name,
+            actualSpendMinor: Number(calculations.actualSpend.amountMinorUnits),
+            budgetMinor: Number(calculations.budgetStatus.currentBudget.amountMinorUnits),
+            currency: plan.base_currency,
+          }, stats);
+          checksRun++;
+        } catch {
+          notificationsFailed++;
+        }
+      }
+    } catch {
+      notificationsFailed++;
+    }
+  }
+
+  // ---- Plan completion (Gate 9) ----
+  // Checked across every one of the user's Plans regardless of current
+  // status, since detecting a transition INTO or OUT OF 'completed' is the
+  // entire point (a Plan reopened after completing must be able to notify
+  // again on a genuine second completion).
+  const { data: allPlans } = await serviceRoleSupabase
+    .from("financial_plans")
+    .select("id, name, status, completed_at")
+    .eq("user_id", userId);
+
+  for (const plan of allPlans ?? []) {
+    try {
+      await checkPlanCompletion({
+        serviceRoleSupabase, userId, userEmail,
+        planId: plan.id,
+        planName: plan.name,
+        isCompleted: plan.status === "completed",
+        completedAtIso: plan.completed_at,
+      }, stats);
+      checksRun++;
+    } catch {
+      notificationsFailed++;
     }
   }
 

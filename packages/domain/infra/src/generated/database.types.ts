@@ -436,6 +436,104 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_card_payment_links: {
+        Row: {
+          amount_applied_minor: number
+          created_at: string
+          id: string
+          obligation_id: string
+          transaction_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_applied_minor: number
+          created_at?: string
+          id?: string
+          obligation_id: string
+          transaction_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_applied_minor?: number
+          created_at?: string
+          id?: string
+          obligation_id?: string
+          transaction_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_card_payment_links_obligation_id_fkey"
+            columns: ["obligation_id"]
+            isOneToOne: false
+            referencedRelation: "credit_card_payment_obligations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_payment_links_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_card_payment_obligations: {
+        Row: {
+          account_id: string
+          created_at: string
+          due_date: string | null
+          id: string
+          paid_minor: number
+          period_end: string
+          period_start: string
+          statement_balance_minor: number
+          statement_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          paid_minor?: number
+          period_end: string
+          period_start: string
+          statement_balance_minor?: number
+          statement_date: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          paid_minor?: number
+          period_end?: string
+          period_start?: string
+          statement_balance_minor?: number
+          statement_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_card_payment_obligations_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credit_card_payment_sources: {
         Row: {
           created_at: string
@@ -477,6 +575,244 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      financial_plan_accounts: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          plan_id: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          plan_id: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          plan_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_plan_accounts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_plan_accounts_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_plan_commitments: {
+        Row: {
+          commitment_id: string
+          created_at: string
+          id: string
+          plan_id: string
+          user_id: string
+        }
+        Insert: {
+          commitment_id: string
+          created_at?: string
+          id?: string
+          plan_id: string
+          user_id: string
+        }
+        Update: {
+          commitment_id?: string
+          created_at?: string
+          id?: string
+          plan_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_plan_commitments_commitment_id_fkey"
+            columns: ["commitment_id"]
+            isOneToOne: false
+            referencedRelation: "planned_commitments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_plan_commitments_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_plan_goals: {
+        Row: {
+          created_at: string
+          goal_id: string
+          id: string
+          plan_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          goal_id: string
+          id?: string
+          plan_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          goal_id?: string
+          id?: string
+          plan_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_plan_goals_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "goals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_plan_goals_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_plan_items: {
+        Row: {
+          category_id: string | null
+          commitment_id: string | null
+          created_at: string
+          description: string | null
+          estimated_amount_minor: number | null
+          estimated_currency: string | null
+          expected_date: string | null
+          id: string
+          name: string
+          plan_id: string
+          status: Database["public"]["Enums"]["plan_item_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category_id?: string | null
+          commitment_id?: string | null
+          created_at?: string
+          description?: string | null
+          estimated_amount_minor?: number | null
+          estimated_currency?: string | null
+          expected_date?: string | null
+          id?: string
+          name: string
+          plan_id: string
+          status?: Database["public"]["Enums"]["plan_item_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category_id?: string | null
+          commitment_id?: string | null
+          created_at?: string
+          description?: string | null
+          estimated_amount_minor?: number | null
+          estimated_currency?: string | null
+          expected_date?: string | null
+          id?: string
+          name?: string
+          plan_id?: string
+          status?: Database["public"]["Enums"]["plan_item_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_plan_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_plan_items_commitment_id_fkey"
+            columns: ["commitment_id"]
+            isOneToOne: false
+            referencedRelation: "planned_commitments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_plan_items_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_plans: {
+        Row: {
+          archived_at: string | null
+          base_currency: string
+          completed_at: string | null
+          created_at: string
+          current_budget_minor: number | null
+          description: string | null
+          end_date: string | null
+          id: string
+          name: string
+          original_budget_minor: number | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["plan_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          base_currency: string
+          completed_at?: string | null
+          created_at?: string
+          current_budget_minor?: number | null
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          original_budget_minor?: number | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["plan_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          base_currency?: string
+          completed_at?: string | null
+          created_at?: string
+          current_budget_minor?: number | null
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          original_budget_minor?: number | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["plan_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       gmail_connections: {
         Row: {
@@ -934,9 +1270,9 @@ export type Database = {
           notes: string | null
           outstanding_minor: number | null
           payment_account_id: string | null
-          reserve_account_id: string | null
           principal_minor: number
           repayment_frequency: Database["public"]["Enums"]["recurrence_interval"]
+          reserve_account_id: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["loan_status"]
           updated_at: string
@@ -957,9 +1293,9 @@ export type Database = {
           notes?: string | null
           outstanding_minor?: number | null
           payment_account_id?: string | null
-          reserve_account_id?: string | null
           principal_minor: number
           repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
+          reserve_account_id?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["loan_status"]
           updated_at?: string
@@ -980,9 +1316,9 @@ export type Database = {
           notes?: string | null
           outstanding_minor?: number | null
           payment_account_id?: string | null
-          reserve_account_id?: string | null
           principal_minor?: number
           repayment_frequency?: Database["public"]["Enums"]["recurrence_interval"]
+          reserve_account_id?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["loan_status"]
           updated_at?: string
@@ -1633,6 +1969,51 @@ export type Database = {
         }
         Relationships: []
       }
+      spensa_attachments: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          extraction: Json | null
+          id: string
+          message_id: string | null
+          mime_type: string
+          original_filename: string
+          size_bytes: number
+          status: string
+          storage_path: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          extraction?: Json | null
+          id?: string
+          message_id?: string | null
+          mime_type: string
+          original_filename: string
+          size_bytes: number
+          status?: string
+          storage_path: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          extraction?: Json | null
+          id?: string
+          message_id?: string | null
+          mime_type?: string
+          original_filename?: string
+          size_bytes?: number
+          status?: string
+          storage_path?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       telegram_link_tokens: {
         Row: {
           created_at: string
@@ -1676,6 +2057,8 @@ export type Database = {
           item_name: string | null
           merchant: string | null
           occurred_at: string
+          plan_id: string | null
+          plan_item_id: string | null
           status: Database["public"]["Enums"]["transaction_status"]
           transfer_pair_id: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -1697,6 +2080,8 @@ export type Database = {
           item_name?: string | null
           merchant?: string | null
           occurred_at: string
+          plan_id?: string | null
+          plan_item_id?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
           transfer_pair_id?: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -1718,6 +2103,8 @@ export type Database = {
           item_name?: string | null
           merchant?: string | null
           occurred_at?: string
+          plan_id?: string | null
+          plan_item_id?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
           transfer_pair_id?: string | null
           type?: Database["public"]["Enums"]["transaction_type"]
@@ -1761,6 +2148,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "transactions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_plan_item_id_fkey"
+            columns: ["plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plan_items"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "transactions_transfer_pair_id_fkey"
             columns: ["transfer_pair_id"]
             isOneToOne: false
@@ -1797,6 +2198,8 @@ export type Database = {
           item_name: string | null
           merchant: string | null
           occurred_at: string
+          plan_id: string | null
+          plan_item_id: string | null
           status: Database["public"]["Enums"]["transaction_status"]
           transfer_pair_id: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -1827,6 +2230,8 @@ export type Database = {
           is_archived: boolean
           market_value_minor: number | null
           name: string
+          payment_due_day: number | null
+          statement_close_day: number | null
           type: Database["public"]["Enums"]["account_type"]
           updated_at: string
           user_id: string
@@ -1837,6 +2242,16 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      auto_protect_occurrence_atomic: {
+        Args: {
+          p_commitment_id: string
+          p_new_reserved_minor: number
+          p_occurrence_id: string
+          p_previous_reserved: number
+          p_user_id: string
+        }
+        Returns: Json
       }
       check_and_increment_rate_limit: {
         Args: {
@@ -1941,6 +2356,8 @@ export type Database = {
           item_name: string | null
           merchant: string | null
           occurred_at: string
+          plan_id: string | null
+          plan_item_id: string | null
           status: Database["public"]["Enums"]["transaction_status"]
           transfer_pair_id: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -1990,6 +2407,8 @@ export type Database = {
           item_name: string | null
           merchant: string | null
           occurred_at: string
+          plan_id: string | null
+          plan_item_id: string | null
           status: Database["public"]["Enums"]["transaction_status"]
           transfer_pair_id: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -2113,6 +2532,8 @@ export type Database = {
           item_name: string | null
           merchant: string | null
           occurred_at: string
+          plan_id: string | null
+          plan_item_id: string | null
           status: Database["public"]["Enums"]["transaction_status"]
           transfer_pair_id: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -2149,6 +2570,8 @@ export type Database = {
           item_name: string | null
           merchant: string | null
           occurred_at: string
+          plan_id: string | null
+          plan_item_id: string | null
           status: Database["public"]["Enums"]["transaction_status"]
           transfer_pair_id: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -2213,8 +2636,26 @@ export type Database = {
         | "security"
         | "report"
         | "spensa"
+        | "commitment"
+        | "loan"
       notification_channel: "in_app" | "email" | "telegram" | "slack"
       notification_severity: "info" | "warning" | "critical" | "success"
+      plan_item_status:
+        | "suggested"
+        | "planned"
+        | "booked"
+        | "committed"
+        | "partially_paid"
+        | "paid"
+        | "cancelled"
+        | "skipped"
+      plan_status:
+        | "draft"
+        | "active"
+        | "paused"
+        | "postponed"
+        | "completed"
+        | "archived"
       recurrence_interval:
         | "weekly"
         | "biweekly"
@@ -2421,9 +2862,29 @@ export const Constants = {
         "security",
         "report",
         "spensa",
+        "commitment",
+        "loan",
       ],
       notification_channel: ["in_app", "email", "telegram", "slack"],
       notification_severity: ["info", "warning", "critical", "success"],
+      plan_item_status: [
+        "suggested",
+        "planned",
+        "booked",
+        "committed",
+        "partially_paid",
+        "paid",
+        "cancelled",
+        "skipped",
+      ],
+      plan_status: [
+        "draft",
+        "active",
+        "paused",
+        "postponed",
+        "completed",
+        "archived",
+      ],
       recurrence_interval: [
         "weekly",
         "biweekly",

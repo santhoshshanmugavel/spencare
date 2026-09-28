@@ -173,10 +173,12 @@ interface GoalPlanRuleInput extends UserTarget {
   amountMinor: number;
   frequency: string;
   nextDueAtIso: string;
+  /** Names of any financial Plans this Goal is linked to (Gate 9, mirrors Gate 8's read-only Plan-context composition). Distinct from `planId` above, which is this row's own goal_contribution_plans id. Never changes the reminder's own financial values. */
+  financialPlanNames?: string[];
 }
 
 export async function checkGoalPlanReminder(input: GoalPlanRuleInput, _stats?: NotificationRunStats): Promise<void> {
-  const { serviceRoleSupabase, userId, userEmail, planId, goalId, goalName, amountMinor, frequency, nextDueAtIso } = input;
+  const { serviceRoleSupabase, userId, userEmail, planId, goalId, goalName, amountMinor, frequency, nextDueAtIso, financialPlanNames } = input;
   const now = new Date();
   const dueDate = new Date(nextDueAtIso);
   const diffMs = dueDate.getTime() - now.getTime();
@@ -211,7 +213,7 @@ export async function checkGoalPlanReminder(input: GoalPlanRuleInput, _stats?: N
   await deliverNotification(serviceRoleSupabase, {
     userId, userEmail,
     eventType,
-    financialContext: { goalName, amountMinor, ...extraCtx },
+    financialContext: { goalName, amountMinor, ...extraCtx, planNames: financialPlanNames },
     category: "goal",
     severity: daysUntilDue < 0 ? "warning" : "info",
     entityType: "goal",
@@ -278,10 +280,12 @@ interface CommitmentRuleInput extends UserTarget {
   reservedMinor: number;
   currency?: string;
   todayIso: string;
+  /** Names of any financial Plans this Commitment is linked to (Gate 9). Never changes the reminder's own financial values. */
+  financialPlanNames?: string[];
 }
 
 export async function checkCommitmentReminder(input: CommitmentRuleInput, _stats?: NotificationRunStats): Promise<void> {
-  const { serviceRoleSupabase, userId, userEmail, occurrenceId, commitmentId, commitmentName, dueDateIso, amountMinor, reservedMinor } = input;
+  const { serviceRoleSupabase, userId, userEmail, occurrenceId, commitmentId, commitmentName, dueDateIso, amountMinor, reservedMinor, financialPlanNames } = input;
   const currency = input.currency ?? "INR";
   const today = new Date(input.todayIso + "T00:00:00Z");
   const dueDate = new Date(dueDateIso + "T00:00:00Z");
@@ -297,7 +301,7 @@ export async function checkCommitmentReminder(input: CommitmentRuleInput, _stats
       await deliverNotification(serviceRoleSupabase, {
         userId, userEmail,
         eventType: "COMMITMENT_SHORTFALL",
-        financialContext: { commitmentName, amountMinor, reservedMinor, dueDateIso, currency },
+        financialContext: { commitmentName, amountMinor, reservedMinor, dueDateIso, currency, planNames: financialPlanNames },
         category: "commitment",
         severity: "warning",
         entityType: "commitment",
@@ -334,7 +338,7 @@ export async function checkCommitmentReminder(input: CommitmentRuleInput, _stats
   await deliverNotification(serviceRoleSupabase, {
     userId, userEmail,
     eventType,
-    financialContext: { commitmentName, amountMinor, reservedMinor, currency, daysPast: Math.abs(daysUntilDue) },
+    financialContext: { commitmentName, amountMinor, reservedMinor, currency, daysPast: Math.abs(daysUntilDue), planNames: financialPlanNames },
     category: "commitment",
     severity: daysUntilDue <= 0 ? "warning" : "info",
     entityType: "commitment",
@@ -352,16 +356,18 @@ interface PreparationRuleInput extends UserTarget {
   nextPaymentDateIso: string;
   todayIso: string;
   currency?: string;
+  /** Names of any financial Plans this Commitment is linked to (Gate 9). Never changes the reminder's own financial values. */
+  financialPlanNames?: string[];
 }
 
 export async function checkPreparationReminder(input: PreparationRuleInput, _stats?: NotificationRunStats): Promise<void> {
-  const { serviceRoleSupabase, userId, userEmail, commitmentId, commitmentName, savingAmountMinor, nextPaymentDateIso, todayIso } = input;
+  const { serviceRoleSupabase, userId, userEmail, commitmentId, commitmentName, savingAmountMinor, nextPaymentDateIso, todayIso, financialPlanNames } = input;
   const currency = input.currency ?? "INR";
   const dedupeKey = `commitment_preparation_${commitmentId}_${todayIso}`;
   await deliverNotification(serviceRoleSupabase, {
     userId, userEmail,
     eventType: "COMMITMENT_PREPARATION",
-    financialContext: { commitmentName, savingAmountMinor, nextPaymentDateIso, currency },
+    financialContext: { commitmentName, savingAmountMinor, nextPaymentDateIso, currency, planNames: financialPlanNames },
     category: "commitment",
     severity: "info",
     entityType: "commitment",
@@ -496,10 +502,12 @@ interface CreditCardBillingRuleInput extends UserTarget {
   outstandingMinor: number;
   currency?: string;
   todayIso: string;
+  /** Names of any financial Plans this account is linked to (Gate 9). Never changes the reminder's own financial values. */
+  financialPlanNames?: string[];
 }
 
 export async function checkCreditCardBillingReminder(input: CreditCardBillingRuleInput, _stats?: NotificationRunStats): Promise<void> {
-  const { serviceRoleSupabase, userId, userEmail, accountId, accountName, dueDateIso, kind, outstandingMinor } = input;
+  const { serviceRoleSupabase, userId, userEmail, accountId, accountName, dueDateIso, kind, outstandingMinor, financialPlanNames } = input;
   const currency = input.currency ?? "INR";
   const today = new Date(input.todayIso + "T00:00:00Z");
   const dueDate = new Date(dueDateIso + "T00:00:00Z");
@@ -543,12 +551,192 @@ export async function checkCreditCardBillingReminder(input: CreditCardBillingRul
   await deliverNotification(serviceRoleSupabase, {
     userId, userEmail,
     eventType,
-    financialContext: { accountName, outstandingMinor, usedMinor: outstandingMinor, currency, ...extraCtx },
+    financialContext: { accountName, outstandingMinor, usedMinor: outstandingMinor, currency, ...extraCtx, planNames: financialPlanNames },
     category: "account",
     severity: isOverdue ? "critical" : daysUntilDue === 0 ? "warning" : "info",
     entityType: "account",
     entityId: accountId,
     actionUrl: "/settings/accounts",
     dedupeKey,
+  }, _stats);
+}
+
+// ============================================================
+// Plan reminders (Gate 9)
+//
+// A financial Plan (financial_plans) is a contextual purpose/container,
+// never a second ledger (locked invariant, docs/phase-40/
+// plans-gate0.75-decision-lock.md). These rules only ever read canonical,
+// already-computed Plan figures (a Plan Item's own stored estimated
+// amount, or the domain-application `summarizePlan` calculation's
+// budgetStatus/progress) -- they never recompute a Plan's actual spend,
+// budget, or progress themselves. There is no dedicated "plan" category
+// in the notifications schema; these reuse the existing "budget" category
+// (a Plan's budget risk and item due dates are both budget-shaped
+// concerns), so no schema migration is needed for this gate. The Settings
+// UI's "Plan alerts" toggle filters by the event_type prefix "PLAN"
+// instead, which works regardless of the stored category.
+// ============================================================
+
+interface PlanItemRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  itemId: string;
+  planId: string;
+  planName: string;
+  itemName: string;
+  /** The item's own stored estimated amount -- never recomputed here. `null` when the item has no price yet. */
+  amountMinor: number | null;
+  currency?: string;
+  /** True for booked/committed/partially_paid items, so the copy can say "committed" instead of "planned" (never implying a payment has actually happened). */
+  isCommitted: boolean;
+  expectedDateIso: string;
+  todayIso: string;
+}
+
+export async function checkPlanItemReminder(input: PlanItemRuleInput, _stats?: NotificationRunStats): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, itemId, planId, planName, itemName, amountMinor, currency, isCommitted, expectedDateIso, todayIso } = input;
+  const today = new Date(todayIso + "T00:00:00Z");
+  const dueDate = new Date(expectedDateIso + "T00:00:00Z");
+  const daysUntilDue = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000);
+
+  let eventType: DeliverNotificationInput["eventType"] | null = null;
+  let dedupeKey = "";
+
+  if (daysUntilDue === 7) {
+    eventType = "PLAN_ITEM_7_DAYS";
+    dedupeKey = `plan_item_7d_${itemId}_${expectedDateIso}`;
+  } else if (daysUntilDue === 3) {
+    eventType = "PLAN_ITEM_3_DAYS";
+    dedupeKey = `plan_item_3d_${itemId}_${expectedDateIso}`;
+  } else if (daysUntilDue === 1) {
+    eventType = "PLAN_ITEM_1_DAY";
+    dedupeKey = `plan_item_1d_${itemId}_${expectedDateIso}`;
+  } else if (daysUntilDue === 0) {
+    eventType = "PLAN_ITEM_DUE_TODAY";
+    dedupeKey = `plan_item_due_${itemId}_${expectedDateIso}`;
+  } else if (daysUntilDue < 0 && daysUntilDue >= -7) {
+    eventType = "PLAN_ITEM_OVERDUE";
+    dedupeKey = `plan_item_overdue_${itemId}_${expectedDateIso}`;
+  }
+
+  if (!eventType) return;
+
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType,
+    financialContext: { planName, itemName, amountMinor, currency: currency ?? "INR", isCommitted, daysPast: Math.abs(daysUntilDue) },
+    category: "budget",
+    severity: daysUntilDue < 0 ? "warning" : "info",
+    entityType: "plan_item",
+    entityId: itemId,
+    actionUrl: `/plans/${planId}`,
+    dedupeKey,
+  }, _stats);
+}
+
+interface PlanBudgetRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  planId: string;
+  planName: string;
+  /** The Plan's canonical actual spend, from `summarizePlan` -- never recomputed here. */
+  actualSpendMinor: number;
+  /** The Plan's currently configured budget. This function is never called when a Plan has no budget configured. */
+  budgetMinor: number;
+  currency?: string;
+}
+
+/**
+ * A Plan's budget does not reset monthly the way a recurring category
+ * budget does (checkBudgetThreshold), so the 80% threshold uses a dedupe
+ * key that changes only when the budget itself changes, rather than a
+ * calendar month -- firing once per distinct budget amount, not spamming
+ * on every cron pass. The over-budget alert mirrors checkBudgetThreshold's
+ * own "re-alert only once the overrun has grown meaningfully" pattern.
+ */
+export async function checkPlanBudgetRisk(input: PlanBudgetRuleInput, _stats?: NotificationRunStats): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, planId, planName, actualSpendMinor, budgetMinor } = input;
+  const currency = input.currency ?? "INR";
+  if (budgetMinor <= 0) return;
+
+  if (actualSpendMinor > budgetMinor) {
+    const overByMinor = actualSpendMinor - budgetMinor;
+    const prevState = await getNotificationAlertState(serviceRoleSupabase, userId, "plan", planId, "budget_over");
+    const prevOverBy = prevState?.lastValue ?? 0;
+
+    if (overByMinor > prevOverBy + 100000) {
+      await upsertNotificationAlertState(serviceRoleSupabase, userId, "plan", planId, "budget_over", overByMinor);
+      await deliverNotification(serviceRoleSupabase, {
+        userId, userEmail,
+        eventType: "PLAN_BUDGET_OVER",
+        financialContext: { planName, overByMinor, actualSpendMinor, budgetMinor, currency },
+        category: "budget",
+        severity: "critical",
+        entityType: "plan",
+        entityId: planId,
+        actionUrl: `/plans/${planId}`,
+        dedupeKey: `plan_budget_over_${planId}_${Math.floor(overByMinor / 100000)}`,
+      }, _stats);
+    }
+    return;
+  }
+
+  const utilizationPct = (actualSpendMinor / budgetMinor) * 100;
+  if (utilizationPct < 80) return;
+
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType: "PLAN_BUDGET_80",
+    financialContext: { planName, actualSpendMinor, budgetMinor, currency },
+    category: "budget",
+    severity: "warning",
+    entityType: "plan",
+    entityId: planId,
+    actionUrl: `/plans/${planId}`,
+    dedupeKey: `plan_budget_80_${planId}_${budgetMinor}`,
+  }, _stats);
+}
+
+interface PlanCompletionRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  planId: string;
+  planName: string;
+  isCompleted: boolean;
+  /** The Plan's own stored completed_at, refreshed on every new transition into 'completed' -- the natural, already-canonical discriminator for a fresh dedupe key each time a Plan is reopened and completed again. */
+  completedAtIso: string | null;
+}
+
+/**
+ * Fires once per distinct completion using the alert-state table purely to
+ * remember "was this Plan already completed the last time this ran" -- not
+ * to gate the notification's own dedupe (the notifications table's own
+ * (user_id, dedupe_key) constraint already does that). Clearing the state
+ * when a Plan leaves 'completed' (reopened) lets a genuine second
+ * completion notify again, using the refreshed completed_at in its key.
+ */
+export async function checkPlanCompletion(input: PlanCompletionRuleInput, _stats?: NotificationRunStats): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, planId, planName, isCompleted, completedAtIso } = input;
+  const prevState = await getNotificationAlertState(serviceRoleSupabase, userId, "plan", planId, "completed");
+  const wasCompleted = (prevState?.lastValue ?? 0) === 1;
+
+  if (!isCompleted) {
+    if (wasCompleted) {
+      await upsertNotificationAlertState(serviceRoleSupabase, userId, "plan", planId, "completed", 0);
+    }
+    return;
+  }
+
+  if (wasCompleted) return;
+
+  await upsertNotificationAlertState(serviceRoleSupabase, userId, "plan", planId, "completed", 1);
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType: "PLAN_COMPLETED",
+    financialContext: { planName },
+    category: "budget",
+    severity: "success",
+    entityType: "plan",
+    entityId: planId,
+    actionUrl: `/plans/${planId}`,
+    dedupeKey: `plan_completed_${planId}_${completedAtIso ?? "unknown"}`,
   }, _stats);
 }

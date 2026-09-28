@@ -40,6 +40,9 @@ import {
   // Credit card billing
   getCreditCardStatementSummary,
   getActiveObligationForAccount,
+  // Financial Plans (Gate 11)
+  listPlansWithSummaries,
+  getPlanDetail,
   type McpAuthContext,
 } from "@spencare/domain-application";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -635,6 +638,114 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
                 dueDate: obligation.dueDate,
               }
             : null,
+        };
+      }),
+  );
+
+  // ── Financial Plan read tools (Gate 11) ───────────────────────────────
+  // Mirrors Spensa's own Plan read tools (packages/ai/src/tools/planTools.ts,
+  // Gate 10) so both surfaces converge on the exact same canonical queries
+  // and the exact same provenance labeling -- never a second Plan
+  // calculation. "Plan" means financial_plans (a real-life purpose
+  // container), never goal_contribution_plans.
+
+  server.registerTool(
+    "getPlans",
+    {
+      description: "List the user's financial Plans (real-life purpose containers such as a trip, wedding, or renovation) with a lightweight actual-vs-budget summary for each. A Plan differs from a Budget (a spending limit), a Goal (a savings target), and a Commitment (an obligated future payment).",
+      inputSchema: {},
+    },
+    async () =>
+      runScopedTool(ctx, "getPlans", "read", async () => {
+        const asOfIso = new Date().toISOString().slice(0, 10);
+        const [summaries, privacyModeEnabled] = await Promise.all([listPlansWithSummaries(ctx, asOfIso), isPrivacyModeEnabled(ctx)]);
+        return summaries.map(({ plan, calculations }) => ({
+          id: plan.id,
+          name: plan.name,
+          status: plan.status,
+          currency: plan.base_currency,
+          currentBudget:
+            plan.current_budget_minor == null
+              ? null
+              : privacyModeEnabled
+                ? { private: true }
+                : { amountMinor: plan.current_budget_minor, currency: plan.base_currency, source: "USER_DEFINED" },
+          actualSpend: privacyModeEnabled
+            ? { private: true }
+            : { amountMinor: Number(calculations.actualSpend.amountMinorUnits), currency: plan.base_currency, source: "ACTUAL" },
+          overBudget: calculations.budgetStatus.overBudget,
+          percentOfBudgetUsed: calculations.progress.percentOfBudgetUsed,
+        }));
+      }),
+  );
+
+  server.registerTool(
+    "getPlanDetail",
+    {
+      description:
+        "Get full detail for a single financial Plan by id: budget, actual spend (from real transactions), planned/committed/upcoming amounts, remaining budget, variance, progress, over-budget state, every Plan Item with its own status and estimated amount, the Goals/Commitments/Accounts linked to this Plan, and every Plan-scoped transaction. Every monetary figure is labeled with its source: ACTUAL (from real transactions), USER_DEFINED (typed in by the user), or CALCULATED (a canonical aggregate) -- never present one as another. Use getPlans first if the Plan id is not already known.",
+      inputSchema: { planId: z.string().uuid() },
+    },
+    async (rawInput: { planId: string }) =>
+      runScopedTool(ctx, "getPlanDetail", "read", async () => {
+        const privacyModeEnabled = await isPrivacyModeEnabled(ctx);
+        const asOfIso = new Date().toISOString().slice(0, 10);
+        const detail = await getPlanDetail(ctx, rawInput.planId, asOfIso);
+        if (!detail) return { error: "Plan not found." };
+
+        const [goals, commitments, accounts] = await Promise.all([listGoals(ctx), listCommitments(ctx), listAccounts(ctx)]);
+        const goalById = new Map(goals.map((g) => [g.id, g]));
+        const commitmentById = new Map(commitments.map((c) => [c.id, c]));
+        const accountById = new Map(accounts.map((a) => [a.id, a]));
+
+        function amount(amountMinor: number, currency: string, source: "ACTUAL" | "USER_DEFINED" | "CALCULATED") {
+          return privacyModeEnabled ? { private: true } : { amountMinor, currency, source };
+        }
+
+        const { plan, items, goalLinks, commitmentLinks, accountLinks, transactions, calculations } = detail;
+
+        return {
+          id: plan.id,
+          name: plan.name,
+          status: plan.status,
+          startDate: plan.start_date,
+          endDate: plan.end_date,
+          currency: plan.base_currency,
+          originalBudget: plan.original_budget_minor == null ? null : amount(plan.original_budget_minor, plan.base_currency, "USER_DEFINED"),
+          currentBudget: plan.current_budget_minor == null ? null : amount(plan.current_budget_minor, plan.base_currency, "USER_DEFINED"),
+          actualSpend: amount(Number(calculations.actualSpend.amountMinorUnits), plan.base_currency, "ACTUAL"),
+          plannedSpend: amount(Number(calculations.plannedSpend.amountMinorUnits), plan.base_currency, "CALCULATED"),
+          committedAmount: amount(Number(calculations.committedAmount.amountMinorUnits), plan.base_currency, "CALCULATED"),
+          upcomingAmount: amount(Number(calculations.upcomingAmount.amountMinorUnits), plan.base_currency, "CALCULATED"),
+          remaining: calculations.budgetStatus.remaining == null ? null : amount(Number(calculations.budgetStatus.remaining.amountMinorUnits), plan.base_currency, "CALCULATED"),
+          overBudget: calculations.budgetStatus.overBudget,
+          variance: amount(Number(calculations.variance.variance.amountMinorUnits), plan.base_currency, "CALCULATED"),
+          percentOfBudgetUsed: calculations.progress.percentOfBudgetUsed,
+          percentOfPlannedSpent: calculations.progress.percentOfPlannedSpent,
+          items: items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            status: item.status,
+            categoryId: item.category_id,
+            expectedDate: item.expected_date,
+            estimatedAmount: item.estimated_amount_minor == null ? null : amount(item.estimated_amount_minor, item.estimated_currency ?? plan.base_currency, "USER_DEFINED"),
+            commitmentId: item.commitment_id,
+          })),
+          linkedGoals: goalLinks.map((l) => goalById.get(l.goal_id)).filter((g): g is NonNullable<typeof g> => !!g).map((g) => ({ id: g.id, name: g.name })),
+          linkedCommitments: commitmentLinks.map((l) => commitmentById.get(l.commitment_id)).filter((c): c is NonNullable<typeof c> => !!c).map((c) => ({ id: c.id, name: c.name })),
+          linkedAccounts: accountLinks.map((l) => accountById.get(l.account_id)).filter((a): a is NonNullable<typeof a> => !!a).map((a) => ({ id: a.id, name: a.name })),
+          transactions: transactions.map((t) => ({
+            id: t.id,
+            type: t.type,
+            amount: amount(t.amount_minor, t.currency, "ACTUAL"),
+            occurredAt: t.occurred_at,
+            merchant: t.merchant,
+            planItemId: t.plan_item_id,
+          })),
+          excludedTransactionsCount: calculations.excludedTransactions.length,
+          excludedItemsCount: calculations.excludedItems.length,
+          lastUpdated: new Date().toISOString(),
+          dataConfidence: "high",
         };
       }),
   );

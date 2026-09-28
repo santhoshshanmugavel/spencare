@@ -50,11 +50,28 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  // Radix restores focus to the trigger on close only when the sheet was
+  // opened via <SheetTrigger>. Several sheets in this app open from
+  // controlled state instead (a plain button's onClick setting `open`
+  // directly, e.g. a dropdown menu item or a list-row action), which
+  // leaves Radix with no registered trigger to return focus to -- focus
+  // then falls back to document.body instead of the element the user
+  // actually opened the sheet from. <Sheet> (SheetPrimitive.Root) stays
+  // mounted for the caller's entire lifetime, only Content's visibility
+  // toggles, so a ref captured once at mount time (or in a plain useEffect,
+  // which also only fires on that same one mount) goes stale after the
+  // first open/close cycle. onOpenAutoFocus fires fresh on every open,
+  // before Radix moves focus into the content, so it is read here (not
+  // prevented) purely to capture that moment's real opener for later.
+  const openerRef = React.useRef<HTMLElement | null>(null)
+
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -65,6 +82,19 @@ function SheetContent({
           "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-modal transition duration-200 ease-in-out data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-[side=bottom]:data-open:slide-in-from-bottom-10 data-[side=left]:data-open:slide-in-from-left-10 data-[side=right]:data-open:slide-in-from-right-10 data-[side=top]:data-open:slide-in-from-top-10 data-closed:animate-out data-closed:fade-out-0 data-[side=bottom]:data-closed:slide-out-to-bottom-10 data-[side=left]:data-closed:slide-out-to-left-10 data-[side=right]:data-closed:slide-out-to-right-10 data-[side=top]:data-closed:slide-out-to-top-10",
           className
         )}
+        onOpenAutoFocus={(event) => {
+          openerRef.current = document.activeElement as HTMLElement | null
+          onOpenAutoFocus?.(event)
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event)
+          if (event.defaultPrevented) return
+          const opener = openerRef.current
+          if (opener && document.contains(opener)) {
+            event.preventDefault()
+            opener.focus()
+          }
+        }}
         {...props}
       >
         {children}

@@ -167,6 +167,36 @@ export {
 } from "./reserveStatus.js";
 
 export {
+  calculatePlanActualSpend,
+  calculatePlanPlannedSpend,
+  calculatePlanCommittedAmount,
+  calculatePlanUpcomingAmount,
+  calculatePlanRemainingBudget,
+  calculatePlanVariance,
+  calculatePlanProgress,
+  isPlanOverBudget,
+  isValidPlanStatusTransition,
+  isValidPlanItemStatusTransition,
+  isValidCurrencyCode,
+  isValidPlanName,
+  isValidPlanDateRange,
+  type PlanStatus,
+  type PlanItemStatus,
+  type FinancialPlan,
+  type PlanItem,
+  type PlanTransactionType,
+  type PlanTransactionInput,
+  type PlanCurrencyExclusion,
+  type PlanActualSpendResult,
+  type PlanPlannedSpendResult,
+  type PlanCommittedAmountResult,
+  type PlanUpcomingAmountResult,
+  type PlanBudgetStatus,
+  type PlanVariance,
+  type PlanProgress,
+} from "./financialPlans.js";
+
+export {
   redactFinancialSnapshot,
   redactBudgetSummaries,
   redactGoalSummaries,

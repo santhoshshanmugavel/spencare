@@ -241,6 +241,23 @@ export const CONFIRMATION_COMMAND_TYPES = [
   "updateLoan",
   "deleteLoan",
   "markLoanPaid",
+  // Gate 11: financial Plans (real-life purpose containers, never a
+  // second ledger -- no command in this group can move money)
+  "createPlan",
+  "updatePlan",
+  "updatePlanBudget",
+  "updatePlanStatus",
+  "deletePlan",
+  "addPlanItem",
+  "updatePlanItem",
+  "updatePlanItemStatus",
+  "associatePlanGoal",
+  "dissociatePlanGoal",
+  "associatePlanCommitment",
+  "dissociatePlanCommitment",
+  "associatePlanAccount",
+  "dissociatePlanAccount",
+  "setTransactionPlan",
 ] as const;
 export type ConfirmationCommandType = (typeof CONFIRMATION_COMMAND_TYPES)[number];
 

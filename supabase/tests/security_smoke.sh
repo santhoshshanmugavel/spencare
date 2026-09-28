@@ -1110,8 +1110,16 @@ R=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/rest/v1/rpc/confirm_co
   -H "Content-Type: application/json" -d "{\"p_user_id\":\"$UID1\",\"p_confirmation_id\":\"$MCPPCID4\",\"p_actor\":\"mcp\"}")
 check "user1 can confirm an mcp-sourced createBudget proposal" "200" "$R"
 
-R=$(curl -s "$BASE/rest/v1/audit_log?entity_type=eq.budget&action=eq.createBudget&user_id=eq.$UID1&order=created_at.desc&limit=1&select=actor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['actor'])")
-check "createBudget's own direct audit_log insert (inside confirm_command, not delegated to another RPC) also records actor='mcp'" "mcp" "$R"
+# NOTE: confirm_command's only audit_log write for createBudget (and every
+# other non-Plan branch) is the single generic trailing insert at the end
+# of the function (action='command_confirmed', entity_type='pending_confirmation'),
+# verified against production's actual live source -- there is no
+# per-branch audit_log insert for createBudget specifically (unlike the
+# Plan branches, which do have their own). This assertion previously
+# queried for a createBudget/budget row that confirm_command has never
+# written; updated to match the real, verified audit trail.
+R=$(curl -s "$BASE/rest/v1/audit_log?entity_type=eq.pending_confirmation&action=eq.command_confirmed&entity_id=eq.$MCPPCID4&user_id=eq.$UID1&order=created_at.desc&limit=1&select=actor" -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN1" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['actor'])")
+check "confirm_command's generic audit_log insert for this mcp-sourced createBudget confirmation records actor='mcp'" "mcp" "$R"
 echo
 
 echo "== MCP OAuth: oauth_clients / oauth_authorization_codes are service-role-only (Phase 27) =="
