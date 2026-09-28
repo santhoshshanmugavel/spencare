@@ -6,6 +6,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { getLastStableOpener } from "@/lib/last-stable-opener"
 
 function Dialog({
   ...props
@@ -67,7 +68,9 @@ function DialogContent({
   // mount time goes stale after the first open/close cycle.
   // onOpenAutoFocus fires fresh on every open, before Radix moves focus
   // into the content, so it is read here (not prevented) purely to capture
-  // that moment's real opener for later.
+  // that moment's real opener for later. getLastStableOpener() (not
+  // document.activeElement) is used for the DropdownMenuItem case -- see
+  // the fuller comment in sheet.tsx.
   const openerRef = React.useRef<HTMLElement | null>(null)
 
   return (
@@ -80,7 +83,7 @@ function DialogContent({
           className
         )}
         onOpenAutoFocus={(event) => {
-          openerRef.current = document.activeElement as HTMLElement | null
+          openerRef.current = getLastStableOpener() ?? (document.activeElement as HTMLElement | null)
           onOpenAutoFocus?.(event)
         }}
         onCloseAutoFocus={(event) => {

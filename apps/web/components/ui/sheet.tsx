@@ -6,6 +6,7 @@ import { Dialog as SheetPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { getLastStableOpener } from "@/lib/last-stable-opener"
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -70,6 +71,20 @@ function SheetContent({
   // first open/close cycle. onOpenAutoFocus fires fresh on every open,
   // before Radix moves focus into the content, so it is read here (not
   // prevented) purely to capture that moment's real opener for later.
+  //
+  // getLastStableOpener() (not document.activeElement) is used because a
+  // sheet opened from a DropdownMenuItem has a different failure: the
+  // menu item briefly receives real focus as part of Radix's own
+  // selection handling, so document.activeElement at this exact moment
+  // is that item, not the dropdown's trigger button -- and the item is
+  // unmounted the instant the dropdown closes, so restoring to it later
+  // is a no-op (document.contains fails) and focus falls back to body.
+  // getLastStableOpener() skips anything inside an open Radix popper
+  // overlay, so for a dropdown-opened sheet it still resolves to the
+  // trigger button (the last real page element interacted with before
+  // the dropdown's own content took focus); for a plain button-opened
+  // sheet it resolves to that same button document.activeElement would
+  // have given, so this is never worse than the previous behavior.
   const openerRef = React.useRef<HTMLElement | null>(null)
 
   return (
@@ -83,7 +98,7 @@ function SheetContent({
           className
         )}
         onOpenAutoFocus={(event) => {
-          openerRef.current = document.activeElement as HTMLElement | null
+          openerRef.current = getLastStableOpener() ?? (document.activeElement as HTMLElement | null)
           onOpenAutoFocus?.(event)
         }}
         onCloseAutoFocus={(event) => {
