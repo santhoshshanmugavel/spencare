@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Money } from "@/components/spencare/money";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { searchTransactionsForPlanAction, setTransactionPlanAction } from "../actions";
@@ -45,7 +46,7 @@ export function AssociateTransactionDialog({
   // react-hooks/set-state-in-effect while still debouncing every keystroke
   // (previously: one network round-trip per keystroke, with no delay).
   const [resultsQuery, setResultsQuery] = useState<string | null>(null);
-  const [selected, setSelected] = useState<TransactionRow | null>(null);
+  const [selected, setSelected] = useState<Map<string, TransactionRow>>(new Map());
   const [planItemId, setPlanItemId] = useState<string | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const loading = open && resultsQuery !== query;
@@ -70,24 +71,38 @@ export function AssociateTransactionDialog({
     setQuery("");
     setResults([]);
     setResultsQuery(null);
-    setSelected(null);
+    setSelected(new Map());
     setPlanItemId(undefined);
   }
 
-  async function handleAssociate() {
-    if (!selected) return;
-    const wasElsewhere = selected.plan_id !== null;
-    setIsSubmitting(true);
-    const result = await setTransactionPlanAction(planId, selected.id, {
-      planId,
-      planItemId: planItemId ?? null,
+  function toggleSelected(t: TransactionRow) {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(t.id)) next.delete(t.id);
+      else next.set(t.id, t);
+      return next;
     });
+  }
+
+  async function handleAssociate() {
+    if (selected.size === 0) return;
+    const transactions = [...selected.values()];
+    setIsSubmitting(true);
+    const results = await Promise.all(
+      transactions.map((t) => setTransactionPlanAction(planId, t.id, { planId, planItemId: planItemId ?? null })),
+    );
     setIsSubmitting(false);
-    if (!result.ok) {
-      toastError(result.error.message);
+    const failed = results.find((r) => !r.ok);
+    if (failed && !failed.ok) {
+      toastError(failed.error.message);
       return;
     }
-    toastConfirmed(wasElsewhere ? "Transaction moved to this Plan." : "Transaction attached to this Plan.");
+    const movedCount = transactions.filter((t) => t.plan_id !== null).length;
+    const attachedCount = transactions.length - movedCount;
+    const parts: string[] = [];
+    if (attachedCount > 0) parts.push(`${attachedCount} transaction${attachedCount === 1 ? "" : "s"} attached`);
+    if (movedCount > 0) parts.push(`${movedCount} transaction${movedCount === 1 ? "" : "s"} moved`);
+    toastConfirmed(`${parts.join(" and ")} to this Plan.`);
     reset();
     onAssociated();
   }
@@ -104,7 +119,7 @@ export function AssociateTransactionDialog({
         <DialogHeader>
           <DialogTitle>Attach a transaction</DialogTitle>
           <DialogDescription>
-            Find an existing transaction to attach to this Plan. This only labels it as part of this Plan — the
+            Find existing transactions to attach to this Plan. This only labels them as part of this Plan — a
             transaction&rsquo;s amount, account, and category never change.
           </DialogDescription>
         </DialogHeader>
@@ -115,10 +130,7 @@ export function AssociateTransactionDialog({
             placeholder="Search by merchant or description"
             aria-label="Search transactions"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setSelected(null);
-            }}
+            onChange={(e) => setQuery(e.target.value)}
             className="pl-9"
           />
         </div>
@@ -131,15 +143,19 @@ export function AssociateTransactionDialog({
           ) : (
             results.map((t) => {
               const mismatched = t.currency !== currency;
+              const isSelected = selected.has(t.id);
               return (
-                <button
+                <label
                   key={t.id}
-                  type="button"
-                  onClick={() => setSelected(t)}
-                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                    selected?.id === t.id ? "bg-accent" : "hover:bg-accent/50"
+                  className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                    isSelected ? "bg-accent" : "hover:bg-accent/50"
                   }`}
                 >
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => toggleSelected(t)}
+                    aria-label={`Select ${t.merchant ?? t.description ?? "transaction"}`}
+                  />
                   <span className="min-w-0 flex-1 truncate">
                     {t.merchant ?? t.description ?? "Transaction"}
                     {t.plan_id ? (
@@ -152,13 +168,19 @@ export function AssociateTransactionDialog({
                     ) : null}
                   </span>
                   <Money value={DomainMoney.fromMinorUnits(BigInt(t.amount_minor), t.currency)} size="body" />
-                </button>
+                </label>
               );
             })
           )}
         </div>
 
-        {selected && items.length > 0 ? (
+        {selected.size > 0 ? (
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {selected.size} transaction{selected.size === 1 ? "" : "s"} selected
+          </p>
+        ) : null}
+
+        {selected.size > 0 && items.length > 0 ? (
           <Select value={planItemId} onValueChange={setPlanItemId}>
             <SelectTrigger aria-label="Optionally attach to a Plan item">
               <SelectValue placeholder="Optionally attach to a specific item" />
@@ -174,12 +196,15 @@ export function AssociateTransactionDialog({
         ) : null}
 
         {/* Reassignment must be explicit, never a silent move (Gate 6 §39) --
-            selecting an already-attached-elsewhere transaction changes the
-            copy and the button label so intent is unambiguous before the
-            single confirming click. */}
-        {selected?.plan_id ? (
+            selecting an already-attached-elsewhere transaction keeps this
+            warning visible so intent is unambiguous before the confirming
+            click, even when the selection mixes fresh attaches and moves. */}
+        {[...selected.values()].some((t) => t.plan_id !== null) ? (
           <p className="text-xs text-warning">
-            This transaction is already attached to another Plan. Continuing will move it here instead.
+            {[...selected.values()].filter((t) => t.plan_id !== null).length === 1
+              ? "One selected transaction is"
+              : `${[...selected.values()].filter((t) => t.plan_id !== null).length} selected transactions are`}{" "}
+            already attached to another Plan. Continuing will move {selected.size === 1 ? "it" : "them"} here instead.
           </p>
         ) : null}
 
@@ -187,8 +212,8 @@ export function AssociateTransactionDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAssociate} disabled={!selected || isSubmitting}>
-            {isSubmitting ? "Saving…" : selected?.plan_id ? "Move to this Plan" : "Attach transaction"}
+          <Button onClick={handleAssociate} disabled={selected.size === 0 || isSubmitting}>
+            {isSubmitting ? "Saving…" : "Attach selected transactions"}
           </Button>
         </div>
       </DialogContent>
