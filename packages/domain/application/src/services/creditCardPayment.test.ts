@@ -3,6 +3,7 @@ import {
   upsertCreditCardObligation,
   applyPaymentToObligation,
   matchCreditCardPayment,
+  getCreditCardBillingStatus,
 } from "./creditCardPayment.js";
 
 // Minimal AuthContext builder for unit tests
@@ -281,5 +282,159 @@ describe("applyPaymentToObligation - partial payment", () => {
     });
     const result = await applyPaymentToObligation(ctx, "obl-dedup", "txn-existing");
     expect(result.outcome).toBe("already_paid");
+  });
+});
+
+/**
+ * getCreditCardBillingStatus needs its own fake: it runs a transactions
+ * SELECT that terminates in `.is("deleted_at", null)` (not `.maybeSingle()`
+ * or `.single()` like the mocks above), plus a real insert/update-backed
+ * obligations table so upsertCreditCardObligation's idempotency actually
+ * exercises. Deliberately self-contained rather than extending makeCtx
+ * above, to avoid changing behavior the existing suites depend on.
+ */
+function makeBillingStatusCtx(input: {
+  userId?: string;
+  transactions: Array<{ amount_minor: number; occurred_at: string; type?: string; deleted_at?: string | null }>;
+  existingObligation?: Record<string, unknown> | null;
+}) {
+  const userId = input.userId ?? "user-1";
+  let obligation: Record<string, unknown> | null = input.existingObligation ?? null;
+  let nextId = 1;
+
+  return {
+    userId,
+    email: "t@example.com",
+    supabase: {
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "transactions") {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  eq: () => ({
+                    gte: () => ({
+                      lte: () => ({
+                        is: () => Promise.resolve({ data: input.transactions, error: null }),
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "credit_card_payment_obligations") {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  eq: () => ({
+                    maybeSingle: () => Promise.resolve({ data: obligation, error: null }),
+                  }),
+                }),
+              }),
+            }),
+            insert: (row: Record<string, unknown>) => {
+              const id = `obl-generated-${nextId++}`;
+              obligation = { id, ...row };
+              return {
+                select: () => ({
+                  single: () => Promise.resolve({ data: { id }, error: null }),
+                }),
+              };
+            },
+            update: (patch: Record<string, unknown>) => ({
+              eq: () => {
+                obligation = { ...obligation, ...patch };
+                return Promise.resolve({ error: null });
+              },
+            }),
+          };
+        }
+        throw new Error(`makeBillingStatusCtx: unexpected table "${table}"`);
+      }),
+    } as unknown,
+    serviceRoleSupabase: {} as unknown,
+  } as Parameters<typeof getCreditCardBillingStatus>[0];
+}
+
+describe("getCreditCardBillingStatus -- acceptance scenario (section 23)", () => {
+  it("returns null when the account has no statement_close_day configured", async () => {
+    const ctx = makeBillingStatusCtx({ transactions: [] });
+    const result = await getCreditCardBillingStatus(
+      ctx,
+      { id: "acct-1", statement_close_day: null, payment_due_day: 5 },
+      "2026-09-10",
+    );
+    expect(result).toBeNull();
+  });
+
+  it("freezes the closed statement's balance from its own transactions, distinct from later spending in the next cycle", async () => {
+    // Card: close=20, due=5. Query as of Sep 25 -- the Aug21-Sep20 statement
+    // has closed (₹10k + ₹10k = ₹20k). A further ₹5k on Sep 25 belongs to
+    // the NEXT (still open) cycle and must not appear in this balance.
+    const ctx = makeBillingStatusCtx({
+      transactions: [
+        { amount_minor: 1000000, occurred_at: "2026-09-10T00:00:00Z" },
+        { amount_minor: 1000000, occurred_at: "2026-09-18T00:00:00Z" },
+      ],
+    });
+    const result = await getCreditCardBillingStatus(
+      ctx,
+      { id: "acct-1", statement_close_day: 20, payment_due_day: 5 },
+      "2026-09-25",
+    );
+    expect(result).not.toBeNull();
+    expect(result!.statementBalanceMinor).toBe(2000000); // ₹20,000
+    expect(result!.snapshot.mostRecentClosedStatementDate).toBe("2026-09-20");
+    expect(result!.snapshot.mostRecentClosedDueDate).toBe("2026-10-05");
+    expect(result!.obligation.remainingMinor).toBe(2000000);
+    expect(result!.paymentStatus).toBe("statement_closed"); // due Oct 5, 10 days out from Sep 25
+  });
+
+  it("marks the obligation paid once a matching payment has been applied, and payment status follows suit", async () => {
+    const ctx = makeBillingStatusCtx({
+      transactions: [
+        { amount_minor: 1000000, occurred_at: "2026-09-10T00:00:00Z" },
+        { amount_minor: 1000000, occurred_at: "2026-09-18T00:00:00Z" },
+      ],
+      existingObligation: {
+        id: "obl-1",
+        paid_minor: 2000000,
+        status: "paid",
+      },
+    });
+    const result = await getCreditCardBillingStatus(
+      ctx,
+      { id: "acct-1", statement_close_day: 20, payment_due_day: 5 },
+      "2026-09-25",
+    );
+    expect(result!.obligation.status).toBe("paid");
+    expect(result!.obligation.remainingMinor).toBe(0);
+    expect(result!.paymentStatus).toBe("paid");
+  });
+
+  it("reports overdue once today is past the due date and the statement remains unpaid", async () => {
+    const ctx = makeBillingStatusCtx({
+      transactions: [{ amount_minor: 2000000, occurred_at: "2026-09-15T00:00:00Z" }],
+    });
+    const result = await getCreditCardBillingStatus(
+      ctx,
+      { id: "acct-1", statement_close_day: 20, payment_due_day: 5 },
+      "2026-10-10", // 5 days after the Oct 5 due date
+    );
+    expect(result!.paymentStatus).toBe("overdue");
+  });
+
+  it("a brand new card with zero closed-cycle activity reports paid (nothing owed) rather than a fabricated balance", async () => {
+    const ctx = makeBillingStatusCtx({ transactions: [] });
+    const result = await getCreditCardBillingStatus(
+      ctx,
+      { id: "acct-1", statement_close_day: 20, payment_due_day: 5 },
+      "2026-09-10",
+    );
+    expect(result!.statementBalanceMinor).toBe(0);
+    expect(result!.paymentStatus).toBe("paid");
   });
 });

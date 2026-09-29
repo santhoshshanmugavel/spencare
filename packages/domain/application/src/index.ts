@@ -143,6 +143,7 @@ export {
   getAccount,
   getAccountBalance,
   getCreditCardStatementSummary,
+  computeStatementBalanceForPeriod,
   type AccountBalance,
   type CreditCardStatementSummary,
 } from "./queries/accounts.js";
@@ -520,7 +521,9 @@ export {
   getActiveObligationForAccount,
   applyPaymentToObligation,
   matchCreditCardPayment,
+  getCreditCardBillingStatus,
   type CreditCardObligation,
   type ObligationStatus,
   type PaymentMatchResult,
+  type CreditCardBillingStatus,
 } from "./services/creditCardPayment.js";

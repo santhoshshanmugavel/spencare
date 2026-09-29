@@ -13,8 +13,7 @@ import {
   getCashFlowOverview,
   toAiAccountSummaryInput,
   getGoalContributionPlan,
-  getCreditCardStatementSummary,
-  getActiveObligationForAccount,
+  getCreditCardBillingStatus,
   getAccount,
   type AuthContext,
 } from "@spencare/domain-application";
@@ -272,9 +271,10 @@ const getCreditCardBillingTool: ReadToolHandler = {
   definition: {
     name: "getCreditCardBillingSummary",
     description:
-      "Get the current billing cycle for a credit card account: statement close date, payment due date, outstanding balance, and payment obligation status. " +
-      "Use this to answer 'when is my credit card bill due?', 'when does my statement close?', or 'what is my credit card balance?'. " +
-      "All dates come from the canonical credit-card billing domain service. Never calculate billing dates yourself.",
+      "Get the billing status for a credit card account: the most recently closed statement's balance, its payment due date and status, current outstanding, available credit, and utilization. " +
+      "Use this to answer 'when is my credit card bill due?', 'when does my statement close?', or 'how much do I owe?'. " +
+      "Always distinguish statementBalanceMinor (the frozen amount owed for the most recently closed statement) from currentOutstandingMinor (the live running balance, which may already include newer, not-yet-billed spending) -- never conflate the two or guess which one answers the user's question. " +
+      "All dates and balances come from the canonical credit-card billing domain service. Never calculate billing dates or balances yourself.",
     inputSchema: {
       type: "object",
       properties: { accountId: { type: "string", description: "Credit card account UUID" } },
@@ -283,47 +283,66 @@ const getCreditCardBillingTool: ReadToolHandler = {
   },
   execute: async ({ ctx, privacyModeEnabled }, input) => {
     const { accountId } = input as { accountId: string };
-    const [account, summary] = await Promise.all([
-      getAccount(ctx, accountId),
-      getCreditCardStatementSummary(ctx, accountId),
-    ]);
+    const account = await getAccount(ctx, accountId);
     if (!account || account.type !== "credit_card") return null;
-    if (!summary) return null;
 
     const acctRow = account as unknown as {
       statement_close_day?: number | null;
       payment_due_day?: number | null;
+      credit_limit_minor?: number | null;
       credit_used_minor?: number | null;
     };
 
-    const obligation = await getActiveObligationForAccount(ctx, accountId, summary.statementDate);
     const currentOutstandingMinor = acctRow.credit_used_minor ?? 0;
-    const statementBalanceMinor = summary.statementBalanceMinor;
+    const creditLimitMinor = acctRow.credit_limit_minor ?? 0;
+    const availableCreditMinor = creditLimitMinor - currentOutstandingMinor;
+    const utilizationPercent =
+      creditLimitMinor > 0 ? Math.round((currentOutstandingMinor / creditLimitMinor) * 100) : null;
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const billing = await getCreditCardBillingStatus(
+      ctx,
+      { id: accountId, statement_close_day: acctRow.statement_close_day ?? null, payment_due_day: acctRow.payment_due_day ?? null },
+      todayIso,
+    );
+    if (!billing) {
+      return {
+        accountId,
+        accountName: account.name,
+        currency: account.currency,
+        statementCloseDay: null,
+        paymentDueDay: null,
+        currentOutstandingMinor: privacyModeEnabled ? null : currentOutstandingMinor,
+        availableCreditMinor: privacyModeEnabled ? null : availableCreditMinor,
+        utilizationPercent,
+        statementBalanceMinor: null,
+        paymentStatus: "no_statement" as const,
+        note: "Billing dates are not set for this card. No statement or due date can be calculated.",
+      };
+    }
 
     return {
-      accountId: summary.accountId,
-      accountName: summary.accountName,
-      currency: summary.currency,
+      accountId,
+      accountName: account.name,
+      currency: account.currency,
       statementCloseDay: acctRow.statement_close_day ?? null,
       paymentDueDay: acctRow.payment_due_day ?? null,
-      statementPeriodStart: summary.periodStart,
-      statementPeriodEnd: summary.periodEnd,
-      nextStatementDate: summary.statementDate,
-      nextPaymentDueDate: summary.paymentDueDate,
-      statementBalanceMinor: privacyModeEnabled ? null : statementBalanceMinor,
-      statementBalanceNote:
-        statementBalanceMinor === 0
-          ? "Statement has not yet closed for this period. Balance shown is charges so far."
-          : null,
+      statementPeriodStart: billing.snapshot.mostRecentClosedPeriodStart,
+      statementPeriodEnd: billing.snapshot.mostRecentClosedStatementDate,
+      nextStatementDate: billing.snapshot.nextCycleEnd,
+      nextPaymentDueDate: billing.snapshot.nextCycleDueDate,
+      currentStatementDueDate: billing.snapshot.mostRecentClosedDueDate,
+      statementBalanceMinor: privacyModeEnabled ? null : billing.statementBalanceMinor,
       currentOutstandingMinor: privacyModeEnabled ? null : currentOutstandingMinor,
-      obligation: obligation
-        ? {
-            status: obligation.status,
-            remainingDueMinor: privacyModeEnabled ? null : obligation.remainingMinor,
-            paidMinor: privacyModeEnabled ? null : obligation.paidMinor,
-            dueDate: obligation.dueDate,
-          }
-        : null,
+      availableCreditMinor: privacyModeEnabled ? null : availableCreditMinor,
+      utilizationPercent,
+      paymentStatus: billing.paymentStatus,
+      obligation: {
+        status: billing.obligation.status,
+        remainingDueMinor: privacyModeEnabled ? null : billing.obligation.remainingMinor,
+        paidMinor: privacyModeEnabled ? null : billing.obligation.paidMinor,
+        dueDate: billing.obligation.dueDate,
+      },
     };
   },
 };

@@ -185,6 +185,67 @@ describe("updateAccount", () => {
     const result = await updateAccount.execute(makeCtx(), { accountId: "" } as never);
     expect(result.ok).toBe(false);
   });
+
+  it("rejects setting statementCloseDay on a non-credit-card account", async () => {
+    const created = await createAccount.execute(makeCtx(), {
+      type: "bank",
+      name: "HDFC Bank",
+      currency: "INR",
+      balanceMinor: 1000,
+    });
+    if (!created.ok) throw new Error("setup failed");
+
+    const result = await updateAccount.execute(makeCtx(), {
+      accountId: created.value.id,
+      statementCloseDay: 20,
+    } as never);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("validation_error");
+  });
+
+  it("rejects setting paymentDueDay on a non-credit-card account", async () => {
+    const created = await createAccount.execute(makeCtx(), {
+      type: "cash",
+      name: "Wallet",
+      currency: "INR",
+      balanceMinor: 0,
+    });
+    if (!created.ok) throw new Error("setup failed");
+
+    const result = await updateAccount.execute(makeCtx(), {
+      accountId: created.value.id,
+      paymentDueDay: 5,
+    } as never);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("validation_error");
+  });
+
+  it("allows setting billing days on a credit card account", async () => {
+    const created = await createAccount.execute(makeCtx(), {
+      type: "credit_card",
+      name: "ICICI Card",
+      currency: "INR",
+      creditLimitMinor: 1000000,
+      creditUsedMinor: 0,
+    });
+    if (!created.ok) throw new Error("setup failed");
+
+    const result = await updateAccount.execute(makeCtx(), {
+      accountId: created.value.id,
+      statementCloseDay: 20,
+      paymentDueDay: 5,
+    } as never);
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects billing-day fields for a non-existent account without leaking whether it exists for another user", async () => {
+    const result = await updateAccount.execute(makeCtx(), {
+      accountId: "does-not-exist",
+      statementCloseDay: 20,
+    } as never);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("not_found");
+  });
 });
 
 describe("archiveAccount — ownership and lifecycle", () => {

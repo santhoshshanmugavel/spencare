@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/spencare/empty-state";
 import { AddAccountSheet } from "./add-account-sheet";
 import { EditAccountSheet } from "./edit-account-sheet";
 import { ArchiveAccountDialog } from "./archive-account-dialog";
-import { AccountDetailsSheet } from "./account-details-sheet";
+import { AccountDetailsSheet, type CreditCardBillingStatusView } from "./account-details-sheet";
 
 /**
  * Grid-of-cards layout per SP-234 ("Settings > Accounts (Main Grid)"),
@@ -51,6 +51,7 @@ export function AccountList({
   cardReserveDetails = [],
   paymentAccountNameByCardId = {},
   paymentSources = [],
+  billingStatusByCardId = {},
 }: {
   initialAccounts: AccountRow[];
   masked: boolean;
@@ -65,6 +66,8 @@ export function AccountList({
   /** Maps credit_card_account_id -> payment bank name, for display on credit card tiles. */
   paymentAccountNameByCardId?: Record<string, string>;
   paymentSources?: CreditCardPaymentSourceRow[];
+  /** Per credit card: canonical billing status (statement balance, payment status), keyed by account id. */
+  billingStatusByCardId?: Record<string, CreditCardBillingStatusView>;
 }) {
   const router = useRouter();
   // Deliberately no local copy of initialAccounts in state: this list
@@ -190,6 +193,7 @@ export function AccountList({
         loanReserveMinor={viewingDetails ? (loanReservePerAccount[viewingDetails.id] ?? 0) : 0}
         cardReserveMinor={viewingDetails ? (cardReservePerAccount[viewingDetails.id] ?? 0) : 0}
         cardReserveDetails={viewingDetails ? cardReserveDetails.filter((d) => d.paymentAccountId === viewingDetails.id) : []}
+        billingStatus={viewingDetails ? (billingStatusByCardId[viewingDetails.id] ?? null) : null}
       />
     </div>
   );

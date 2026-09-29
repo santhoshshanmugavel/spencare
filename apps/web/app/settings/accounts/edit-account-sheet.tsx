@@ -5,6 +5,7 @@ import { Controller, useForm, type Control, type FieldErrors } from "react-hook-
 import { zodResolver } from "@hookform/resolvers/zod";
 import { updateAccountSchema, type UpdateAccountInput } from "@spencare/validation";
 import type { AccountRow } from "@spencare/domain-application";
+import { calculateCreditCardBillingCycle } from "@spencare/domain-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,60 +24,42 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { FormField, errorId } from "@/components/spencare/form-field";
+import { DayOfMonthSelect, dayOfMonthLabel } from "@/components/spencare/day-of-month-select";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
 import { updateAccountAction, setCardPaymentAccountAction, removeCardPaymentAccountAction } from "./actions";
 
-function ordinalSuffix(n: number): string {
-  const abs = n === 32 ? 31 : n;
-  const suffix = abs === 1 || abs === 21 || abs === 31 ? "st" : abs === 2 || abs === 22 ? "nd" : abs === 3 || abs === 23 ? "rd" : "th";
-  return n === 32 ? `last` : `${abs}${suffix}`;
+function todayIsoLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function billingCyclePreview(statementCloseDay: number | null, paymentDueDay: number | null): string | null {
+function formatDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
+  return new Date(y, m - 1, d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/**
+ * Live preview computed from the SAME canonical domain function every other
+ * surface (Upcoming, notifications, Spensa) calls -- never a locally
+ * re-derived shift rule, so this can never silently drift from what
+ * actually happens once saved.
+ */
+function BillingCyclePreview({ statementCloseDay, paymentDueDay }: { statementCloseDay: number | null; paymentDueDay: number | null }) {
   if (statementCloseDay == null) return null;
-  const today = new Date();
-  const year = today.getUTCFullYear();
-  const month = today.getUTCMonth() + 1;
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-  function resolveDay(y: number, mo: number, dayRule: number): { day: number; month: string } {
-    const daysInMo = new Date(Date.UTC(y, mo, 0)).getUTCDate();
-    const d = dayRule >= 32 ? daysInMo : Math.min(dayRule, daysInMo);
-    return { day: d, month: monthNames[mo - 1]! };
-  }
-
-  const thisStmt = resolveDay(year, month, statementCloseDay);
-  const todayDay = today.getUTCDate();
-  const stmtDay = statementCloseDay >= 32 ? new Date(Date.UTC(year, month, 0)).getUTCDate() : Math.min(statementCloseDay, new Date(Date.UTC(year, month, 0)).getUTCDate());
-
-  let stmtYear = year;
-  let stmtMonth = month;
-  if (todayDay > stmtDay) {
-    const next = year * 12 + month;
-    stmtYear = Math.floor(next / 12);
-    stmtMonth = (next % 12) + 1;
-  }
-  const nextStmt = resolveDay(stmtYear, stmtMonth, statementCloseDay);
-
-  if (paymentDueDay == null) {
-    return `Statement closes ${nextStmt.month} ${nextStmt.day}`;
-  }
-
-  const stmtDate = `${stmtYear}-${String(stmtMonth).padStart(2, "0")}-${String(nextStmt.day).padStart(2, "0")}`;
-  const daysInPayMo = new Date(Date.UTC(stmtYear, stmtMonth, 0)).getUTCDate();
-  const payDayResolved = paymentDueDay >= 32 ? daysInPayMo : Math.min(paymentDueDay, daysInPayMo);
-  const sameMoDue = `${stmtYear}-${String(stmtMonth).padStart(2, "0")}-${String(payDayResolved).padStart(2, "0")}`;
-
-  let payYear = stmtYear;
-  let payMonth = stmtMonth;
-  if (sameMoDue <= stmtDate) {
-    const nextTotal = stmtYear * 12 + stmtMonth;
-    payYear = Math.floor(nextTotal / 12);
-    payMonth = (nextTotal % 12) + 1;
-  }
-  const dueResolved = resolveDay(payYear, payMonth, paymentDueDay);
-  return `Statement closes ${nextStmt.month} ${nextStmt.day} - Payment due ${dueResolved.month} ${dueResolved.day}`;
+  const snapshot = calculateCreditCardBillingCycle(todayIsoLocal(), { statementCloseDay, paymentDueDay });
+  return (
+    <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-1">
+      <div className="flex justify-between"><span>Statement closes</span><span className="font-medium text-foreground">{formatDate(snapshot.openCycleEnd)}</span></div>
+      {snapshot.openCycleDueDate ? (
+        <div className="flex justify-between"><span>Payment due</span><span className="font-medium text-foreground">{formatDate(snapshot.openCycleDueDate)}</span></div>
+      ) : null}
+      <div className="flex justify-between"><span>Next statement closes</span><span>{formatDate(snapshot.nextCycleEnd)}</span></div>
+      {snapshot.nextCycleDueDate ? (
+        <div className="flex justify-between"><span>Next payment due</span><span>{formatDate(snapshot.nextCycleDueDate)}</span></div>
+      ) : null}
+    </div>
+  );
 }
 
 function CreditCardBillingFields({
@@ -91,60 +74,41 @@ function CreditCardBillingFields({
       <Controller
         control={control}
         name="statementCloseDay"
-        render={({ field }) => {
-          const preview = billingCyclePreview(field.value ?? null, null);
-          return (
-            <FormField
-              id="edit-statement-day"
-              label="Statement closes on"
-              error={errors.statementCloseDay?.message}
-              hint={field.value ? `Repeats on the ${ordinalSuffix(field.value)} of every month` : "Day of month your billing cycle closes. Leave blank if unknown."}
-            >
-              <Input
-                id="edit-statement-day"
-                inputMode="numeric"
-                placeholder="Eg: 21"
-                value={field.value != null ? (field.value === 32 ? "32" : String(field.value)) : ""}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/[^0-9]/g, "");
-                  field.onChange(raw === "" ? null : Number(raw));
-                }}
-              />
-              {preview && <p className="mt-1 text-xs text-muted-foreground">{preview}</p>}
-            </FormField>
-          );
-        }}
+        render={({ field }) => (
+          <FormField
+            id="edit-statement-day"
+            label="Statement closes"
+            error={errors.statementCloseDay?.message}
+            hint={field.value ? `Every month on the ${dayOfMonthLabel(field.value)}` : "Leave unset if you don't know your billing cycle yet."}
+          >
+            <DayOfMonthSelect id="edit-statement-day" value={field.value ?? null} onChange={field.onChange} placeholder="Not set" />
+          </FormField>
+        )}
       />
       <Controller
         control={control}
         name="paymentDueDay"
-        render={({ field: payField }) => (
+        render={({ field }) => (
+          <FormField
+            id="edit-payment-day"
+            label="Payment due"
+            error={errors.paymentDueDay?.message}
+            hint={field.value ? `Every month on the ${dayOfMonthLabel(field.value)}` : "Leave unset if you don't know your payment due date yet."}
+          >
+            <DayOfMonthSelect id="edit-payment-day" value={field.value ?? null} onChange={field.onChange} placeholder="Not set" />
+          </FormField>
+        )}
+      />
+      <Controller
+        control={control}
+        name="statementCloseDay"
+        render={({ field: stmtField }) => (
           <Controller
             control={control}
-            name="statementCloseDay"
-            render={({ field: stmtField }) => {
-              const preview = billingCyclePreview(stmtField.value ?? null, payField.value ?? null);
-              return (
-                <FormField
-                  id="edit-payment-day"
-                  label="Payment due on"
-                  error={errors.paymentDueDay?.message}
-                  hint={payField.value ? `Repeats on the ${ordinalSuffix(payField.value)} of every month` : "Day of month your payment is due. Leave blank if unknown."}
-                >
-                  <Input
-                    id="edit-payment-day"
-                    inputMode="numeric"
-                    placeholder="Eg: 2"
-                    value={payField.value != null ? String(payField.value) : ""}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/[^0-9]/g, "");
-                      payField.onChange(raw === "" ? null : Number(raw));
-                    }}
-                  />
-                  {preview && <p className="mt-1 text-xs text-muted-foreground">{preview}</p>}
-                </FormField>
-              );
-            }}
+            name="paymentDueDay"
+            render={({ field: payField }) => (
+              <BillingCyclePreview statementCloseDay={stmtField.value ?? null} paymentDueDay={payField.value ?? null} />
+            )}
           />
         )}
       />

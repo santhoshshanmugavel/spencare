@@ -97,6 +97,40 @@ describe("<AddAccountSheet> — credit card tab", () => {
       }),
     );
   });
+
+  it("billing days default to unset -- creating a card without choosing them never fabricates a date", async () => {
+    const { createAccountAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(<AddAccountSheet open onOpenChange={() => {}} onCreated={() => {}} />);
+    await user.click(screen.getByRole("tab", { name: "Credit card" }));
+    await user.type(screen.getByLabelText("Card provider"), "ICICI");
+    await user.click(screen.getByRole("button", { name: "Add card" }));
+    expect(createAccountAction).toHaveBeenCalledWith(
+      expect.objectContaining({ statementCloseDay: null, paymentDueDay: null }),
+    );
+  });
+
+  it("uses a day-of-month selector for both billing days and shows a live preview once chosen", async () => {
+    const { createAccountAction } = await import("./actions");
+    const user = userEvent.setup();
+    render(<AddAccountSheet open onOpenChange={() => {}} onCreated={() => {}} />);
+    await user.click(screen.getByRole("tab", { name: "Credit card" }));
+    await user.type(screen.getByLabelText("Card provider"), "HDFC");
+
+    expect(screen.queryByText("Next statement closes")).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Statement closes"));
+    await user.click(await screen.findByRole("option", { name: "20th" }));
+    expect(await screen.findByText("Next statement closes")).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Payment due"));
+    await user.click(await screen.findByRole("option", { name: "5th" }));
+
+    await user.click(screen.getByRole("button", { name: "Add card" }));
+    expect(createAccountAction).toHaveBeenCalledWith(
+      expect.objectContaining({ statementCloseDay: 20, paymentDueDay: 5 }),
+    );
+  });
 });
 
 describe("<AddAccountSheet> — investment tab", () => {

@@ -24,8 +24,10 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FormField, errorId } from "@/components/spencare/form-field";
+import { DayOfMonthSelect, dayOfMonthLabel } from "@/components/spencare/day-of-month-select";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { parseMoneyInput } from "@/lib/money-input";
+import { calculateCreditCardBillingCycle } from "@spencare/domain-core";
 import { createAccountAction } from "./actions";
 import { ChangeCurrencyDialog } from "./change-currency-dialog";
 
@@ -47,10 +49,32 @@ const CURRENCIES = ["INR", "USD", "EUR", "GBP"];
  * 20260921000002).
  */
 
-function ordinalSuffix(n: number): string {
-  if (n === 32) return "last";
-  const suffix = n === 1 || n === 21 || n === 31 ? "st" : n === 2 || n === 22 ? "nd" : n === 3 || n === 23 ? "rd" : "th";
-  return `${n}${suffix}`;
+function todayIsoLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
+  return new Date(y, m - 1, d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Same canonical domain function every other surface calls -- never a locally re-derived shift rule. */
+function BillingCyclePreview({ statementCloseDay, paymentDueDay }: { statementCloseDay: number | null; paymentDueDay: number | null }) {
+  if (statementCloseDay == null) return null;
+  const snapshot = calculateCreditCardBillingCycle(todayIsoLocal(), { statementCloseDay, paymentDueDay });
+  return (
+    <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-1">
+      <div className="flex justify-between"><span>Statement closes</span><span className="font-medium text-foreground">{formatDate(snapshot.openCycleEnd)}</span></div>
+      {snapshot.openCycleDueDate ? (
+        <div className="flex justify-between"><span>Payment due</span><span className="font-medium text-foreground">{formatDate(snapshot.openCycleDueDate)}</span></div>
+      ) : null}
+      <div className="flex justify-between"><span>Next statement closes</span><span>{formatDate(snapshot.nextCycleEnd)}</span></div>
+      {snapshot.nextCycleDueDate ? (
+        <div className="flex justify-between"><span>Next payment due</span><span>{formatDate(snapshot.nextCycleDueDate)}</span></div>
+      ) : null}
+    </div>
+  );
 }
 
 function useMoneyField(initial = "", currency = "INR") {
@@ -244,20 +268,11 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
         render={({ field }) => (
           <FormField
             id="cc-statement-day"
-            label="Statement closes on"
+            label="Statement closes"
             error={errors.statementCloseDay?.message}
-            hint={field.value ? `Repeats on the ${ordinalSuffix(field.value)} of every month` : "Day of month your billing cycle closes. Leave blank if unknown."}
+            hint={field.value ? `Every month on the ${dayOfMonthLabel(field.value)}` : "Leave unset if you don't know your billing cycle yet."}
           >
-            <Input
-              id="cc-statement-day"
-              inputMode="numeric"
-              placeholder="Eg: 21"
-              value={field.value != null ? String(field.value) : ""}
-              onChange={(e) => {
-                const raw = e.target.value.replace(/[^0-9]/g, "");
-                field.onChange(raw === "" ? null : Number(raw));
-              }}
-            />
+            <DayOfMonthSelect id="cc-statement-day" value={field.value ?? null} onChange={field.onChange} placeholder="Not set" />
           </FormField>
         )}
       />
@@ -267,21 +282,25 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
         render={({ field }) => (
           <FormField
             id="cc-payment-day"
-            label="Payment due on"
+            label="Payment due"
             error={errors.paymentDueDay?.message}
-            hint={field.value ? `Repeats on the ${ordinalSuffix(field.value)} of every month` : "Day of month your payment is due. Leave blank if unknown."}
+            hint={field.value ? `Every month on the ${dayOfMonthLabel(field.value)}` : "Leave unset if you don't know your payment due date yet."}
           >
-            <Input
-              id="cc-payment-day"
-              inputMode="numeric"
-              placeholder="Eg: 2"
-              value={field.value != null ? String(field.value) : ""}
-              onChange={(e) => {
-                const raw = e.target.value.replace(/[^0-9]/g, "");
-                field.onChange(raw === "" ? null : Number(raw));
-              }}
-            />
+            <DayOfMonthSelect id="cc-payment-day" value={field.value ?? null} onChange={field.onChange} placeholder="Not set" />
           </FormField>
+        )}
+      />
+      <Controller
+        control={control}
+        name="statementCloseDay"
+        render={({ field: stmtField }) => (
+          <Controller
+            control={control}
+            name="paymentDueDay"
+            render={({ field: payField }) => (
+              <BillingCyclePreview statementCloseDay={stmtField.value ?? null} paymentDueDay={payField.value ?? null} />
+            )}
+          />
         )}
       />
       <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { MoreHorizontal, Landmark, Banknote, CreditCard, TrendingUp, AlertTriangle } from "lucide-react";
-import { Money as DomainMoney, resolveRecurringDay } from "@spencare/domain-core";
+import { Money as DomainMoney, calculateCreditCardBillingCycle } from "@spencare/domain-core";
 import type { AccountRow } from "@spencare/domain-application";
 import type { CardReserveDetail } from "@spencare/domain-infra";
 import { Card } from "@/components/ui/card";
@@ -151,35 +151,37 @@ export function AccountCard({
   );
 }
 
-function resolveDayForMonth(dayRule: number): string {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth() + 1;
-  return resolveRecurringDay({ year, month, paymentDayRule: dayRule });
+function todayIsoLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function daysFromToday(dateIso: string): number {
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const target = new Date(dateIso + "T00:00:00Z");
-  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
-}
-
+/**
+ * Sourced from the same canonical calculateCreditCardBillingCycle every
+ * other surface (Upcoming, notifications, Spensa) uses, never a locally
+ * re-derived day/shift rule.
+ */
 function CreditCardBillingRow({ account }: { account: AccountRow }) {
   const stmtDay = account.statement_close_day;
   const payDay = account.payment_due_day;
   if (stmtDay == null && payDay == null) return null;
 
+  const snapshot = calculateCreditCardBillingCycle(todayIsoLocal(), {
+    statementCloseDay: stmtDay ?? 1,
+    paymentDueDay: payDay,
+  });
+
   const parts: string[] = [];
   if (stmtDay != null) {
-    const stmtDate = resolveDayForMonth(stmtDay);
-    const d = daysFromToday(stmtDate);
+    const d = snapshot.daysUntilOpenCycleClose;
     if (d === 0) parts.push("Statement today");
     else if (d > 0) parts.push(`Statement in ${d}d`);
   }
-  if (payDay != null) {
-    const payDate = resolveDayForMonth(payDay);
-    const d = daysFromToday(payDate);
+  if (payDay != null && snapshot.daysUntilMostRecentDue != null) {
+    // The most recently closed statement's due date -- what's actually
+    // payable right now, correctly reflecting the statement-close shift
+    // rule (and able to show overdue, unlike a naive day-of-month read).
+    const d = snapshot.daysUntilMostRecentDue;
     if (d === 0) parts.push("Payment due today");
     else if (d > 0) parts.push(`Payment due in ${d}d`);
     else parts.push(`Payment due ${Math.abs(d)}d ago`);

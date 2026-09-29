@@ -44,9 +44,43 @@ export interface CreditCardStatementSummary {
 }
 
 /**
- * Computes the current statement period for a credit card account using
- * statement_close_day, then sums expenses in that period. Returns null when
- * the account has no statement_close_day set.
+ * Sums expense transactions on a credit card account within an arbitrary,
+ * caller-supplied date range (inclusive both ends, matching the period
+ * convention documented on getCurrentStatementPeriod). Used both for "the
+ * currently open cycle's balance so far" (getCreditCardStatementSummary)
+ * and for a specific, already-closed historical cycle's frozen balance
+ * (getCreditCardBillingStatus in creditCardPayment.ts) -- the single
+ * canonical query so both never drift apart.
+ */
+export async function computeStatementBalanceForPeriod(
+  ctx: AuthContext,
+  accountId: string,
+  periodStart: string,
+  periodEnd: string,
+): Promise<number> {
+  const { data: txns } = await ctx.supabase
+    .from("transactions")
+    .select("amount_minor")
+    .eq("user_id", ctx.userId)
+    .eq("account_id", accountId)
+    .eq("type", "expense")
+    .gte("occurred_at", periodStart + "T00:00:00Z")
+    .lte("occurred_at", periodEnd + "T23:59:59Z")
+    .is("deleted_at", null);
+
+  return (txns ?? []).reduce((sum, t) => sum + Math.abs(t.amount_minor ?? 0), 0);
+}
+
+/**
+ * Computes the current (open, not-yet-closed) statement period for a
+ * credit card account using statement_close_day, then sums expenses in
+ * that period so far. Returns null when the account has no
+ * statement_close_day set.
+ *
+ * This is deliberately the OPEN cycle's running total, not a frozen
+ * "statement balance" for a closed cycle -- see getCreditCardBillingStatus
+ * in creditCardPayment.ts for the most-recently-closed statement's frozen
+ * balance plus payment status.
  */
 export async function getCreditCardStatementSummary(
   ctx: AuthContext,
@@ -62,20 +96,7 @@ export async function getCreditCardStatementSummary(
   const { periodStart, statementDate } = getCurrentStatementPeriod(todayIso, stmtDay);
   const periodEnd = statementDate;
 
-  const { data: txns } = await ctx.supabase
-    .from("transactions")
-    .select("amount_minor")
-    .eq("user_id", ctx.userId)
-    .eq("account_id", accountId)
-    .eq("type", "expense")
-    .gte("occurred_at", periodStart + "T00:00:00Z")
-    .lte("occurred_at", periodEnd + "T23:59:59Z")
-    .is("deleted_at", null);
-
-  const statementBalanceMinor = (txns ?? []).reduce(
-    (sum, t) => sum + Math.abs(t.amount_minor ?? 0),
-    0,
-  );
+  const statementBalanceMinor = await computeStatementBalanceForPeriod(ctx, accountId, periodStart, periodEnd);
 
   const payDay: number | null = account.payment_due_day ?? null;
   const paymentDueDate = payDay != null ? resolvePaymentDueDate(statementDate, payDay) : null;

@@ -1,5 +1,6 @@
-import { getProfile, listAccounts, listGoals, listCardPaymentSources, listUpcoming, listAllLoans, type AuthContext, getProfileForDisplay,
+import { getProfile, listAccounts, listGoals, listCardPaymentSources, listUpcoming, listAllLoans, getCreditCardBillingStatus, type AuthContext, getProfileForDisplay,
 } from "@spencare/domain-application";
+import type { CreditCardBillingStatusView } from "./account-details-sheet";
 import { deriveCardPaymentReserveState } from "@spencare/domain-infra";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
@@ -36,6 +37,29 @@ export default async function AccountsSettingsPage() {
   // Per bank/cash account: how much is reserved for card payments and goals.
   const cardReserveState = deriveCardPaymentReserveState(accounts, paymentSources);
   const cardReservePerAccount = cardReserveState.perPaymentAccount;
+
+  // Per credit card: the canonical billing status (statement balance,
+  // payment status) -- same source every other surface uses. Fetched once
+  // here (typically a handful of cards per user, never all transactions)
+  // rather than each UI component re-deriving its own view of "what's owed."
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const creditCardAccounts = accounts.filter((a) => a.type === "credit_card" && !a.is_archived);
+  const billingStatusEntries = await Promise.all(
+    creditCardAccounts.map(async (a) => {
+      const status = await getCreditCardBillingStatus(ctx, a, todayIso);
+      return [a.id, status] as const;
+    }),
+  );
+  const billingStatusByCardId: Record<string, CreditCardBillingStatusView> = {};
+  for (const [id, status] of billingStatusEntries) {
+    if (status) {
+      billingStatusByCardId[id] = {
+        statementBalanceMinor: status.statementBalanceMinor,
+        paymentStatus: status.paymentStatus,
+        obligationStatus: status.obligation.status,
+      };
+    }
+  }
 
   // For credit card display: which bank account pays for which credit card.
   const accountById = new Map(accounts.map((a) => [a.id, a]));
@@ -99,6 +123,7 @@ export default async function AccountsSettingsPage() {
           loanReservePerAccount={loanReservePerAccount}
           paymentAccountNameByCardId={paymentAccountNameByCardId}
           paymentSources={paymentSources}
+          billingStatusByCardId={billingStatusByCardId}
         />
       </SettingsShell>
     </AppShell>

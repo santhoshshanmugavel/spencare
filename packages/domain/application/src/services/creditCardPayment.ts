@@ -10,6 +10,13 @@
  *   and type = 'transfer'. That row is the payment candidate.
  */
 
+import {
+  calculateCreditCardBillingCycle,
+  deriveCreditCardPaymentStatus,
+  type CreditCardBillingSnapshot,
+  type CreditCardPaymentStatus,
+} from "@spencare/domain-core";
+import { computeStatementBalanceForPeriod } from "../queries/accounts.js";
 import type { AuthContext } from "../types.js";
 
 export type ObligationStatus = "unpaid" | "partial" | "paid";
@@ -363,4 +370,69 @@ export async function matchCreditCardPayment(
   const sole = unapplied[0];
   if (!sole) return { outcome: "unmatched", reason: "No candidates after filter." };
   return applyPaymentToObligation(ctx, obligationId, sole.id);
+}
+
+export interface CreditCardBillingStatus {
+  snapshot: CreditCardBillingSnapshot;
+  /** The most recently closed statement's frozen balance -- computed from actual transactions in that exact historical period, never the account's live running balance. */
+  statementBalanceMinor: number;
+  obligation: CreditCardObligation;
+  paymentStatus: CreditCardPaymentStatus;
+}
+
+/**
+ * THE canonical, single source of truth for "what does this credit card
+ * owe right now." Computes the most recently closed statement's frozen
+ * balance directly from that period's actual transactions (never the
+ * account's live credit_used_minor, which keeps growing as the next,
+ * still-open cycle accumulates spending), upserts its obligation row, and
+ * derives a deterministic payment status.
+ *
+ * Unlike the notification cron's obligation upsert (which only freezes a
+ * cycle's balance if the cron happens to run while that cycle is still
+ * "current" per getCreditCardStatementSummary), this always looks
+ * backward to find the most recently closed cycle directly -- correct
+ * regardless of when or how often it is called. Upcoming, the account UI,
+ * and the Spensa/MCP billing tool all call this rather than assembling
+ * their own view of "amount owed."
+ *
+ * Returns null when the account has no statement_close_day configured
+ * (no billing cycle concept exists yet for this card).
+ */
+export async function getCreditCardBillingStatus(
+  ctx: AuthContext,
+  account: { id: string; statement_close_day: number | null; payment_due_day: number | null },
+  todayIso: string,
+): Promise<CreditCardBillingStatus | null> {
+  if (account.statement_close_day == null) return null;
+
+  const snapshot = calculateCreditCardBillingCycle(todayIso, {
+    statementCloseDay: account.statement_close_day,
+    paymentDueDay: account.payment_due_day,
+  });
+
+  const statementBalanceMinor = await computeStatementBalanceForPeriod(
+    ctx,
+    account.id,
+    snapshot.mostRecentClosedPeriodStart,
+    snapshot.mostRecentClosedStatementDate,
+  );
+
+  const obligation = await upsertCreditCardObligation(ctx, {
+    accountId: account.id,
+    statementDate: snapshot.mostRecentClosedStatementDate,
+    periodStart: snapshot.mostRecentClosedPeriodStart,
+    periodEnd: snapshot.mostRecentClosedStatementDate,
+    statementBalanceMinor,
+    dueDate: snapshot.mostRecentClosedDueDate,
+  });
+
+  const paymentStatus = deriveCreditCardPaymentStatus({
+    todayIso,
+    dueDate: snapshot.mostRecentClosedDueDate,
+    obligationStatus: obligation.status,
+    statementBalanceMinor: obligation.statementBalanceMinor,
+  });
+
+  return { snapshot, statementBalanceMinor, obligation, paymentStatus };
 }

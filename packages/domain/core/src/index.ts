@@ -146,8 +146,13 @@ export {
   resolvePaymentDueDate,
   getCreditCardBillingCycleForMonth,
   getCurrentStatementPeriod,
+  getMostRecentlyClosedStatementPeriod,
+  calculateCreditCardBillingCycle,
+  deriveCreditCardPaymentStatus,
   type CreditCardBillingConfig,
   type CreditCardBillingCycle,
+  type CreditCardBillingSnapshot,
+  type CreditCardPaymentStatus,
 } from "./creditCardBilling.js";
 
 export {
