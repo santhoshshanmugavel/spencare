@@ -6,6 +6,10 @@ import {
   getMostRecentlyClosedStatementPeriod,
   calculateCreditCardBillingCycle,
   deriveCreditCardPaymentStatus,
+  calculateCreditCardBillCycle,
+  getCurrentBillCycle,
+  isTransactionInBillCycle,
+  billingConfigFromAccount,
 } from "./creditCardBilling.js";
 
 describe("resolvePaymentDueDate", () => {
@@ -276,5 +280,215 @@ describe("deriveCreditCardPaymentStatus", () => {
 
   it("treats a partial payment as not-yet-paid (still overdue/due-soon/etc as applicable)", () => {
     expect(deriveCreditCardPaymentStatus({ ...base, obligationStatus: "partial", todayIso: "2026-10-06" })).toBe("overdue");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Bill-due-day-only model (Slice A)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("getCurrentBillCycle", () => {
+  // The canonical product example from the Slice A spec.
+  it("mid-cycle: today = 2026-10-03, billDueDay=5 → cycle is (05 Sep, 05 Oct]", () => {
+    const c = getCurrentBillCycle("2026-10-03", 5);
+    expect(c).toEqual({ previousCycleEnd: "2026-09-05", currentCycleEnd: "2026-10-05", dueDate: "2026-10-05" });
+  });
+
+  it("on the bill due day itself: today = 2026-10-05, billDueDay=5 → cycle still ends 2026-10-05 (inclusive-right)", () => {
+    const c = getCurrentBillCycle("2026-10-05", 5);
+    expect(c.currentCycleEnd).toBe("2026-10-05");
+    expect(c.previousCycleEnd).toBe("2026-09-05");
+  });
+
+  it("day after bill due day: today = 2026-10-06, billDueDay=5 → cycle rolls forward to 2026-11-05", () => {
+    const c = getCurrentBillCycle("2026-10-06", 5);
+    expect(c.currentCycleEnd).toBe("2026-11-05");
+    expect(c.previousCycleEnd).toBe("2026-10-05");
+  });
+
+  it("start-of-month: today = 2026-10-01, billDueDay=5 → cycle ends 2026-10-05", () => {
+    expect(getCurrentBillCycle("2026-10-01", 5).currentCycleEnd).toBe("2026-10-05");
+  });
+
+  it("billDueDay=1 and today is day 1 → cycle ends today", () => {
+    const c = getCurrentBillCycle("2026-10-01", 1);
+    expect(c.currentCycleEnd).toBe("2026-10-01");
+    expect(c.previousCycleEnd).toBe("2026-09-01");
+  });
+
+  it("billDueDay=1 and today is day 2 → cycle rolls to next month's 1st", () => {
+    const c = getCurrentBillCycle("2026-10-02", 1);
+    expect(c.currentCycleEnd).toBe("2026-11-01");
+    expect(c.previousCycleEnd).toBe("2026-10-01");
+  });
+
+  // Month-end clamping — the point of using resolveRecurringDay for all day math.
+  it("billDueDay=31 in February (non-leap) clamps to Feb 28", () => {
+    const c = getCurrentBillCycle("2026-02-15", 31);
+    expect(c.currentCycleEnd).toBe("2026-02-28");
+    expect(c.previousCycleEnd).toBe("2026-01-31");
+  });
+
+  it("billDueDay=31 in February (leap year) clamps to Feb 29", () => {
+    const c = getCurrentBillCycle("2028-02-15", 31);
+    expect(c.currentCycleEnd).toBe("2028-02-29");
+    expect(c.previousCycleEnd).toBe("2028-01-31");
+  });
+
+  it("billDueDay=30 in February (non-leap) clamps to Feb 28", () => {
+    const c = getCurrentBillCycle("2026-02-15", 30);
+    expect(c.currentCycleEnd).toBe("2026-02-28");
+  });
+
+  it("billDueDay=30 in February (leap) clamps to Feb 29", () => {
+    const c = getCurrentBillCycle("2028-02-15", 30);
+    expect(c.currentCycleEnd).toBe("2028-02-29");
+  });
+
+  it("billDueDay=29 in February (non-leap) clamps to Feb 28", () => {
+    const c = getCurrentBillCycle("2026-02-15", 29);
+    expect(c.currentCycleEnd).toBe("2026-02-28");
+  });
+
+  it("billDueDay=29 in February (leap) is literal Feb 29", () => {
+    const c = getCurrentBillCycle("2028-02-15", 29);
+    expect(c.currentCycleEnd).toBe("2028-02-29");
+  });
+
+  it("billDueDay=32 (last-day sentinel) resolves to each month's actual last day", () => {
+    expect(getCurrentBillCycle("2026-10-15", 32).currentCycleEnd).toBe("2026-10-31");
+    expect(getCurrentBillCycle("2026-11-15", 32).currentCycleEnd).toBe("2026-11-30");
+    expect(getCurrentBillCycle("2026-02-15", 32).currentCycleEnd).toBe("2026-02-28");
+    expect(getCurrentBillCycle("2028-02-15", 32).currentCycleEnd).toBe("2028-02-29");
+  });
+
+  // Year boundaries.
+  it("December → January rollover: today = 2026-12-20, billDueDay=5 → cycle ends 2027-01-05", () => {
+    const c = getCurrentBillCycle("2026-12-20", 5);
+    expect(c.currentCycleEnd).toBe("2027-01-05");
+    expect(c.previousCycleEnd).toBe("2026-12-05");
+  });
+
+  it("January 1 with billDueDay=5 → cycle ends 2027-01-05, previous was 2026-12-05", () => {
+    const c = getCurrentBillCycle("2027-01-01", 5);
+    expect(c.currentCycleEnd).toBe("2027-01-05");
+    expect(c.previousCycleEnd).toBe("2026-12-05");
+  });
+
+  it("January 6 with billDueDay=5 → cycle rolls to 2027-02-05, previous is 2027-01-05", () => {
+    const c = getCurrentBillCycle("2027-01-06", 5);
+    expect(c.currentCycleEnd).toBe("2027-02-05");
+    expect(c.previousCycleEnd).toBe("2027-01-05");
+  });
+
+  it("January with billDueDay=31 → previous cycle end clamps to 2026-12-31, this cycle to 2027-01-31", () => {
+    const c = getCurrentBillCycle("2027-01-15", 31);
+    expect(c.currentCycleEnd).toBe("2027-01-31");
+    expect(c.previousCycleEnd).toBe("2026-12-31");
+  });
+
+  it("March with billDueDay=31 → previous end clamps to Feb 28 (non-leap), March to literal 31", () => {
+    const c = getCurrentBillCycle("2026-03-15", 31);
+    expect(c.currentCycleEnd).toBe("2026-03-31");
+    expect(c.previousCycleEnd).toBe("2026-02-28");
+  });
+
+  it("March 2028 with billDueDay=31 → previous end clamps to Feb 29 (leap)", () => {
+    const c = getCurrentBillCycle("2028-03-15", 31);
+    expect(c.currentCycleEnd).toBe("2028-03-31");
+    expect(c.previousCycleEnd).toBe("2028-02-29");
+  });
+});
+
+describe("calculateCreditCardBillCycle (snapshot)", () => {
+  // Mirrors the Slice A spec example end-to-end.
+  it("spec example: today = 2026-10-03, billDueDay = 5", () => {
+    const snap = calculateCreditCardBillCycle("2026-10-03", { billDueDay: 5 });
+    expect(snap).toEqual({
+      previousCycleStart: "2026-08-05",
+      previousCycleEnd: "2026-09-05",
+      previousDueDate: "2026-09-05",
+      currentCycleStart: "2026-09-05",
+      currentCycleEnd: "2026-10-05",
+      currentDueDate: "2026-10-05",
+      nextCycleStart: "2026-10-05",
+      nextCycleEnd: "2026-11-05",
+      nextDueDate: "2026-11-05",
+      daysUntilCurrentDue: 2,
+    });
+  });
+
+  it("daysUntilCurrentDue is 0 on the due day itself", () => {
+    const snap = calculateCreditCardBillCycle("2026-10-05", { billDueDay: 5 });
+    expect(snap.currentCycleEnd).toBe("2026-10-05");
+    expect(snap.daysUntilCurrentDue).toBe(0);
+  });
+
+  it("Dec→Jan rollover is reflected across all three cycle slots", () => {
+    const snap = calculateCreditCardBillCycle("2026-12-20", { billDueDay: 5 });
+    expect(snap.previousCycleStart).toBe("2026-11-05");
+    expect(snap.previousCycleEnd).toBe("2026-12-05");
+    expect(snap.currentCycleStart).toBe("2026-12-05");
+    expect(snap.currentCycleEnd).toBe("2027-01-05");
+    expect(snap.nextCycleStart).toBe("2027-01-05");
+    expect(snap.nextCycleEnd).toBe("2027-02-05");
+  });
+
+  it("month-end clamping propagates through previous/current/next for billDueDay=31", () => {
+    // Today mid-March, billDue=31 → previous end was Feb 28 (clamped), current end is Mar 31, next end is Apr 30 (clamped).
+    const snap = calculateCreditCardBillCycle("2026-03-15", { billDueDay: 31 });
+    expect(snap.previousCycleEnd).toBe("2026-02-28");
+    expect(snap.currentCycleEnd).toBe("2026-03-31");
+    expect(snap.nextCycleEnd).toBe("2026-04-30");
+  });
+
+  it("billDueDay=1 edge: all three cycles end on day 1 of their respective months", () => {
+    const snap = calculateCreditCardBillCycle("2026-10-15", { billDueDay: 1 });
+    expect(snap.previousCycleEnd).toBe("2026-10-01");
+    expect(snap.currentCycleEnd).toBe("2026-11-01");
+    expect(snap.nextCycleEnd).toBe("2026-12-01");
+  });
+});
+
+describe("isTransactionInBillCycle (boundary rule: inclusive-right)", () => {
+  // Cycle: (prevEnd = 2026-09-05, cycleEnd = 2026-10-05]
+  const prev = "2026-09-05";
+  const end = "2026-10-05";
+
+  it("transaction STRICTLY AFTER prevEnd belongs to this cycle", () => {
+    expect(isTransactionInBillCycle("2026-09-06", prev, end)).toBe(true);
+  });
+
+  it("transaction exactly on prevEnd does NOT belong to this cycle (it was last cycle's due day)", () => {
+    expect(isTransactionInBillCycle("2026-09-05", prev, end)).toBe(false);
+  });
+
+  it("transaction exactly on cycleEnd DOES belong to this cycle (inclusive-right)", () => {
+    // Documents the intentional deviation from the spec's cycleStart<=tx<cycleEnd
+    // suggestion -- see the module header for why we keep inclusive-right.
+    expect(isTransactionInBillCycle("2026-10-05", prev, end)).toBe(true);
+  });
+
+  it("transaction after cycleEnd does NOT belong to this cycle", () => {
+    expect(isTransactionInBillCycle("2026-10-06", prev, end)).toBe(false);
+  });
+
+  it("transaction mid-cycle belongs", () => {
+    expect(isTransactionInBillCycle("2026-09-20", prev, end)).toBe(true);
+  });
+});
+
+describe("billingConfigFromAccount", () => {
+  it("returns null when the card has no payment_due_day", () => {
+    expect(billingConfigFromAccount({ payment_due_day: null })).toBeNull();
+    expect(billingConfigFromAccount({ payment_due_day: undefined })).toBeNull();
+  });
+
+  it("returns the single billDueDay when configured", () => {
+    expect(billingConfigFromAccount({ payment_due_day: 5 })).toEqual({ billDueDay: 5 });
+  });
+
+  it("passes through the last-day sentinel (32) without translating", () => {
+    expect(billingConfigFromAccount({ payment_due_day: 32 })).toEqual({ billDueDay: 32 });
   });
 });
