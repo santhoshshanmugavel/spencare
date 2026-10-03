@@ -1,4 +1,4 @@
-import { addMonthsToPeriodStart, lastDayOfMonth } from "@spencare/domain-core";
+import { addMonthsToPeriodStart, lastDayOfMonth, type RecurrenceInterval } from "@spencare/domain-core";
 import type { TypedSupabaseClient } from "./supabaseClients.js";
 
 /**
@@ -273,4 +273,93 @@ export async function getCategorySpending(
     totals[categoryId] = (totals[categoryId] ?? 0) + (row.amount_minor as number);
   }
   return totals;
+}
+
+/**
+ * Row-level counterpart to `getCategorySpending`. Returns the raw
+ * expense transactions in a period/category instead of pre-summing
+ * them, so the application layer can apply the commitment-aware
+ * calculation (`calculateCommitmentAwareSpend`) that replaces a
+ * matched quarterly transaction with its monthly share allocation
+ * rather than counting the full lump as this month's spend.
+ *
+ * Kept alongside `getCategorySpending` rather than replacing it:
+ * other callers that genuinely want "pure actual spending" (dashboard
+ * cash-flow aggregates, category donut charts) must stay unchanged.
+ */
+export interface CategoryExpenseTransactionRow {
+  id: string;
+  category_id: string;
+  amount_minor: number;
+}
+
+export async function listCategoryExpenseTransactions(
+  client: TypedSupabaseClient,
+  userId: string,
+  options: { categoryIds: string[]; periodStart: string; periodEnd: string },
+): Promise<CategoryExpenseTransactionRow[]> {
+  if (options.categoryIds.length === 0) return [];
+  const { data, error } = await client
+    .from("transactions")
+    .select("id, category_id, amount_minor")
+    .eq("user_id", userId)
+    .eq("type", "expense")
+    .in("category_id", options.categoryIds)
+    .gte("occurred_at", options.periodStart)
+    .lte("occurred_at", options.periodEnd)
+    .is("deleted_at", null);
+  if (error) throw error;
+  return (data ?? []) as CategoryExpenseTransactionRow[];
+}
+
+/**
+ * Resolves which of the supplied transaction ids are the realization
+ * of a planned-commitment occurrence, and returns the parent
+ * commitment's amount and payment frequency alongside each. The
+ * commitment-aware budget calculator uses the frequency to decide
+ * whether the budget contribution is a smoothed monthly share (quarterly
+ * and longer) or the raw transaction amount (monthly / sub-monthly /
+ * one-time).
+ */
+export interface MatchedCommitmentForTransactionRow {
+  matched_transaction_id: string;
+  commitment_id: string;
+  amount_minor: number;
+  payment_frequency: RecurrenceInterval | string;
+}
+
+export async function listCommitmentsMatchedToTransactions(
+  client: TypedSupabaseClient,
+  userId: string,
+  transactionIds: string[],
+): Promise<MatchedCommitmentForTransactionRow[]> {
+  if (transactionIds.length === 0) return [];
+  const { data, error } = await client
+    .from("planned_commitment_occurrences")
+    .select(
+      "matched_transaction_id, commitment_id, planned_commitments(amount_minor, payment_frequency, deleted_at)",
+    )
+    .eq("user_id", userId)
+    .in("matched_transaction_id", transactionIds);
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{
+    matched_transaction_id: string | null;
+    commitment_id: string;
+    planned_commitments:
+      | { amount_minor: number; payment_frequency: string; deleted_at: string | null }
+      | null;
+  }>;
+  return rows
+    .filter(
+      (r) =>
+        r.matched_transaction_id != null &&
+        r.planned_commitments != null &&
+        r.planned_commitments.deleted_at == null,
+    )
+    .map((r) => ({
+      matched_transaction_id: r.matched_transaction_id as string,
+      commitment_id: r.commitment_id,
+      amount_minor: r.planned_commitments!.amount_minor,
+      payment_frequency: r.planned_commitments!.payment_frequency,
+    }));
 }

@@ -140,6 +140,20 @@ export {
   type PaymentFrequency,
 } from "./commitments.js";
 
+export {
+  monthsPerPaymentInterval,
+  allocateMinorAcrossMonths,
+  monthIndexInCycle,
+  commitmentMonthlyBudgetShareMinor,
+  monthsInPeriod,
+  commitmentBudgetContributionForPeriodMinor,
+  calculateCommitmentAwareSpend,
+  isCommitmentCadenceBudgetSmoothed,
+  type CommitmentLike,
+  type CommitmentAwareSpendingInput,
+  type CommitmentAwareSpendingResult,
+} from "./commitmentBudgets.js";
+
 export { getTransactionDisplay, type TransactionDisplayFields } from "./transactionDisplay.js";
 
 export {
