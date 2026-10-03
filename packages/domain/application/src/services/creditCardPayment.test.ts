@@ -359,38 +359,61 @@ function makeBillingStatusCtx(input: {
   } as Parameters<typeof getCreditCardBillingStatus>[0];
 }
 
-describe("getCreditCardBillingStatus -- acceptance scenario (section 23)", () => {
-  it("returns null when the account has no statement_close_day configured", async () => {
+describe("getCreditCardBillingStatus -- mandatory acceptance scenario (Slice B single-date model)", () => {
+  // Spec example: card with billDueDay=5. Four transactions fall into the
+  // Oct 5 bill cycle [09-05, 10-05); a 5th on 06 Oct belongs to the NEXT
+  // cycle (never to the Oct bill). statement_close_day is deprecated: the
+  // service reads only payment_due_day as the single bill due day.
+
+  it("returns null when the card has no bill due day (payment_due_day) configured", async () => {
     const ctx = makeBillingStatusCtx({ transactions: [] });
     const result = await getCreditCardBillingStatus(
       ctx,
-      { id: "acct-1", statement_close_day: null, payment_due_day: 5 },
-      "2026-09-10",
+      { id: "acct-1", statement_close_day: 20, payment_due_day: null },
+      "2026-10-10",
     );
     expect(result).toBeNull();
   });
 
-  it("freezes the closed statement's balance from its own transactions, distinct from later spending in the next cycle", async () => {
-    // Card: close=20, due=5. Query as of Sep 25 -- the Aug21-Sep20 statement
-    // has closed (₹10k + ₹10k = ₹20k). A further ₹5k on Sep 25 belongs to
-    // the NEXT (still open) cycle and must not appear in this balance.
+  it("ignores a stale statement_close_day: the single-date model derives everything from payment_due_day only", async () => {
+    const ctx = makeBillingStatusCtx({ transactions: [] });
+    const result = await getCreditCardBillingStatus(
+      ctx,
+      { id: "acct-1", statement_close_day: 20, payment_due_day: 5 },
+      "2026-10-10",
+    );
+    // The snapshot's cycle boundaries are driven by billDueDay=5 (not the
+    // ignored statement_close_day=20), so the just-closed cycle ends 10-05.
+    expect(result).not.toBeNull();
+    expect(result!.snapshot.mostRecentClosedCycle.cycleEnd).toBe("2026-10-05");
+  });
+
+  it("freezes the just-closed bill from its own cycle's transactions (acceptance example: four in-cycle txns = ₹60k)", async () => {
+    // Cycle for the 05 Oct bill: [05 Sep, 05 Oct). The four in-cycle
+    // transactions sum to ₹60k. The 06 Oct ₹5k txn belongs to the NEXT
+    // cycle and is covered by the boundary tests in creditCardBilling.test
+    // (the mock here doesn't actually filter by date, so only the in-cycle
+    // txns are fed in; see makeBillingStatusCtx's note on the fake chain).
     const ctx = makeBillingStatusCtx({
       transactions: [
-        { amount_minor: 1000000, occurred_at: "2026-09-10T00:00:00Z" },
-        { amount_minor: 1000000, occurred_at: "2026-09-18T00:00:00Z" },
+        { amount_minor: 2000000, occurred_at: "2026-09-10T00:00:00Z" }, // ₹20k
+        { amount_minor: 1500000, occurred_at: "2026-09-18T00:00:00Z" }, // ₹15k
+        { amount_minor: 1000000, occurred_at: "2026-09-25T00:00:00Z" }, // ₹10k
+        { amount_minor: 1500000, occurred_at: "2026-10-02T00:00:00Z" }, // ₹15k
       ],
     });
     const result = await getCreditCardBillingStatus(
       ctx,
-      { id: "acct-1", statement_close_day: 20, payment_due_day: 5 },
-      "2026-09-25",
+      { id: "acct-1", statement_close_day: null, payment_due_day: 5 },
+      "2026-10-07", // two days after the Oct 5 bill closed
     );
     expect(result).not.toBeNull();
-    expect(result!.statementBalanceMinor).toBe(2000000); // ₹20,000
-    expect(result!.snapshot.mostRecentClosedStatementDate).toBe("2026-09-20");
-    expect(result!.snapshot.mostRecentClosedDueDate).toBe("2026-10-05");
-    expect(result!.obligation.remainingMinor).toBe(2000000);
-    expect(result!.paymentStatus).toBe("statement_closed"); // due Oct 5, 10 days out from Sep 25
+    expect(result!.statementBalanceMinor).toBe(6000000); // ₹60,000
+    expect(result!.snapshot.mostRecentClosedCycle.dueDate).toBe("2026-10-05");
+    expect(result!.snapshot.openCycle.cycleStart).toBe("2026-10-05");
+    expect(result!.snapshot.openCycle.cycleEnd).toBe("2026-11-05");
+    expect(result!.obligation.remainingMinor).toBe(6000000);
+    expect(result!.paymentStatus).toBe("overdue"); // today > bill due date → overdue
   });
 
   it("marks the obligation paid once a matching payment has been applied, and payment status follows suit", async () => {
@@ -407,22 +430,22 @@ describe("getCreditCardBillingStatus -- acceptance scenario (section 23)", () =>
     });
     const result = await getCreditCardBillingStatus(
       ctx,
-      { id: "acct-1", statement_close_day: 20, payment_due_day: 5 },
-      "2026-09-25",
+      { id: "acct-1", statement_close_day: null, payment_due_day: 5 },
+      "2026-10-07",
     );
     expect(result!.obligation.status).toBe("paid");
     expect(result!.obligation.remainingMinor).toBe(0);
     expect(result!.paymentStatus).toBe("paid");
   });
 
-  it("reports overdue once today is past the due date and the statement remains unpaid", async () => {
+  it("reports overdue once today is past the bill due date and the bill remains unpaid", async () => {
     const ctx = makeBillingStatusCtx({
       transactions: [{ amount_minor: 2000000, occurred_at: "2026-09-15T00:00:00Z" }],
     });
     const result = await getCreditCardBillingStatus(
       ctx,
-      { id: "acct-1", statement_close_day: 20, payment_due_day: 5 },
-      "2026-10-10", // 5 days after the Oct 5 due date
+      { id: "acct-1", statement_close_day: null, payment_due_day: 5 },
+      "2026-10-10", // 5 days after the 05 Oct bill
     );
     expect(result!.paymentStatus).toBe("overdue");
   });
@@ -431,7 +454,7 @@ describe("getCreditCardBillingStatus -- acceptance scenario (section 23)", () =>
     const ctx = makeBillingStatusCtx({ transactions: [] });
     const result = await getCreditCardBillingStatus(
       ctx,
-      { id: "acct-1", statement_close_day: 20, payment_due_day: 5 },
+      { id: "acct-1", statement_close_day: null, payment_due_day: 5 },
       "2026-09-10",
     );
     expect(result!.statementBalanceMinor).toBe(0);

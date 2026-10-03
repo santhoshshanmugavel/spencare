@@ -1,6 +1,12 @@
 "use client";
 
-import { calculateCreditCardBillingCycle, Money as DomainMoney, type CreditCardPaymentStatus } from "@spencare/domain-core";
+import { useState } from "react";
+import {
+  calculateCreditCardBillCycle,
+  billingConfigFromAccount,
+  Money as DomainMoney,
+  type CreditCardPaymentStatus,
+} from "@spencare/domain-core";
 import type { AccountRow } from "@spencare/domain-application";
 import type { CardReserveDetail } from "@spencare/domain-infra";
 import {
@@ -9,9 +15,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { Money } from "@/components/spencare/money";
 import { Separator } from "@/components/ui/separator";
-import { Landmark, Banknote, CreditCard } from "lucide-react";
+import { Landmark, Banknote, CreditCard, CircleCheck } from "lucide-react";
+import { CreditCardPaymentDialog } from "@/app/cash-flow/upcoming/credit-card-actions";
 
 const CURRENCY = "INR";
 
@@ -21,12 +29,20 @@ function todayIsoLocal(): string {
 }
 
 const PAYMENT_STATUS_LABELS: Record<CreditCardPaymentStatus, string> = {
-  statement_closed: "Statement closed",
+  statement_closed: "Billed",
   due_soon: "Due soon",
   due_today: "Due today",
   overdue: "Overdue",
   paid: "Paid",
 };
+
+function dueDateHint(daysUntilDue: number): string {
+  if (daysUntilDue === 0) return "Due today";
+  if (daysUntilDue === 1) return "Due tomorrow";
+  if (daysUntilDue > 0) return `Due in ${daysUntilDue} days`;
+  if (daysUntilDue === -1) return "Overdue by 1 day";
+  return `Overdue by ${Math.abs(daysUntilDue)} days`;
+}
 
 function formatDate(iso: string): string {
   const parts = iso.split("-").map(Number);
@@ -65,6 +81,14 @@ interface AccountDetailsSheetProps {
   cardReserveMinor: number;
   cardReserveDetails: CardReserveDetail[];
   billingStatus?: CreditCardBillingStatusView | null;
+  /** All of this user's accounts -- used to pick the bank/cash source when
+   *  opening Pay Bill from the credit-card details view. Optional for
+   *  callers that render a non-CC account; the Pay Bill CTA simply hides
+   *  when the list isn't supplied. */
+  allAccounts?: AccountRow[];
+  /** Fired after a successful Pay Bill so the host page can revalidate.
+   *  Optional; defaults to a no-op (the dialog already shows the toast). */
+  onBillPaid?: () => void;
 }
 
 export function AccountDetailsSheet({
@@ -78,7 +102,10 @@ export function AccountDetailsSheet({
   cardReserveMinor,
   cardReserveDetails,
   billingStatus = null,
+  allAccounts = [],
+  onBillPaid,
 }: AccountDetailsSheetProps) {
+  const [payBillOpen, setPayBillOpen] = useState(false);
   if (!account) return null;
 
   const money = (minor: number, currency = CURRENCY) =>
@@ -160,25 +187,34 @@ export function AccountDetailsSheet({
         )}
 
         {isCC && (() => {
-          const used = account.credit_used_minor ?? 0;
+          const outstanding = account.credit_used_minor ?? 0;
           const limit = account.credit_limit_minor ?? 0;
-          const available = Math.max(0, limit - used);
-          const stmtDay = account.statement_close_day;
-          const dueDay = account.payment_due_day;
-          const snapshot = stmtDay != null ? calculateCreditCardBillingCycle(todayIsoLocal(), { statementCloseDay: stmtDay, paymentDueDay: dueDay }) : null;
+          const available = Math.max(0, limit - outstanding);
+          // Single-date billing model: payment_due_day IS the card's bill
+          // due day. statement_close_day is deprecated and ignored here.
+          const billConfig = billingConfigFromAccount(account);
+          const snapshot = billConfig ? calculateCreditCardBillCycle(todayIsoLocal(), billConfig) : null;
+          // The "bill now owed" = the cycle that most recently closed. Its
+          // amount is the obligation's statement balance (if we have one),
+          // minus whatever the user has already paid against it.
+          const billAmountMinor = billingStatus?.statementBalanceMinor ?? 0;
+          const paidMinor = Math.max(0, billAmountMinor - Math.max(0, outstanding));
+          // ^ On a freshly-closed bill, remaining == outstanding (until the
+          //   user starts the next cycle). This is a display-only derivation;
+          //   authoritative paid/remaining lives on the obligation row.
+          const remainingMinor = billingStatus
+            ? Math.max(0, billingStatus.statementBalanceMinor - paidMinor)
+            : outstanding;
+          const bankSources = allAccounts.filter((a) => a.type === "bank" || a.type === "cash");
+          const canPayBill = bankSources.length > 0 && remainingMinor > 0;
 
           return (
             <>
               <SectionHeading>Credit Card</SectionHeading>
               <div className="divide-y divide-border rounded-xl border bg-card px-4">
                 <Row label="Current outstanding" highlighted>
-                  <Money value={money(used, account.currency)} masked={masked} size="numeric" />
+                  <Money value={money(outstanding, account.currency)} masked={masked} size="numeric" />
                 </Row>
-                {billingStatus ? (
-                  <Row label="Statement balance">
-                    <Money value={money(billingStatus.statementBalanceMinor, account.currency)} masked={masked} size="numeric" className="text-muted-foreground" />
-                  </Row>
-                ) : null}
                 <Row label="Credit limit">
                   {limit > 0 ? (
                     <Money value={money(limit, account.currency)} masked={masked} size="numeric" className="text-muted-foreground" />
@@ -193,42 +229,79 @@ export function AccountDetailsSheet({
                     <span className="text-muted-foreground">Set credit limit to see this</span>
                   )}
                 </Row>
-                {billingStatus ? (
-                  <Row label="Payment status" highlighted>
-                    <span>{PAYMENT_STATUS_LABELS[billingStatus.paymentStatus]}</span>
-                  </Row>
-                ) : null}
               </div>
 
-              {(stmtDay != null || dueDay != null) && (
+              {snapshot && (
                 <>
-                  <SectionHeading>Billing Cycle</SectionHeading>
+                  <SectionHeading>Bill</SectionHeading>
                   <div className="divide-y divide-border rounded-xl border bg-card px-4">
-                    {stmtDay != null && (
-                      <Row label="Statement closes">
+                    <Row label="Bill due">
+                      <span className="text-muted-foreground">
+                        {billConfig!.billDueDay === 32
+                          ? "Last day of month"
+                          : `${billConfig!.billDueDay}th of month`}
+                      </span>
+                    </Row>
+                    <Row label="Next bill due" highlighted>
+                      <span>{formatDate(snapshot.openCycle.cycleEnd)}</span>
+                    </Row>
+                    {billingStatus ? (
+                      <>
+                        <Row label="Bill amount">
+                          <Money
+                            value={money(billingStatus.statementBalanceMinor, account.currency)}
+                            masked={masked}
+                            size="numeric"
+                            className="text-muted-foreground"
+                          />
+                        </Row>
+                        <Row label="Paid">
+                          <Money
+                            value={money(paidMinor, account.currency)}
+                            masked={masked}
+                            size="numeric"
+                            className="text-muted-foreground"
+                          />
+                        </Row>
+                        <Row label="Remaining" highlighted>
+                          <Money value={money(remainingMinor, account.currency)} masked={masked} size="numeric" />
+                        </Row>
+                        <Row label="Status" highlighted>
+                          <span>{PAYMENT_STATUS_LABELS[billingStatus.paymentStatus]}</span>
+                        </Row>
+                      </>
+                    ) : (
+                      <Row label="Status">
                         <span className="text-muted-foreground">
-                          {stmtDay === 32 ? "Last day of month" : `${stmtDay}th of month`}
+                          {dueDateHint(snapshot.daysUntilMostRecentDue)}
                         </span>
-                      </Row>
-                    )}
-                    {snapshot && (
-                      <Row label="Next statement close">
-                        <span>{formatDate(snapshot.openCycleEnd)}</span>
-                      </Row>
-                    )}
-                    {dueDay != null && (
-                      <Row label="Payment due">
-                        <span className="text-muted-foreground">
-                          {dueDay === 32 ? "Last day of month" : `${dueDay}th of month`}
-                        </span>
-                      </Row>
-                    )}
-                    {snapshot?.openCycleDueDate && (
-                      <Row label="Next payment due" highlighted>
-                        <span>{formatDate(snapshot.openCycleDueDate)}</span>
                       </Row>
                     )}
                   </div>
+                  {canPayBill && (
+                    <div className="mt-3">
+                      <Button
+                        type="button"
+                        size="touch"
+                        className="w-full"
+                        onClick={() => setPayBillOpen(true)}
+                      >
+                        <CircleCheck className="size-4 mr-2" />
+                        Pay bill
+                      </Button>
+                      <CreditCardPaymentDialog
+                        open={payBillOpen}
+                        onOpenChange={setPayBillOpen}
+                        creditCardAccount={account}
+                        accounts={allAccounts}
+                        outstandingMinor={remainingMinor}
+                        onPaid={() => {
+                          setPayBillOpen(false);
+                          onBillPaid?.();
+                        }}
+                      />
+                    </div>
+                  )}
                 </>
               )}
             </>

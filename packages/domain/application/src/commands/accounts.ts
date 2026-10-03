@@ -43,7 +43,11 @@ export const createAccount: Command<CreateAccountInput, AccountRow> = {
           ? {
               creditLimitMinor: data.creditLimitMinor,
               creditUsedMinor: data.creditUsedMinor,
-              statementCloseDay: data.statementCloseDay ?? null,
+              // The single-date billing model stores the user's bill-due-day
+              // in payment_due_day. statement_close_day is deprecated: we
+              // always write NULL for it so existing-but-dead data cannot
+              // creep back into new rows.
+              statementCloseDay: null,
               paymentDueDay: data.paymentDueDay ?? null,
             }
           : {}),
@@ -75,11 +79,11 @@ export const updateAccount: Command<UpdateAccountCommandInput, AccountRow> = {
         message: parsed.error.issues[0]?.message ?? "Invalid account details.",
       });
     }
-    // Billing-day fields are only meaningful for credit cards -- the shared
+    // Bill-due-day is only meaningful for credit cards -- the shared
     // (non-discriminated) updateAccountSchema can't express that at the
     // type level, so it's enforced here, server-side, never trusting the
-    // client to only send these fields for the right account type.
-    if (parsed.data.statementCloseDay !== undefined || parsed.data.paymentDueDay !== undefined) {
+    // client to only send this field for the right account type.
+    if (parsed.data.paymentDueDay !== undefined) {
       const existing = await getAccountRow(ctx.supabase, ctx.userId, accountId);
       if (!existing) {
         return err({ code: "not_found", message: "That account no longer exists." });
@@ -87,12 +91,20 @@ export const updateAccount: Command<UpdateAccountCommandInput, AccountRow> = {
       if (existing.type !== "credit_card") {
         return err({
           code: "validation_error",
-          message: "Billing cycle days can only be set on credit card accounts.",
+          message: "Bill due day can only be set on credit card accounts.",
         });
       }
     }
     try {
-      const row = await updateAccountRow(ctx.supabase, ctx.userId, accountId, parsed.data);
+      // Defensive: on any CC account update, also NULL out statement_close_day.
+      // No consumer or UI reads it anymore (single-date billing), and
+      // explicitly nulling it here keeps the deprecated column from drifting
+      // out of alignment with the active model.
+      const patch = { ...parsed.data } as typeof parsed.data & { statementCloseDay?: number | null };
+      if (parsed.data.paymentDueDay !== undefined) {
+        patch.statementCloseDay = null;
+      }
+      const row = await updateAccountRow(ctx.supabase, ctx.userId, accountId, patch);
       return ok(row);
     } catch {
       return err({ code: "update_failed", message: "Couldn't save your changes. Try again." });

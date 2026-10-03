@@ -143,6 +143,9 @@ export {
 export { getTransactionDisplay, type TransactionDisplayFields } from "./transactionDisplay.js";
 
 export {
+  // Legacy two-input (statementCloseDay + paymentDueDay) model. Retained
+  // for existing tests and historical obligation reconstruction; new
+  // callers must use the single-date API below.
   resolvePaymentDueDate,
   getCreditCardBillingCycleForMonth,
   getCurrentStatementPeriod,
@@ -153,6 +156,14 @@ export {
   type CreditCardBillingCycle,
   type CreditCardBillingSnapshot,
   type CreditCardPaymentStatus,
+  // Single-date (billDueDay) model -- the one every active surface uses.
+  calculateCreditCardBillCycle,
+  getCurrentBillCycle,
+  getMostRecentClosedBillCycle,
+  isTransactionInBillCycle,
+  billingConfigFromAccount,
+  type CreditCardBillConfig,
+  type CreditCardBillSnapshot,
 } from "./creditCardBilling.js";
 
 export {

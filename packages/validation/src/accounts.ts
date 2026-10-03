@@ -45,8 +45,16 @@ export const createCashAccountSchema = z.object({
   currency: currencySchema,
   balanceMinor: nonNegativeMinorUnitsSchema,
 });
-// Billing-day fields share the payment_day_rule sentinel: 1-28 = literal day,
-// 29 = 29th, 30 = 30th, 31 = 31st, 32 = last day of month.
+// Bill-due-day field uses the payment_day_rule sentinel: 1-28 = literal day,
+// 29 = 29th, 30 = 30th, 31 = 31st (clamped to last valid day of a shorter
+// month), 32 = last day of month. The paymentDueDay zod field maps to the
+// `payment_due_day` DB column -- which, in the simplified single-date
+// billing model, IS the card's bill due day. There is no longer a separate
+// "statement closes on" input (that distinction and the grace-period shift
+// rule it enabled are gone); the day the cycle closes IS the day the bill
+// is due. The `statement_close_day` column still exists in the schema but
+// is deprecated: the application command always writes NULL for it on new
+// and updated rows.
 const billingDaySchema = z
   .number()
   .int()
@@ -61,7 +69,6 @@ export const createCreditCardAccountSchema = z.object({
   currency: currencySchema,
   creditLimitMinor: nonNegativeMinorUnitsSchema,
   creditUsedMinor: nonNegativeMinorUnitsSchema,
-  statementCloseDay: billingDaySchema,
   paymentDueDay: billingDaySchema,
 });
 export const createInvestmentAccountSchema = z.object({
@@ -101,7 +108,6 @@ export const updateAccountSchema = z.object({
   creditLimitMinor: nonNegativeMinorUnitsSchema.optional(),
   creditUsedMinor: nonNegativeMinorUnitsSchema.optional(),
   marketValueMinor: nonNegativeMinorUnitsSchema.optional(),
-  statementCloseDay: billingDaySchema,
   paymentDueDay: billingDaySchema,
 });
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;

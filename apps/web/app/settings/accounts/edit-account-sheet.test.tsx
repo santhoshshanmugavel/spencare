@@ -94,58 +94,63 @@ describe("<EditAccountSheet> — field scope by account type", () => {
   });
 });
 
-describe("<EditAccountSheet> — credit card billing cycle", () => {
-  const creditCardWithBilling: AccountRow = { ...creditCard, statement_close_day: 20, payment_due_day: 5 };
+describe("<EditAccountSheet> — credit card bill due (single-date model)", () => {
+  // In the single-date model, payment_due_day is the card's bill due day.
+  // statement_close_day is deprecated; the UI neither reads nor writes it.
+  const creditCardWithBilling: AccountRow = { ...creditCard, statement_close_day: null, payment_due_day: 5 };
   const creditCardUnset: AccountRow = { ...creditCard, statement_close_day: null, payment_due_day: null };
 
-  it("uses a day-of-month selector, not a free-form text field, for both billing days", () => {
+  it("uses a day-of-month selector, not a free-form text field, for the single Bill due input", () => {
     render(<EditAccountSheet account={creditCardUnset} open onOpenChange={() => {}} onSaved={() => {}} />);
-    const stmtTrigger = screen.getByLabelText("Statement closes");
-    const dueTrigger = screen.getByLabelText("Payment due");
-    expect(stmtTrigger.tagName).not.toBe("INPUT");
-    expect(dueTrigger.tagName).not.toBe("INPUT");
+    const trigger = screen.getByLabelText("Bill due");
+    expect(trigger.tagName).not.toBe("INPUT");
+    // The old two-input UI is gone.
+    expect(screen.queryByLabelText("Statement closes")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Payment due")).not.toBeInTheDocument();
   });
 
-  it("selecting a statement close day shows a live preview computed from the canonical billing cycle", async () => {
+  it("selecting a bill due day shows a live preview computed from the canonical calculator", async () => {
     const user = userEvent.setup();
     render(<EditAccountSheet account={creditCardUnset} open onOpenChange={() => {}} onSaved={() => {}} />);
-    expect(screen.queryByText("Next statement closes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Next bill due")).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText("Statement closes"));
-    await user.click(await screen.findByRole("option", { name: "20th" }));
+    await user.click(screen.getByLabelText("Bill due"));
+    await user.click(await screen.findByRole("option", { name: "5th" }));
 
-    // The preview block renders once a close day is chosen (exact date is
-    // relative to "today" at test-run time, so assert the label appears
-    // rather than a specific date string).
-    expect(await screen.findByText("Next statement closes")).toBeInTheDocument();
+    expect(await screen.findByText("Next bill due")).toBeInTheDocument();
+    expect(screen.getByText("Following bill due")).toBeInTheDocument();
   });
 
-  it("pre-fills the selectors from the account's existing billing days and submits them unchanged", async () => {
+  it("pre-fills the selector from the account's payment_due_day and submits it unchanged", async () => {
     const { updateAccountAction } = await import("./actions");
     const user = userEvent.setup();
     render(<EditAccountSheet account={creditCardWithBilling} open onOpenChange={() => {}} onSaved={() => {}} />);
-    expect(screen.getByLabelText("Statement closes")).toHaveTextContent("20th");
-    expect(screen.getByLabelText("Payment due")).toHaveTextContent("5th");
+    expect(screen.getByLabelText("Bill due")).toHaveTextContent("5th");
 
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     expect(updateAccountAction).toHaveBeenCalledWith(
       "acc-cc",
-      expect.objectContaining({ statementCloseDay: 20, paymentDueDay: 5 }),
+      expect.objectContaining({ paymentDueDay: 5 }),
+    );
+    // statement_close_day is NOT sent as part of the edit payload anymore.
+    expect(updateAccountAction).toHaveBeenCalledWith(
+      "acc-cc",
+      expect.not.objectContaining({ statementCloseDay: expect.anything() }),
     );
   });
 
-  it("changing the payment due day submits the new value", async () => {
+  it("changing the bill due day submits the new value", async () => {
     const { updateAccountAction } = await import("./actions");
     const user = userEvent.setup();
     render(<EditAccountSheet account={creditCardWithBilling} open onOpenChange={() => {}} onSaved={() => {}} />);
 
-    await user.click(screen.getByLabelText("Payment due"));
+    await user.click(screen.getByLabelText("Bill due"));
     await user.click(await screen.findByRole("option", { name: "Last day of month" }));
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(updateAccountAction).toHaveBeenCalledWith(
       "acc-cc",
-      expect.objectContaining({ statementCloseDay: 20, paymentDueDay: 32 }),
+      expect.objectContaining({ paymentDueDay: 32 }),
     );
   });
 });

@@ -11,9 +11,10 @@
  */
 
 import {
-  calculateCreditCardBillingCycle,
+  calculateCreditCardBillCycle,
+  billingConfigFromAccount,
   deriveCreditCardPaymentStatus,
-  type CreditCardBillingSnapshot,
+  type CreditCardBillSnapshot,
   type CreditCardPaymentStatus,
 } from "@spencare/domain-core";
 import { computeStatementBalanceForPeriod } from "../queries/accounts.js";
@@ -373,8 +374,8 @@ export async function matchCreditCardPayment(
 }
 
 export interface CreditCardBillingStatus {
-  snapshot: CreditCardBillingSnapshot;
-  /** The most recently closed statement's frozen balance -- computed from actual transactions in that exact historical period, never the account's live running balance. */
+  snapshot: CreditCardBillSnapshot;
+  /** The most recently closed cycle's bill amount -- computed from actual transactions in that exact historical period, never the account's live running balance. Stays named "statementBalanceMinor" to preserve the DB column + obligation-row contract; "statement" here is a historical name for "closed-cycle bill." */
   statementBalanceMinor: number;
   obligation: CreditCardObligation;
   paymentStatus: CreditCardPaymentStatus;
@@ -382,57 +383,69 @@ export interface CreditCardBillingStatus {
 
 /**
  * THE canonical, single source of truth for "what does this credit card
- * owe right now." Computes the most recently closed statement's frozen
- * balance directly from that period's actual transactions (never the
- * account's live credit_used_minor, which keeps growing as the next,
- * still-open cycle accumulates spending), upserts its obligation row, and
- * derives a deterministic payment status.
+ * owe right now." Computes the most recently closed cycle's frozen bill
+ * directly from that period's actual transactions (never the account's
+ * live credit_used_minor, which keeps growing as the next, still-open
+ * cycle accumulates spending), upserts its obligation row, and derives
+ * a deterministic payment status.
  *
- * Unlike the notification cron's obligation upsert (which only freezes a
- * cycle's balance if the cron happens to run while that cycle is still
- * "current" per getCreditCardStatementSummary), this always looks
- * backward to find the most recently closed cycle directly -- correct
- * regardless of when or how often it is called. Upcoming, the account UI,
- * and the Spensa/MCP billing tool all call this rather than assembling
- * their own view of "amount owed."
- *
- * Returns null when the account has no statement_close_day configured
- * (no billing cycle concept exists yet for this card).
+ * Single-date billing model (Slice B): the user configures ONE
+ * `bill due day` -- stored in payment_due_day -- and the cycle, due
+ * date, and status all derive from that. `statement_close_day` is
+ * deprecated and ignored. Returns null when the card has no bill due
+ * day configured.
  */
 export async function getCreditCardBillingStatus(
   ctx: AuthContext,
   account: { id: string; statement_close_day: number | null; payment_due_day: number | null },
   todayIso: string,
 ): Promise<CreditCardBillingStatus | null> {
-  if (account.statement_close_day == null) return null;
+  const config = billingConfigFromAccount(account);
+  if (!config) return null;
 
-  const snapshot = calculateCreditCardBillingCycle(todayIso, {
-    statementCloseDay: account.statement_close_day,
-    paymentDueDay: account.payment_due_day,
-  });
+  const snapshot = calculateCreditCardBillCycle(todayIso, config);
 
+  // The bill now owed = the cycle that most recently closed. Our
+  // billing-cycle rule is inclusive-left: `[cycleStart, cycleEnd)` -- a
+  // transaction on `cycleEnd` belongs to the NEXT cycle, not this one.
+  // computeStatementBalanceForPeriod sums with `.gte(start).lte(end)` so
+  // both of its arguments are INCLUSIVE. To translate between conventions
+  // we subtract one day from cycleEnd and leave cycleStart as-is.
+  const cycleStart = snapshot.mostRecentClosedCycle.cycleStart; // inclusive on both sides
+  const cycleEndExclusive = snapshot.mostRecentClosedCycle.cycleEnd;
+  const periodEndInclusive = subtractOneDay(cycleEndExclusive);
   const statementBalanceMinor = await computeStatementBalanceForPeriod(
     ctx,
     account.id,
-    snapshot.mostRecentClosedPeriodStart,
-    snapshot.mostRecentClosedStatementDate,
+    cycleStart,
+    periodEndInclusive,
   );
 
   const obligation = await upsertCreditCardObligation(ctx, {
     accountId: account.id,
-    statementDate: snapshot.mostRecentClosedStatementDate,
-    periodStart: snapshot.mostRecentClosedPeriodStart,
-    periodEnd: snapshot.mostRecentClosedStatementDate,
+    // The obligation's statement_date is the bill's due date; its period
+    // bounds record which exact calendar window the frozen balance was
+    // computed from (persisted as inclusive dates, matching the SQL path).
+    statementDate: cycleEndExclusive,
+    periodStart: cycleStart,
+    periodEnd: periodEndInclusive,
     statementBalanceMinor,
-    dueDate: snapshot.mostRecentClosedDueDate,
+    dueDate: snapshot.mostRecentClosedCycle.dueDate,
   });
 
   const paymentStatus = deriveCreditCardPaymentStatus({
     todayIso,
-    dueDate: snapshot.mostRecentClosedDueDate,
+    dueDate: snapshot.mostRecentClosedCycle.dueDate,
     obligationStatus: obligation.status,
     statementBalanceMinor: obligation.statementBalanceMinor,
   });
 
   return { snapshot, statementBalanceMinor, obligation, paymentStatus };
+}
+
+function subtractOneDay(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
 }

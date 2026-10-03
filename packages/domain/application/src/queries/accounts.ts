@@ -1,5 +1,5 @@
 import { getAccount as getAccountRow, listAccounts as listAccountsRow, type AccountRow } from "@spencare/domain-infra";
-import { getCurrentStatementPeriod, resolvePaymentDueDate } from "@spencare/domain-core";
+import { billingConfigFromAccount, getCurrentBillCycle } from "@spencare/domain-core";
 import type { AuthContext } from "../types.js";
 
 export async function listAccounts(
@@ -72,15 +72,22 @@ export async function computeStatementBalanceForPeriod(
 }
 
 /**
- * Computes the current (open, not-yet-closed) statement period for a
- * credit card account using statement_close_day, then sums expenses in
- * that period so far. Returns null when the account has no
- * statement_close_day set.
+ * Computes the current (open, not-yet-closed) billing cycle for a credit
+ * card account using its bill_due_day (stored in payment_due_day), then
+ * sums expenses that have landed in that cycle so far. Returns null when
+ * the card has no bill_due_day configured.
  *
  * This is deliberately the OPEN cycle's running total, not a frozen
- * "statement balance" for a closed cycle -- see getCreditCardBillingStatus
- * in creditCardPayment.ts for the most-recently-closed statement's frozen
- * balance plus payment status.
+ * "bill amount" for a closed cycle -- see getCreditCardBillingStatus in
+ * creditCardPayment.ts for the most-recently-closed cycle's frozen bill
+ * plus payment status.
+ *
+ * The returned shape retains the historical `statementDate` /
+ * `periodStart` / `periodEnd` / `statementBalanceMinor` names for
+ * backward-compat with callers that haven't been renamed yet; the
+ * semantics now map onto the single-date model: statementDate IS the
+ * next bill due date, period bounds are the open cycle's bounds
+ * [cycleStart, cycleEnd), and paymentDueDate equals statementDate.
  */
 export async function getCreditCardStatementSummary(
   ctx: AuthContext,
@@ -89,28 +96,42 @@ export async function getCreditCardStatementSummary(
   const account = await getAccountRow(ctx.supabase, ctx.userId, accountId);
   if (!account || account.type !== "credit_card") return null;
 
-  const stmtDay: number | null = account.statement_close_day ?? null;
-  if (stmtDay == null) return null;
+  const config = billingConfigFromAccount(account);
+  if (!config) return null;
 
   const todayIso = new Date().toISOString().slice(0, 10);
-  const { periodStart, statementDate } = getCurrentStatementPeriod(todayIso, stmtDay);
-  const periodEnd = statementDate;
+  const open = getCurrentBillCycle(todayIso, config.billDueDay);
 
-  const statementBalanceMinor = await computeStatementBalanceForPeriod(ctx, accountId, periodStart, periodEnd);
-
-  const payDay: number | null = account.payment_due_day ?? null;
-  const paymentDueDate = payDay != null ? resolvePaymentDueDate(statementDate, payDay) : null;
+  // The open cycle is half-open [cycleStart, cycleEnd). The SQL path uses
+  // inclusive-on-both-sides bounds, so cycleEnd shifts back one day for
+  // the balance sum (identical adapter as creditCardPayment.ts). The
+  // exposed `periodEnd`/`statementDate` keep the cycleEnd (= next bill
+  // due date) that UI copy actually wants to display.
+  const periodEndInclusive = subtractOneDay(open.cycleEnd);
+  const statementBalanceMinor = await computeStatementBalanceForPeriod(
+    ctx,
+    accountId,
+    open.cycleStart,
+    periodEndInclusive,
+  );
 
   return {
     accountId,
     accountName: account.name,
     currency: account.currency,
-    periodStart,
-    periodEnd,
-    statementDate,
+    periodStart: open.cycleStart,
+    periodEnd: periodEndInclusive,
+    statementDate: open.cycleEnd,
     statementBalanceMinor,
-    paymentDueDate,
+    paymentDueDate: open.cycleEnd,
   };
+}
+
+function subtractOneDay(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
 }
 
 export async function getAccountBalance(

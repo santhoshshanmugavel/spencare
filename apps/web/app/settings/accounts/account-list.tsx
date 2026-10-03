@@ -194,6 +194,8 @@ export function AccountList({
         cardReserveMinor={viewingDetails ? (cardReservePerAccount[viewingDetails.id] ?? 0) : 0}
         cardReserveDetails={viewingDetails ? cardReserveDetails.filter((d) => d.paymentAccountId === viewingDetails.id) : []}
         billingStatus={viewingDetails ? (billingStatusByCardId[viewingDetails.id] ?? null) : null}
+        allAccounts={accounts}
+        onBillPaid={() => { setViewingDetails(null); handleMutated(); }}
       />
     </div>
   );

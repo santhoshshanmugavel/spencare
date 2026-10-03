@@ -117,24 +117,30 @@ describe("registerReadTools — Privacy Mode", () => {
   });
 });
 
-describe("registerReadTools — getCreditCardBillingSummary canonical source", () => {
+describe("registerReadTools — getCreditCardBillingSummary canonical source (single-date model)", () => {
   function mockBillingStatus() {
     return {
       snapshot: {
-        openCycleStart: "2026-09-21",
-        openCycleEnd: "2026-10-21",
-        openCycleDueDate: "2026-11-02",
-        mostRecentClosedPeriodStart: "2026-08-21",
-        mostRecentClosedStatementDate: "2026-09-21",
-        mostRecentClosedDueDate: "2026-10-02",
-        nextCycleStart: "2026-10-21",
-        nextCycleEnd: "2026-11-21",
-        nextCycleDueDate: "2026-12-02",
-        daysUntilOpenCycleClose: 26,
-        daysUntilMostRecentDue: 7,
+        mostRecentClosedCycle: {
+          cycleStart: "2026-09-02",
+          cycleEnd: "2026-10-02",
+          dueDate: "2026-10-02",
+        },
+        openCycle: {
+          cycleStart: "2026-10-02",
+          cycleEnd: "2026-11-02",
+          dueDate: "2026-11-02",
+        },
+        nextCycle: {
+          cycleStart: "2026-11-02",
+          cycleEnd: "2026-12-02",
+          dueDate: "2026-12-02",
+        },
+        daysUntilMostRecentDue: -5,
+        daysUntilNextDue: 25,
       },
       statementBalanceMinor: 4183986,
-      obligation: { id: "obl-1", accountId: "acct1", statementDate: "2026-09-21", periodStart: "2026-08-21", periodEnd: "2026-09-21", statementBalanceMinor: 4183986, paidMinor: 0, remainingMinor: 4183986, status: "unpaid" as const, dueDate: "2026-10-02" },
+      obligation: { id: "obl-1", accountId: "acct1", statementDate: "2026-10-02", periodStart: "2026-09-02", periodEnd: "2026-10-01", statementBalanceMinor: 4183986, paidMinor: 0, remainingMinor: 4183986, status: "unpaid" as const, dueDate: "2026-10-02" },
       paymentStatus: "due_soon" as const,
     };
   }
@@ -160,12 +166,10 @@ describe("registerReadTools — getCreditCardBillingSummary canonical source", (
 
     const result = await server.call("getCreditCardBillingSummary", { accountId: "acct1" });
     expect(result.isError).toBeUndefined();
-    expect(result.data.nextStatementDate).toBe("2026-11-21");
-    expect(result.data.nextPaymentDueDate).toBe("2026-12-02");
-    expect(result.data.currentStatementDueDate).toBe("2026-10-02");
-    expect(result.data.statementBalanceMinor).toBe(4183986);
-    expect(result.data.statementCloseDay).toBe(21);
-    expect(result.data.paymentDueDay).toBe(2);
+    expect(result.data.currentBillDueDate).toBe("2026-10-02");
+    expect(result.data.nextBillDueDate).toBe("2026-11-02");
+    expect(result.data.currentBillAmountMinor).toBe(4183986);
+    expect(result.data.billDueDay).toBe(2);
     expect(result.data.currentOutstandingMinor).toBe(4183986);
     expect(result.data.availableCreditMinor).toBe(10000000 - 4183986);
     expect(result.data.utilizationPercent).toBe(42);
@@ -191,7 +195,7 @@ describe("registerReadTools — getCreditCardBillingSummary canonical source", (
     expect(result.data).toBeNull();
   });
 
-  it("reports no_statement without fabricating dates when billing days are not configured", async () => {
+  it("reports no_bill_configured without fabricating dates when the bill due day is not set", async () => {
     const domainApp = await import("@spencare/domain-application");
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
     vi.mocked(domainApp.getAccount).mockResolvedValue({
@@ -205,8 +209,8 @@ describe("registerReadTools — getCreditCardBillingSummary canonical source", (
     registerReadTools(server as never, readCtx(["read"]));
 
     const result = await server.call("getCreditCardBillingSummary", { accountId: "acct1" });
-    expect(result.data.paymentStatus).toBe("no_statement");
-    expect(result.data.statementBalanceMinor).toBeNull();
+    expect(result.data.paymentStatus).toBe("no_bill_configured");
+    expect(result.data.currentBillAmountMinor).toBeNull();
   });
 
   it("redacts monetary amounts in privacy mode", async () => {
@@ -214,7 +218,7 @@ describe("registerReadTools — getCreditCardBillingSummary canonical source", (
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: true } as never);
     vi.mocked(domainApp.getAccount).mockResolvedValue({
       id: "acct1", type: "credit_card", name: "IDFC First Millennia",
-      currency: "INR", statement_close_day: 21, payment_due_day: 2, credit_limit_minor: 10000000, credit_used_minor: 4183986,
+      currency: "INR", statement_close_day: null, payment_due_day: 2, credit_limit_minor: 10000000, credit_used_minor: 4183986,
     } as never);
     vi.mocked(domainApp.getCreditCardBillingStatus).mockResolvedValue(mockBillingStatus() as never);
 
@@ -223,10 +227,10 @@ describe("registerReadTools — getCreditCardBillingSummary canonical source", (
     registerReadTools(server as never, readCtx(["read"]));
 
     const result = await server.call("getCreditCardBillingSummary", { accountId: "acct1" });
-    // Dates must still be shown; amounts must be redacted
-    expect(result.data.nextStatementDate).toBe("2026-11-21");
-    expect(result.data.nextPaymentDueDate).toBe("2026-12-02");
-    expect(result.data.statementBalanceMinor).toBeNull();
+    // Dates must still be shown; amounts must be redacted.
+    expect(result.data.currentBillDueDate).toBe("2026-10-02");
+    expect(result.data.nextBillDueDate).toBe("2026-11-02");
+    expect(result.data.currentBillAmountMinor).toBeNull();
     expect(result.data.currentOutstandingMinor).toBeNull();
     expect(result.data.availableCreditMinor).toBeNull();
     expect(JSON.stringify(result.data)).not.toContain("4183986");

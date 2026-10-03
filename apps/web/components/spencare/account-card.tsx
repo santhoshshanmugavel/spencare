@@ -1,7 +1,7 @@
 "use client";
 
 import { MoreHorizontal, Landmark, Banknote, CreditCard, TrendingUp, AlertTriangle } from "lucide-react";
-import { Money as DomainMoney, calculateCreditCardBillingCycle } from "@spencare/domain-core";
+import { Money as DomainMoney, billingConfigFromAccount, calculateCreditCardBillCycle } from "@spencare/domain-core";
 import type { AccountRow } from "@spencare/domain-application";
 import type { CardReserveDetail } from "@spencare/domain-infra";
 import { Card } from "@/components/ui/card";
@@ -157,40 +157,31 @@ function todayIsoLocal(): string {
 }
 
 /**
- * Sourced from the same canonical calculateCreditCardBillingCycle every
- * other surface (Upcoming, notifications, Spensa) uses, never a locally
- * re-derived day/shift rule.
+ * Single-date bill status row for the account card. Sourced from the same
+ * canonical calculateCreditCardBillCycle every other surface uses, so
+ * the card's at-a-glance text can never drift from account-details or
+ * Upcoming.
  */
 function CreditCardBillingRow({ account }: { account: AccountRow }) {
-  const stmtDay = account.statement_close_day;
-  const payDay = account.payment_due_day;
-  if (stmtDay == null && payDay == null) return null;
+  const config = billingConfigFromAccount(account);
+  if (!config) return null;
 
-  const snapshot = calculateCreditCardBillingCycle(todayIsoLocal(), {
-    statementCloseDay: stmtDay ?? 1,
-    paymentDueDay: payDay,
-  });
+  const snapshot = calculateCreditCardBillCycle(todayIsoLocal(), config);
 
-  const parts: string[] = [];
-  if (stmtDay != null) {
-    const d = snapshot.daysUntilOpenCycleClose;
-    if (d === 0) parts.push("Statement today");
-    else if (d > 0) parts.push(`Statement in ${d}d`);
-  }
-  if (payDay != null && snapshot.daysUntilMostRecentDue != null) {
-    // The most recently closed statement's due date -- what's actually
-    // payable right now, correctly reflecting the statement-close shift
-    // rule (and able to show overdue, unlike a naive day-of-month read).
-    const d = snapshot.daysUntilMostRecentDue;
-    if (d === 0) parts.push("Payment due today");
-    else if (d > 0) parts.push(`Payment due in ${d}d`);
-    else parts.push(`Payment due ${Math.abs(d)}d ago`);
-  }
-  if (parts.length === 0) return null;
+  // Show the most-recently-closed bill's status when a bill is actually
+  // owed (statement already closed), else fall back to "next bill in N
+  // days" from the open cycle.
+  const dueNow = snapshot.daysUntilMostRecentDue;
+  const dueNext = snapshot.daysUntilNextDue;
+  let text: string;
+  if (dueNow === 0) text = "Bill due today";
+  else if (dueNow === -1) text = "Bill overdue by 1d";
+  else if (dueNow < 0) text = `Bill overdue by ${Math.abs(dueNow)}d`;
+  else if (dueNext === 0) text = "Bill due today";
+  else if (dueNext === 1) text = "Bill due tomorrow";
+  else text = `Bill due in ${dueNext}d`;
 
-  return (
-    <p className="mt-2 text-xs text-muted-foreground">{parts.join(" · ")}</p>
-  );
+  return <p className="mt-2 text-xs text-muted-foreground">{text}</p>;
 }
 
 function AccountCardBody({

@@ -38,12 +38,23 @@ import {
   predictNextOccurrence,
   resolveRecurringDay,
   computeReserveStatus,
-  getCreditCardBillingCycleForMonth,
   type ReserveStatusResult,
   type PaymentFrequency,
   type GoalContributionFrequency,
   type RecurrenceInterval,
 } from "@spencare/domain-core";
+
+/**
+ * Local shorthand: use the SAME month-end clamping convention as every
+ * other paymentDayRule call (29/30/31 clamp to the last valid day of a
+ * shorter month; 32 = last calendar day). resolveRecurringDay is already
+ * imported above for commitments and goals -- this just wraps it in the
+ * single-date billing model's own name so the credit-card loop below
+ * reads with the product's actual terminology.
+ */
+function resolveBillDueDateFor(year: number, month: number, billDueDay: number): string {
+  return resolveRecurringDay({ year, month, paymentDayRule: billDueDay });
+}
 import { listCommitments, listUpcoming } from "./plannedCommitments.js";
 import { listAllLoans } from "./loans.js";
 import { listGoalContributionPlans } from "./goalContributionPlans.js";
@@ -608,21 +619,24 @@ export async function getUpcomingProjection(
     });
   }
 
-  // ── Credit card statement and payment events ──────────────────────────────
+  // ── Credit card bill events ───────────────────────────────────────────────
   //
-  // For each active credit card with statement_close_day or payment_due_day,
-  // project one event per month using the canonical getCreditCardBillingCycleForMonth
-  // function (single authoritative implementation for the shift rule).
+  // Single-date billing model (Slice B): for each active credit card with
+  // a bill_due_day (payment_due_day), project ONE "credit card bill" event
+  // per month on the bill's due date. There is no separate statement-close
+  // event in this model -- the cycle closes on the same date the bill is
+  // due. Uses the canonical new calculator so Upcoming matches account
+  // details, Spensa, notifications, and MCP exactly.
 
   const creditCardPaymentDueMinor_acc: number[] = [];
 
   const activeCreditCardAccounts = accounts.filter(
-    (a) => a.type === "credit_card" && !a.is_archived && (a.statement_close_day != null || a.payment_due_day != null),
+    (a) => a.type === "credit_card" && !a.is_archived && a.payment_due_day != null,
   );
 
   // One real billing-status lookup per card (not per projected month): this
-  // is what freezes the nearest unpaid statement's actual balance (summed
-  // from its own transactions / obligation remaining, correctly reflecting
+  // is what freezes the nearest unpaid bill's actual balance (summed from
+  // its own transactions / obligation remaining, correctly reflecting
   // partial payments) rather than reusing the account's ever-growing
   // credit_used_minor for every future month in the window -- which would
   // both mislabel a not-yet-closed cycle's amount as fact and inflate the
@@ -634,17 +648,13 @@ export async function getUpcomingProjection(
   );
 
   for (const account of activeCreditCardAccounts) {
-    const stmtDay = account.statement_close_day;
-    const dueDay = account.payment_due_day;
     const outstanding = account.credit_used_minor ?? 0;
     const billingStatus = billingStatusByAccountId.get(account.id) ?? null;
-    const nearestDueDate = billingStatus?.snapshot.mostRecentClosedDueDate ?? null;
+    const nearestDueDate = billingStatus?.snapshot.mostRecentClosedCycle.dueDate ?? null;
 
-    // Iterate over all months that overlap with [startDate, endDate].
-    // Start one month before the window so that a payment whose statement
-    // closed in the previous month is still captured (e.g. statement closes
-    // Aug 25, payment due Sep 5 -- we need the Aug iteration when the
-    // display window starts Sep 1).
+    // Iterate every month that overlaps `[startDate, endDate]`. Start one
+    // month before the window so a bill due early in the first visible
+    // month still projects when its due date falls back a month.
     const startParts = startDate.split("-").map(Number);
     const endParts = endDate.split("-").map(Number);
     const sy = startParts[0]!;
@@ -659,53 +669,37 @@ export async function getUpcomingProjection(
       const year = Math.floor(monthOffset / 12);
       const month = (monthOffset % 12) + 1;
 
-      const { statementCloseDate, paymentDueDate } = getCreditCardBillingCycleForMonth(
-        year,
-        month,
-        { statementCloseDay: stmtDay ?? 1, paymentDueDay: dueDay },
-      );
+      // In the single-date model, the bill due date IS the cycle end
+      // (resolved with the same month-end clamping rule used everywhere
+      // else: 29/30/31 clamp to the last valid day; 32 = last of month).
+      const billDueDate = resolveBillDueDateFor(year, month, account.payment_due_day!);
 
-      if (stmtDay != null && statementCloseDate >= startDate && statementCloseDate <= endDate) {
-        allEvents.push({
-          id: projectedId("cc_statement", account.id, statementCloseDate),
-          kind: "credit_card_statement",
-          date: statementCloseDate,
-          title: `${account.name} statement`,
-          subtitle: "Statement date",
-          amountMinor: 0,
-          currency: account.currency,
-          sourceId: account.id,
-          projected: true,
-        });
-      }
+      if (billDueDate < startDate || billDueDate > endDate) continue;
 
-      if (dueDay != null && paymentDueDate != null && paymentDueDate >= startDate && paymentDueDate <= endDate) {
-        // The nearest unpaid statement's due date gets its real, frozen
-        // remaining balance. Any other (further future, not-yet-closed)
-        // cycle in the window shows the account's current outstanding
-        // instead, explicitly labeled as such rather than mislabeled as a
-        // statement balance it isn't yet.
-        const isNearest = nearestDueDate != null && paymentDueDate === nearestDueDate;
-        const amountMinor = isNearest ? billingStatus!.obligation.remainingMinor : outstanding;
-        const subtitle = isNearest
-          ? billingStatus!.obligation.status === "partial"
-            ? "Remaining balance"
-            : "Statement balance"
-          : "Current outstanding (statement not yet closed)";
+      // The nearest unpaid bill's due date gets its real, frozen remaining
+      // balance. Any further-future, not-yet-closed cycle in the window
+      // shows the account's current outstanding instead, explicitly
+      // labeled rather than mislabeled as a bill amount it isn't yet.
+      const isNearest = nearestDueDate != null && billDueDate === nearestDueDate;
+      const amountMinor = isNearest ? billingStatus!.obligation.remainingMinor : outstanding;
+      const subtitle = isNearest
+        ? billingStatus!.obligation.status === "partial"
+          ? "Remaining balance"
+          : "Bill amount"
+        : "Current outstanding (cycle not yet closed)";
 
-        allEvents.push({
-          id: projectedId("cc_payment", account.id, paymentDueDate),
-          kind: "credit_card_payment",
-          date: paymentDueDate,
-          title: `${account.name} payment due`,
-          subtitle,
-          amountMinor,
-          currency: account.currency,
-          sourceId: account.id,
-          projected: true,
-        });
-        if (isNearest && amountMinor > 0) creditCardPaymentDueMinor_acc.push(amountMinor);
-      }
+      allEvents.push({
+        id: projectedId("cc_payment", account.id, billDueDate),
+        kind: "credit_card_payment",
+        date: billDueDate,
+        title: `${account.name} bill`,
+        subtitle,
+        amountMinor,
+        currency: account.currency,
+        sourceId: account.id,
+        projected: true,
+      });
+      if (isNearest && amountMinor > 0) creditCardPaymentDueMinor_acc.push(amountMinor);
     }
   }
 

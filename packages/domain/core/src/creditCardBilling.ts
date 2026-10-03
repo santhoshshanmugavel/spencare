@@ -249,29 +249,28 @@ export function deriveCreditCardPaymentStatus(input: {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-//  Bill-due-day-only model (Slice A).
+//  Bill-due-day-only model (Slice A, boundary finalized in Slice B).
 //
-//  This is the simplified billing model the product is moving to: the user
+//  The simplified billing model the product is moving to: the user
 //  configures ONE date -- the day the card's bill becomes due each month --
 //  and the cycle, due date, and status all derive from that single input.
 //  There is no separate "statement closes on" input and no grace-period
 //  concept: the day the cycle closes IS the day the bill is due.
 //
-//  Boundary rule (kept consistent with the two-day calculator above):
-//      previousCycleEnd < transaction_date <= currentCycleEnd
+//  Canonical boundary rule (inclusive-left):
+//      cycleStart <= transaction_date < cycleEnd
 //  A transaction landing exactly on the bill due day belongs to the cycle
-//  that CLOSES on that day (i.e. the bill that becomes due that day). The
-//  product spec's examples suggest `cycleStart <= tx < cycleEnd`, which is
-//  equally defensible but would move boundary-day transactions into the
-//  next cycle and risk shifting them between already-closed and open
-//  obligations; the product owner has signed off on keeping the inclusive-
-//  right convention so historical obligations/payments stay stable.
+//  STARTING on that day (the new accumulating one), not the cycle that
+//  just closed. Example: billDueDay=5. The cycle [5 Sep, 5 Oct) contains
+//  5 Sep but EXCLUDES 5 Oct; 5 Oct falls into the next cycle [5 Oct,
+//  5 Nov). Transactions on 5 Oct therefore roll into the November bill,
+//  not October's.
 //
 //  The older `calculateCreditCardBillingCycle({ statementCloseDay,
-//  paymentDueDay })` and friends remain in this file for the moment -- the
-//  Slice A plan is additive (new API + tests only). Slice B swaps the UI
-//  and consumers to the new API, and Slice C removes the deprecated API
-//  and runs the forward-only schema migration.
+//  paymentDueDay })` and friends remain exported for backward-compat (old
+//  tests still cover the two-input cycle math and are kept pending Slice
+//  C's full removal). Slice B swaps every UI/service consumer onto the
+//  new API below and marks the legacy functions @deprecated.
 // ────────────────────────────────────────────────────────────────────────────
 
 export interface CreditCardBillConfig {
@@ -285,41 +284,48 @@ export interface CreditCardBillConfig {
   billDueDay: number;
 }
 
+/**
+ * One billing cycle. Half-open interval: `[cycleStart, cycleEnd)`. The
+ * `cycleEnd` is the date the bill for that cycle is due.
+ */
 export interface CreditCardBillCycle {
-  /** Date the previous bill was due. Transactions STRICTLY AFTER this fall into the current open cycle. */
-  previousCycleEnd: string;
-  /** Date the current open cycle will close -- same date as the next bill's due date. Transactions ON OR BEFORE this fall into the current open cycle. */
-  currentCycleEnd: string;
-  /** Alias for currentCycleEnd. The one date the UI shows the user ("bill due 5 Oct"). */
+  /** Inclusive left bound -- the previous bill's due date. */
+  cycleStart: string;
+  /** Exclusive right bound -- this cycle's bill due date. Transactions on this date fall into the NEXT cycle. */
+  cycleEnd: string;
+  /** Convenience alias for cycleEnd. The one date the UI shows the user ("bill due 5 Oct"). */
   dueDate: string;
 }
 
 export interface CreditCardBillSnapshot {
-  /** Previously-closed cycle: (previousPreviousCycleEnd, previousCycleEnd]. */
-  previousCycleStart: string;
-  previousCycleEnd: string;
-  previousDueDate: string;
-  /** Current (open) cycle: (previousCycleEnd, currentCycleEnd]. */
-  currentCycleStart: string;
-  currentCycleEnd: string;
-  currentDueDate: string;
-  /** Next cycle (will open as soon as the current closes): (currentCycleEnd, nextCycleEnd]. */
-  nextCycleStart: string;
-  nextCycleEnd: string;
-  nextDueDate: string;
   /**
-   * Signed day delta from today to the current cycle's due date.
-   *   > 0  the bill is due in that many days (future).
-   *   = 0  the bill is due today.
-   *   < 0  overdue by that many days (should not happen for the currently open cycle, but is well-defined).
+   * The cycle that most recently closed. ITS bill is the one currently
+   * owed. On today == billDueDay this is the cycle that closed today
+   * (today's bill is due today); on today > billDueDay this is overdue.
    */
-  daysUntilCurrentDue: number;
+  mostRecentClosedCycle: CreditCardBillCycle;
+  /**
+   * The cycle currently accumulating transactions. cycleEnd > today
+   * (strict). On today == billDueDay this is the cycle that just started.
+   */
+  openCycle: CreditCardBillCycle;
+  /** The cycle that will open after the current one closes. */
+  nextCycle: CreditCardBillCycle;
+  /**
+   * Signed day delta from today to the most-recently-closed bill's due
+   * date. 0 == due today; positive == shouldn't happen for a closed
+   * cycle; negative == overdue by that many days.
+   */
+  daysUntilMostRecentDue: number;
+  /** Positive day count from today until the next bill becomes due (openCycle.cycleEnd). 0 on the day itself. */
+  daysUntilNextDue: number;
 }
 
 /**
- * Walks back one calendar month from an ISO date (year/month only; the
- * caller re-resolves the day with resolveRecurringDay to honor month-end
- * clamping -- Jan 31 → Feb 28/29, not Feb 31).
+ * Walks back one calendar month from a year/month pair. Day of month is
+ * NOT passed through here; the caller re-resolves the day with
+ * resolveRecurringDay so Jan 31 → Feb 28/29 clamps correctly rather than
+ * silently rolling to March.
  */
 function stepBackOneMonth(year: number, month: number): { year: number; month: number } {
   if (month === 1) return { year: year - 1, month: 12 };
@@ -331,85 +337,98 @@ function stepForwardOneMonth(year: number, month: number): { year: number; month
   return { year, month: month + 1 };
 }
 
-/**
- * Resolves the single open billing cycle as of `todayIso`.
- *
- * The current cycle is the one whose due date is the smallest bill-due-day
- * occurrence >= today. "The next bill coming due" is always a well-defined
- * single date, even on the due day itself (`today === billDueDay`).
- */
-export function getCurrentBillCycle(todayIso: string, billDueDay: number): CreditCardBillCycle {
-  const [y, m] = todayIso.split("-").map(Number) as [number, number];
-  const thisMoDue = resolveRecurringDay({ year: y, month: m, paymentDayRule: billDueDay });
-
-  let currentCycleEnd: string;
-  if (todayIso <= thisMoDue) {
-    currentCycleEnd = thisMoDue;
-  } else {
-    const next = stepForwardOneMonth(y, m);
-    currentCycleEnd = resolveRecurringDay({ year: next.year, month: next.month, paymentDayRule: billDueDay });
-  }
-
-  const [cy, cm] = currentCycleEnd.split("-").map(Number) as [number, number];
-  const prev = stepBackOneMonth(cy, cm);
-  const previousCycleEnd = resolveRecurringDay({ year: prev.year, month: prev.month, paymentDayRule: billDueDay });
-
-  return { previousCycleEnd, currentCycleEnd, dueDate: currentCycleEnd };
+function billDueDateFor(year: number, month: number, billDueDay: number): string {
+  return resolveRecurringDay({ year, month, paymentDayRule: billDueDay });
 }
 
 /**
- * Full three-cycle snapshot as of `todayIso` (previous closed, current
- * open, next pending). This is what UI, Upcoming, Spensa, and MCP will
- * consume once Slice B/C swap the consumers over.
+ * Returns the currently OPEN billing cycle as of `todayIso`. The open
+ * cycle is `[cycleStart, cycleEnd)` where `cycleEnd` is the smallest
+ * bill-due-day occurrence STRICTLY AFTER today. On today == billDueDay,
+ * that is next month's due date (the cycle that just started today);
+ * today's bill belongs to the just-closed cycle returned by
+ * `getMostRecentClosedBillCycle`.
+ */
+export function getCurrentBillCycle(todayIso: string, billDueDay: number): CreditCardBillCycle {
+  const [y, m] = todayIso.split("-").map(Number) as [number, number];
+  const thisMoDue = billDueDateFor(y, m, billDueDay);
+
+  let cycleEnd: string;
+  if (todayIso < thisMoDue) {
+    cycleEnd = thisMoDue;
+  } else {
+    const next = stepForwardOneMonth(y, m);
+    cycleEnd = billDueDateFor(next.year, next.month, billDueDay);
+  }
+
+  const [cy, cm] = cycleEnd.split("-").map(Number) as [number, number];
+  const prev = stepBackOneMonth(cy, cm);
+  const cycleStart = billDueDateFor(prev.year, prev.month, billDueDay);
+
+  return { cycleStart, cycleEnd, dueDate: cycleEnd };
+}
+
+/**
+ * Returns the cycle that most recently CLOSED as of `todayIso`. On today
+ * == billDueDay this is the cycle whose bill is due today; otherwise the
+ * cycle whose bill was due at some past billDueDay occurrence.
+ */
+export function getMostRecentClosedBillCycle(todayIso: string, billDueDay: number): CreditCardBillCycle {
+  const open = getCurrentBillCycle(todayIso, billDueDay);
+  // The open cycle's start IS the previous (most recently closed) cycle's end,
+  // because successive cycles share their boundary date.
+  const closedEnd = open.cycleStart;
+  const [ey, em] = closedEnd.split("-").map(Number) as [number, number];
+  const prev = stepBackOneMonth(ey, em);
+  const closedStart = billDueDateFor(prev.year, prev.month, billDueDay);
+  return { cycleStart: closedStart, cycleEnd: closedEnd, dueDate: closedEnd };
+}
+
+/**
+ * Full three-cycle snapshot as of `todayIso` -- the cycle that just
+ * closed (whose bill is owed now), the currently open accumulating
+ * cycle, and the cycle after that. Everything downstream (UI, Upcoming,
+ * Spensa, MCP, notifications) builds from this one snapshot.
  */
 export function calculateCreditCardBillCycle(
   todayIso: string,
   config: CreditCardBillConfig,
 ): CreditCardBillSnapshot {
-  const current = getCurrentBillCycle(todayIso, config.billDueDay);
+  const open = getCurrentBillCycle(todayIso, config.billDueDay);
+  const mostRecentClosed = getMostRecentClosedBillCycle(todayIso, config.billDueDay);
 
-  const [cy, cm] = current.currentCycleEnd.split("-").map(Number) as [number, number];
-  const prev = stepBackOneMonth(cy, cm);
-  const previousCycleStartParts = stepBackOneMonth(prev.year, prev.month);
-  const previousCycleStart = resolveRecurringDay({
-    year: previousCycleStartParts.year,
-    month: previousCycleStartParts.month,
-    paymentDayRule: config.billDueDay,
-  });
-
-  const nextParts = stepForwardOneMonth(cy, cm);
-  const nextCycleEnd = resolveRecurringDay({
-    year: nextParts.year,
-    month: nextParts.month,
-    paymentDayRule: config.billDueDay,
-  });
+  const [oy, om] = open.cycleEnd.split("-").map(Number) as [number, number];
+  const nxt = stepForwardOneMonth(oy, om);
+  const nextEnd = billDueDateFor(nxt.year, nxt.month, config.billDueDay);
+  const nextCycle: CreditCardBillCycle = {
+    cycleStart: open.cycleEnd,
+    cycleEnd: nextEnd,
+    dueDate: nextEnd,
+  };
 
   return {
-    previousCycleStart,
-    previousCycleEnd: current.previousCycleEnd,
-    previousDueDate: current.previousCycleEnd,
-    currentCycleStart: current.previousCycleEnd,
-    currentCycleEnd: current.currentCycleEnd,
-    currentDueDate: current.currentCycleEnd,
-    nextCycleStart: current.currentCycleEnd,
-    nextCycleEnd,
-    nextDueDate: nextCycleEnd,
-    daysUntilCurrentDue: diffDaysIso(current.currentCycleEnd, todayIso),
+    mostRecentClosedCycle: mostRecentClosed,
+    openCycle: open,
+    nextCycle,
+    daysUntilMostRecentDue: diffDaysIso(mostRecentClosed.cycleEnd, todayIso),
+    daysUntilNextDue: diffDaysIso(open.cycleEnd, todayIso),
   };
 }
 
 /**
- * Returns true iff the transaction (occurredAt) belongs to the cycle
- * ending on `cycleEnd` (bounded by `prevCycleEnd` exclusive at the start,
- * inclusive at `cycleEnd`). Pure. Use this everywhere transaction →
- * cycle attribution is decided so one convention is enforced.
+ * True iff the transaction (`occurredAtIso`) belongs to the cycle
+ * `[cycleStart, cycleEnd)`. Half-open per the canonical rule: a
+ * transaction on `cycleEnd` belongs to the NEXT cycle, not this one.
+ * Use this everywhere transaction → cycle attribution is decided so one
+ * convention is enforced across upcoming, obligations, Safe-to-Spend,
+ * notifications, and MCP.
  */
 export function isTransactionInBillCycle(
   occurredAtIso: string,
-  prevCycleEndIso: string,
+  cycleStartIso: string,
   cycleEndIso: string,
 ): boolean {
-  return occurredAtIso > prevCycleEndIso && occurredAtIso <= cycleEndIso;
+  return occurredAtIso >= cycleStartIso && occurredAtIso < cycleEndIso;
 }
 
 /**

@@ -5,7 +5,7 @@ import { Controller, useForm, type Control, type FieldErrors } from "react-hook-
 import { zodResolver } from "@hookform/resolvers/zod";
 import { updateAccountSchema, type UpdateAccountInput } from "@spencare/validation";
 import type { AccountRow } from "@spencare/domain-application";
-import { calculateCreditCardBillingCycle } from "@spencare/domain-core";
+import { calculateCreditCardBillCycle } from "@spencare/domain-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,24 +40,24 @@ function formatDate(iso: string): string {
 }
 
 /**
- * Live preview computed from the SAME canonical domain function every other
- * surface (Upcoming, notifications, Spensa) calls -- never a locally
- * re-derived shift rule, so this can never silently drift from what
- * actually happens once saved.
+ * Live preview computed from the SAME canonical single-date billing
+ * calculator every other surface (Upcoming, notifications, Spensa) calls
+ * -- never a locally re-derived rule, so this can never silently drift
+ * from what actually happens once saved.
  */
-function BillingCyclePreview({ statementCloseDay, paymentDueDay }: { statementCloseDay: number | null; paymentDueDay: number | null }) {
-  if (statementCloseDay == null) return null;
-  const snapshot = calculateCreditCardBillingCycle(todayIsoLocal(), { statementCloseDay, paymentDueDay });
+function BillingCyclePreview({ billDueDay }: { billDueDay: number | null }) {
+  if (billDueDay == null) return null;
+  const snapshot = calculateCreditCardBillCycle(todayIsoLocal(), { billDueDay });
   return (
     <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-1">
-      <div className="flex justify-between"><span>Statement closes</span><span className="font-medium text-foreground">{formatDate(snapshot.openCycleEnd)}</span></div>
-      {snapshot.openCycleDueDate ? (
-        <div className="flex justify-between"><span>Payment due</span><span className="font-medium text-foreground">{formatDate(snapshot.openCycleDueDate)}</span></div>
-      ) : null}
-      <div className="flex justify-between"><span>Next statement closes</span><span>{formatDate(snapshot.nextCycleEnd)}</span></div>
-      {snapshot.nextCycleDueDate ? (
-        <div className="flex justify-between"><span>Next payment due</span><span>{formatDate(snapshot.nextCycleDueDate)}</span></div>
-      ) : null}
+      <div className="flex justify-between">
+        <span>Next bill due</span>
+        <span className="font-medium text-foreground">{formatDate(snapshot.openCycle.cycleEnd)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Following bill due</span>
+        <span>{formatDate(snapshot.nextCycle.cycleEnd)}</span>
+      </div>
     </div>
   );
 }
@@ -70,49 +70,32 @@ function CreditCardBillingFields({
   errors: FieldErrors<UpdateAccountInput>;
 }) {
   return (
-    <>
-      <Controller
-        control={control}
-        name="statementCloseDay"
-        render={({ field }) => (
+    <Controller
+      control={control}
+      name="paymentDueDay"
+      render={({ field }) => (
+        <>
           <FormField
-            id="edit-statement-day"
-            label="Statement closes"
-            error={errors.statementCloseDay?.message}
-            hint={field.value ? `Every month on the ${dayOfMonthLabel(field.value)}` : "Leave unset if you don't know your billing cycle yet."}
-          >
-            <DayOfMonthSelect id="edit-statement-day" value={field.value ?? null} onChange={field.onChange} placeholder="Not set" />
-          </FormField>
-        )}
-      />
-      <Controller
-        control={control}
-        name="paymentDueDay"
-        render={({ field }) => (
-          <FormField
-            id="edit-payment-day"
-            label="Payment due"
+            id="edit-bill-due-day"
+            label="Bill due"
             error={errors.paymentDueDay?.message}
-            hint={field.value ? `Every month on the ${dayOfMonthLabel(field.value)}` : "Leave unset if you don't know your payment due date yet."}
+            hint={
+              field.value
+                ? `Every month on the ${dayOfMonthLabel(field.value)}`
+                : "Leave unset if you don't know your bill due date yet."
+            }
           >
-            <DayOfMonthSelect id="edit-payment-day" value={field.value ?? null} onChange={field.onChange} placeholder="Not set" />
+            <DayOfMonthSelect
+              id="edit-bill-due-day"
+              value={field.value ?? null}
+              onChange={field.onChange}
+              placeholder="Not set"
+            />
           </FormField>
-        )}
-      />
-      <Controller
-        control={control}
-        name="statementCloseDay"
-        render={({ field: stmtField }) => (
-          <Controller
-            control={control}
-            name="paymentDueDay"
-            render={({ field: payField }) => (
-              <BillingCyclePreview statementCloseDay={stmtField.value ?? null} paymentDueDay={payField.value ?? null} />
-            )}
-          />
-        )}
-      />
-    </>
+          <BillingCyclePreview billDueDay={field.value ?? null} />
+        </>
+      )}
+    />
   );
 }
 
@@ -165,7 +148,6 @@ export function EditAccountSheet({
       [valueField.key]: valueField.initial,
       ...(account.type === "credit_card"
         ? {
-            statementCloseDay: account.statement_close_day ?? null,
             paymentDueDay: account.payment_due_day ?? null,
           }
         : {}),

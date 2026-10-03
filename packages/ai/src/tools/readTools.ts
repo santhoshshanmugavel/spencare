@@ -272,8 +272,8 @@ const getCreditCardBillingTool: ReadToolHandler = {
     name: "getCreditCardBillingSummary",
     description:
       "Get the billing status for a credit card account: the most recently closed statement's balance, its payment due date and status, current outstanding, available credit, and utilization. " +
-      "Use this to answer 'when is my credit card bill due?', 'when does my statement close?', or 'how much do I owe?'. " +
-      "Always distinguish statementBalanceMinor (the frozen amount owed for the most recently closed statement) from currentOutstandingMinor (the live running balance, which may already include newer, not-yet-billed spending) -- never conflate the two or guess which one answers the user's question. " +
+      "Use this to answer 'when is my credit card bill due?' or 'how much do I owe?'. " +
+      "Always distinguish currentBillAmountMinor (the frozen amount owed for the most recently closed cycle) from currentOutstandingMinor (the live running balance, which may already include newer, not-yet-billed spending) -- never conflate the two or guess which one answers the user's question. " +
       "All dates and balances come from the canonical credit-card billing domain service. Never calculate billing dates or balances yourself.",
     inputSchema: {
       type: "object",
@@ -287,6 +287,10 @@ const getCreditCardBillingTool: ReadToolHandler = {
     if (!account || account.type !== "credit_card") return null;
 
     const acctRow = account as unknown as {
+      // statement_close_day is deprecated in the single-date billing
+      // model (Slice B). The AI tool no longer surfaces it; retained in
+      // the row shape only because the column still exists on the DB
+      // table pending Slice C's drop.
       statement_close_day?: number | null;
       payment_due_day?: number | null;
       credit_limit_minor?: number | null;
@@ -302,7 +306,11 @@ const getCreditCardBillingTool: ReadToolHandler = {
     const todayIso = new Date().toISOString().slice(0, 10);
     const billing = await getCreditCardBillingStatus(
       ctx,
-      { id: accountId, statement_close_day: acctRow.statement_close_day ?? null, payment_due_day: acctRow.payment_due_day ?? null },
+      {
+        id: accountId,
+        statement_close_day: acctRow.statement_close_day ?? null,
+        payment_due_day: acctRow.payment_due_day ?? null,
+      },
       todayIso,
     );
     if (!billing) {
@@ -310,14 +318,14 @@ const getCreditCardBillingTool: ReadToolHandler = {
         accountId,
         accountName: account.name,
         currency: account.currency,
-        statementCloseDay: null,
-        paymentDueDay: null,
+        billDueDay: null,
         currentOutstandingMinor: privacyModeEnabled ? null : currentOutstandingMinor,
         availableCreditMinor: privacyModeEnabled ? null : availableCreditMinor,
+        creditLimitMinor: privacyModeEnabled ? null : creditLimitMinor,
         utilizationPercent,
-        statementBalanceMinor: null,
-        paymentStatus: "no_statement" as const,
-        note: "Billing dates are not set for this card. No statement or due date can be calculated.",
+        currentBillAmountMinor: null,
+        paymentStatus: "no_bill_configured" as const,
+        note: "Bill due day is not set for this card. No bill date can be calculated.",
       };
     }
 
@@ -325,16 +333,22 @@ const getCreditCardBillingTool: ReadToolHandler = {
       accountId,
       accountName: account.name,
       currency: account.currency,
-      statementCloseDay: acctRow.statement_close_day ?? null,
-      paymentDueDay: acctRow.payment_due_day ?? null,
-      statementPeriodStart: billing.snapshot.mostRecentClosedPeriodStart,
-      statementPeriodEnd: billing.snapshot.mostRecentClosedStatementDate,
-      nextStatementDate: billing.snapshot.nextCycleEnd,
-      nextPaymentDueDate: billing.snapshot.nextCycleDueDate,
-      currentStatementDueDate: billing.snapshot.mostRecentClosedDueDate,
-      statementBalanceMinor: privacyModeEnabled ? null : billing.statementBalanceMinor,
+      billDueDay: acctRow.payment_due_day ?? null,
+      // Dates for the cycle that most recently closed (the bill owed now)
+      // and for the next bill coming due.
+      currentCycleStart: billing.snapshot.mostRecentClosedCycle.cycleStart,
+      currentCycleEnd: billing.snapshot.mostRecentClosedCycle.cycleEnd,
+      currentBillDueDate: billing.snapshot.mostRecentClosedCycle.dueDate,
+      nextBillDueDate: billing.snapshot.openCycle.cycleEnd,
+      // Amounts: the bill now owed (frozen) vs the live outstanding
+      // (which may already include spending in the next, open cycle).
+      currentBillAmountMinor: privacyModeEnabled ? null : billing.statementBalanceMinor,
+      billPaidMinor: privacyModeEnabled ? null : billing.obligation.paidMinor,
+      billRemainingMinor: privacyModeEnabled ? null : billing.obligation.remainingMinor,
+      billStatus: billing.obligation.status,
       currentOutstandingMinor: privacyModeEnabled ? null : currentOutstandingMinor,
       availableCreditMinor: privacyModeEnabled ? null : availableCreditMinor,
+      creditLimitMinor: privacyModeEnabled ? null : creditLimitMinor,
       utilizationPercent,
       paymentStatus: billing.paymentStatus,
       obligation: {

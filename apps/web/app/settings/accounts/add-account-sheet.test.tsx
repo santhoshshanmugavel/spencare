@@ -98,7 +98,7 @@ describe("<AddAccountSheet> — credit card tab", () => {
     );
   });
 
-  it("billing days default to unset -- creating a card without choosing them never fabricates a date", async () => {
+  it("bill due day defaults to unset -- creating a card without choosing it never fabricates a date", async () => {
     const { createAccountAction } = await import("./actions");
     const user = userEvent.setup();
     render(<AddAccountSheet open onOpenChange={() => {}} onCreated={() => {}} />);
@@ -106,29 +106,35 @@ describe("<AddAccountSheet> — credit card tab", () => {
     await user.type(screen.getByLabelText("Card provider"), "ICICI");
     await user.click(screen.getByRole("button", { name: "Add card" }));
     expect(createAccountAction).toHaveBeenCalledWith(
-      expect.objectContaining({ statementCloseDay: null, paymentDueDay: null }),
+      expect.objectContaining({ paymentDueDay: null }),
     );
   });
 
-  it("uses a day-of-month selector for both billing days and shows a live preview once chosen", async () => {
+  it("uses a day-of-month selector for the single Bill due input and shows a live preview once chosen", async () => {
     const { createAccountAction } = await import("./actions");
     const user = userEvent.setup();
     render(<AddAccountSheet open onOpenChange={() => {}} onCreated={() => {}} />);
     await user.click(screen.getByRole("tab", { name: "Credit card" }));
     await user.type(screen.getByLabelText("Card provider"), "HDFC");
 
+    // The old two-input form is gone -- there is no "Statement closes" input anymore.
+    expect(screen.queryByLabelText("Statement closes")).not.toBeInTheDocument();
     expect(screen.queryByText("Next statement closes")).not.toBeInTheDocument();
+    // The preview starts hidden; appears once a bill due day is picked.
+    expect(screen.queryByText("Next bill due")).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText("Statement closes"));
-    await user.click(await screen.findByRole("option", { name: "20th" }));
-    expect(await screen.findByText("Next statement closes")).toBeInTheDocument();
-
-    await user.click(screen.getByLabelText("Payment due"));
+    await user.click(screen.getByLabelText("Bill due"));
     await user.click(await screen.findByRole("option", { name: "5th" }));
+    expect(await screen.findByText("Next bill due")).toBeInTheDocument();
+    expect(screen.getByText("Following bill due")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Add card" }));
     expect(createAccountAction).toHaveBeenCalledWith(
-      expect.objectContaining({ statementCloseDay: 20, paymentDueDay: 5 }),
+      expect.objectContaining({ paymentDueDay: 5 }),
+    );
+    // statement_close_day isn't part of the create payload anymore.
+    expect(createAccountAction).toHaveBeenCalledWith(
+      expect.not.objectContaining({ statementCloseDay: expect.anything() }),
     );
   });
 });

@@ -10,7 +10,7 @@ import {
   checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder,
   checkCreditCardBillingReminder, checkPlanItemReminder, checkPlanBudgetRisk, checkPlanCompletion,
 } from "./eventRules";
-import { resolveRecurringDay, getCreditCardBillingCycleForMonth } from "@spencare/domain-core";
+import { resolveRecurringDay } from "@spencare/domain-core";
 import { savingDatesForOccurrence } from "@spencare/domain-core";
 import { getCreditCardStatementSummary, upsertCreditCardObligation, listPlansWithSummaries, getPlanContextForUpcomingSources, type UpcomingPlanContextMaps } from "@spencare/domain-application";
 import type { NotificationRunStats } from "./engine";
@@ -480,21 +480,24 @@ async function runChecksForUser(
     }
   }
 
-  // ---- Credit card billing reminders (statement cut day + payment due day) ----
+  // ---- Credit card bill reminders (single-date billing model) ----
+  // One reminder per card per month, keyed on the bill due date. There
+  // is no separate "statement close" reminder in the new model -- the
+  // cycle closes on the same date the bill is due.
   for (const account of accounts ?? []) {
     if (account.type !== "credit_card") continue;
-    const stmtDay: number | null = (account as { statement_close_day?: number | null }).statement_close_day ?? null;
     const payDay: number | null = (account as { payment_due_day?: number | null }).payment_due_day ?? null;
-    if (stmtDay == null && payDay == null) continue;
+    if (payDay == null) continue;
 
-    // Compute statement summary and upsert obligation for the current period
+    // Compute the open cycle's running summary and upsert the obligation
+    // for the most-recently-closed cycle (that's the bill actually owed).
     let obligationRemainingMinor: number | null = null;
     let obligationStatus: string | null = null;
-    let currentStatementDate: string | null = null;
+    let currentBillDueDate: string | null = null;
     try {
       const summary = await getCreditCardStatementSummary(svcCtx, account.id);
       if (summary) {
-        currentStatementDate = summary.statementDate;
+        currentBillDueDate = summary.statementDate; // = next bill due date in the new model
         const obligation = await upsertCreditCardObligation(svcCtx, {
           accountId: account.id,
           statementDate: summary.statementDate,
@@ -507,11 +510,9 @@ async function runChecksForUser(
         obligationStatus = obligation.status;
       }
     } catch {
-      // Obligation upsert failure must not block reminders
+      // Obligation upsert failure must not block reminders.
     }
 
-    // Check the current calendar month and the next so reminders fire near month boundaries.
-    // For payment reminders: suppress when the obligation is fully paid.
     const outstanding = obligationRemainingMinor ?? (account.credit_used_minor ?? 0);
 
     const todayYear = today.getUTCFullYear();
@@ -523,55 +524,33 @@ async function runChecksForUser(
     ];
 
     for (const { year, month } of months) {
-      const billing = getCreditCardBillingCycleForMonth(year, month, {
-        statementCloseDay: stmtDay ?? 1,
-        paymentDueDay: payDay,
-      });
+      // Bill due day with full month-end clamping (same convention
+      // everywhere -- resolveRecurringDay is the single source).
+      const billDueDate = resolveRecurringDay({ year, month, paymentDayRule: payDay });
 
       try {
-        if (stmtDay != null) {
-          await checkCreditCardBillingReminder({
-            serviceRoleSupabase, userId, userEmail,
-            accountId: account.id,
-            accountName: account.name,
-            dueDateIso: billing.statementCloseDate,
-            kind: "statement",
-            outstandingMinor: outstanding,
-            currency: account.currency ?? "INR",
-            todayIso,
-            financialPlanNames: planContext.accountIdToPlans.get(account.id)?.map((p) => p.name),
-          }, stats);
+        // Suppress the reminder when the bill for THIS exact cycle has
+        // already been fully paid.
+        const isCurrentCyclePaid =
+          obligationStatus === "paid" &&
+          currentBillDueDate != null &&
+          billDueDate === currentBillDueDate;
+        if (isCurrentCyclePaid) {
           checksRun++;
+          continue;
         }
-      } catch {
-        notificationsFailed++;
-      }
-
-      try {
-        if (payDay != null && billing.paymentDueDate != null) {
-          // Suppress payment reminders when the obligation is fully paid for the current cycle.
-          const isCurrentCyclePaid =
-            obligationStatus === "paid" &&
-            currentStatementDate != null &&
-            stmtDay != null &&
-            billing.statementCloseDate === currentStatementDate;
-          if (isCurrentCyclePaid) {
-            checksRun++;
-            continue;
-          }
-          await checkCreditCardBillingReminder({
-            serviceRoleSupabase, userId, userEmail,
-            accountId: account.id,
-            accountName: account.name,
-            dueDateIso: billing.paymentDueDate,
-            kind: "payment",
-            outstandingMinor: outstanding,
-            currency: account.currency ?? "INR",
-            todayIso,
-            financialPlanNames: planContext.accountIdToPlans.get(account.id)?.map((p) => p.name),
-          }, stats);
-          checksRun++;
-        }
+        await checkCreditCardBillingReminder({
+          serviceRoleSupabase, userId, userEmail,
+          accountId: account.id,
+          accountName: account.name,
+          dueDateIso: billDueDate,
+          kind: "payment",
+          outstandingMinor: outstanding,
+          currency: account.currency ?? "INR",
+          todayIso,
+          financialPlanNames: planContext.accountIdToPlans.get(account.id)?.map((p) => p.name),
+        }, stats);
+        checksRun++;
       } catch {
         notificationsFailed++;
       }

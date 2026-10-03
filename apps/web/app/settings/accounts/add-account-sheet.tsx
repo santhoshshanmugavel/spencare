@@ -27,7 +27,7 @@ import { FormField, errorId } from "@/components/spencare/form-field";
 import { DayOfMonthSelect, dayOfMonthLabel } from "@/components/spencare/day-of-month-select";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { parseMoneyInput } from "@/lib/money-input";
-import { calculateCreditCardBillingCycle } from "@spencare/domain-core";
+import { calculateCreditCardBillCycle } from "@spencare/domain-core";
 import { createAccountAction } from "./actions";
 import { ChangeCurrencyDialog } from "./change-currency-dialog";
 
@@ -44,9 +44,11 @@ const CURRENCIES = ["INR", "USD", "EUR", "GBP"];
  * (Phase 7 reconnaissance): bank "Account type" (Savings/Current).
  * Investment "Investment Type" (Mutual Funds/Stocks/…) -- DD-10 is
  * unresolved, no schema column exists.
- * Credit card billing/due days are now supported (statement_close_day,
- * payment_due_day columns added in migration 20260920000002, renamed in
- * 20260921000002).
+ * Credit cards: a single "Bill due" day drives the entire billing cycle
+ * (the day the bill is due is also the day the cycle closes). The older
+ * "Statement closes on" input and the grace-period shift it enabled are
+ * gone from this surface; see creditCardBilling.ts for the canonical
+ * single-date model.
  */
 
 function todayIsoLocal(): string {
@@ -59,20 +61,20 @@ function formatDate(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-/** Same canonical domain function every other surface calls -- never a locally re-derived shift rule. */
-function BillingCyclePreview({ statementCloseDay, paymentDueDay }: { statementCloseDay: number | null; paymentDueDay: number | null }) {
-  if (statementCloseDay == null) return null;
-  const snapshot = calculateCreditCardBillingCycle(todayIsoLocal(), { statementCloseDay, paymentDueDay });
+/** Same canonical single-date billing calculator every other surface calls. */
+function BillingCyclePreview({ billDueDay }: { billDueDay: number | null }) {
+  if (billDueDay == null) return null;
+  const snapshot = calculateCreditCardBillCycle(todayIsoLocal(), { billDueDay });
   return (
     <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-1">
-      <div className="flex justify-between"><span>Statement closes</span><span className="font-medium text-foreground">{formatDate(snapshot.openCycleEnd)}</span></div>
-      {snapshot.openCycleDueDate ? (
-        <div className="flex justify-between"><span>Payment due</span><span className="font-medium text-foreground">{formatDate(snapshot.openCycleDueDate)}</span></div>
-      ) : null}
-      <div className="flex justify-between"><span>Next statement closes</span><span>{formatDate(snapshot.nextCycleEnd)}</span></div>
-      {snapshot.nextCycleDueDate ? (
-        <div className="flex justify-between"><span>Next payment due</span><span>{formatDate(snapshot.nextCycleDueDate)}</span></div>
-      ) : null}
+      <div className="flex justify-between">
+        <span>Next bill due</span>
+        <span className="font-medium text-foreground">{formatDate(snapshot.openCycle.cycleEnd)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Following bill due</span>
+        <span>{formatDate(snapshot.nextCycle.cycleEnd)}</span>
+      </div>
     </div>
   );
 }
@@ -207,7 +209,6 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
       currency: "INR",
       creditLimitMinor: 0,
       creditUsedMinor: 0,
-      statementCloseDay: null,
       paymentDueDay: null,
     },
   });
@@ -264,43 +265,28 @@ function CreditCardForm({ onDone }: { onDone: () => void }) {
       </FormField>
       <Controller
         control={control}
-        name="statementCloseDay"
-        render={({ field }) => (
-          <FormField
-            id="cc-statement-day"
-            label="Statement closes"
-            error={errors.statementCloseDay?.message}
-            hint={field.value ? `Every month on the ${dayOfMonthLabel(field.value)}` : "Leave unset if you don't know your billing cycle yet."}
-          >
-            <DayOfMonthSelect id="cc-statement-day" value={field.value ?? null} onChange={field.onChange} placeholder="Not set" />
-          </FormField>
-        )}
-      />
-      <Controller
-        control={control}
         name="paymentDueDay"
         render={({ field }) => (
-          <FormField
-            id="cc-payment-day"
-            label="Payment due"
-            error={errors.paymentDueDay?.message}
-            hint={field.value ? `Every month on the ${dayOfMonthLabel(field.value)}` : "Leave unset if you don't know your payment due date yet."}
-          >
-            <DayOfMonthSelect id="cc-payment-day" value={field.value ?? null} onChange={field.onChange} placeholder="Not set" />
-          </FormField>
-        )}
-      />
-      <Controller
-        control={control}
-        name="statementCloseDay"
-        render={({ field: stmtField }) => (
-          <Controller
-            control={control}
-            name="paymentDueDay"
-            render={({ field: payField }) => (
-              <BillingCyclePreview statementCloseDay={stmtField.value ?? null} paymentDueDay={payField.value ?? null} />
-            )}
-          />
+          <>
+            <FormField
+              id="cc-bill-due-day"
+              label="Bill due"
+              error={errors.paymentDueDay?.message}
+              hint={
+                field.value
+                  ? `Every month on the ${dayOfMonthLabel(field.value)}`
+                  : "Leave unset if you don't know your bill due date yet."
+              }
+            >
+              <DayOfMonthSelect
+                id="cc-bill-due-day"
+                value={field.value ?? null}
+                onChange={field.onChange}
+                placeholder="Not set"
+              />
+            </FormField>
+            <BillingCyclePreview billDueDay={field.value ?? null} />
+          </>
         )}
       />
       <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
