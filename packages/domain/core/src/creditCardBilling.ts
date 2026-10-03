@@ -247,3 +247,184 @@ export function deriveCreditCardPaymentStatus(input: {
   const days = diffDaysIso(input.dueDate, input.todayIso);
   return days <= DUE_SOON_THRESHOLD_DAYS ? "due_soon" : "statement_closed";
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Bill-due-day-only model (Slice A).
+//
+//  This is the simplified billing model the product is moving to: the user
+//  configures ONE date -- the day the card's bill becomes due each month --
+//  and the cycle, due date, and status all derive from that single input.
+//  There is no separate "statement closes on" input and no grace-period
+//  concept: the day the cycle closes IS the day the bill is due.
+//
+//  Boundary rule (kept consistent with the two-day calculator above):
+//      previousCycleEnd < transaction_date <= currentCycleEnd
+//  A transaction landing exactly on the bill due day belongs to the cycle
+//  that CLOSES on that day (i.e. the bill that becomes due that day). The
+//  product spec's examples suggest `cycleStart <= tx < cycleEnd`, which is
+//  equally defensible but would move boundary-day transactions into the
+//  next cycle and risk shifting them between already-closed and open
+//  obligations; the product owner has signed off on keeping the inclusive-
+//  right convention so historical obligations/payments stay stable.
+//
+//  The older `calculateCreditCardBillingCycle({ statementCloseDay,
+//  paymentDueDay })` and friends remain in this file for the moment -- the
+//  Slice A plan is additive (new API + tests only). Slice B swaps the UI
+//  and consumers to the new API, and Slice C removes the deprecated API
+//  and runs the forward-only schema migration.
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface CreditCardBillConfig {
+  /**
+   * Day of the month the credit card's bill becomes due. Same encoding as
+   * every other paymentDayRule in the domain: 1-28 are literal, 29-31 are
+   * clamped to the last valid day of a shorter month (February: 28/29 in
+   * leap years), and PAYMENT_DAY_LAST_OF_MONTH (= 32) means "last calendar
+   * day of the month" regardless of length.
+   */
+  billDueDay: number;
+}
+
+export interface CreditCardBillCycle {
+  /** Date the previous bill was due. Transactions STRICTLY AFTER this fall into the current open cycle. */
+  previousCycleEnd: string;
+  /** Date the current open cycle will close -- same date as the next bill's due date. Transactions ON OR BEFORE this fall into the current open cycle. */
+  currentCycleEnd: string;
+  /** Alias for currentCycleEnd. The one date the UI shows the user ("bill due 5 Oct"). */
+  dueDate: string;
+}
+
+export interface CreditCardBillSnapshot {
+  /** Previously-closed cycle: (previousPreviousCycleEnd, previousCycleEnd]. */
+  previousCycleStart: string;
+  previousCycleEnd: string;
+  previousDueDate: string;
+  /** Current (open) cycle: (previousCycleEnd, currentCycleEnd]. */
+  currentCycleStart: string;
+  currentCycleEnd: string;
+  currentDueDate: string;
+  /** Next cycle (will open as soon as the current closes): (currentCycleEnd, nextCycleEnd]. */
+  nextCycleStart: string;
+  nextCycleEnd: string;
+  nextDueDate: string;
+  /**
+   * Signed day delta from today to the current cycle's due date.
+   *   > 0  the bill is due in that many days (future).
+   *   = 0  the bill is due today.
+   *   < 0  overdue by that many days (should not happen for the currently open cycle, but is well-defined).
+   */
+  daysUntilCurrentDue: number;
+}
+
+/**
+ * Walks back one calendar month from an ISO date (year/month only; the
+ * caller re-resolves the day with resolveRecurringDay to honor month-end
+ * clamping -- Jan 31 → Feb 28/29, not Feb 31).
+ */
+function stepBackOneMonth(year: number, month: number): { year: number; month: number } {
+  if (month === 1) return { year: year - 1, month: 12 };
+  return { year, month: month - 1 };
+}
+
+function stepForwardOneMonth(year: number, month: number): { year: number; month: number } {
+  if (month === 12) return { year: year + 1, month: 1 };
+  return { year, month: month + 1 };
+}
+
+/**
+ * Resolves the single open billing cycle as of `todayIso`.
+ *
+ * The current cycle is the one whose due date is the smallest bill-due-day
+ * occurrence >= today. "The next bill coming due" is always a well-defined
+ * single date, even on the due day itself (`today === billDueDay`).
+ */
+export function getCurrentBillCycle(todayIso: string, billDueDay: number): CreditCardBillCycle {
+  const [y, m] = todayIso.split("-").map(Number) as [number, number];
+  const thisMoDue = resolveRecurringDay({ year: y, month: m, paymentDayRule: billDueDay });
+
+  let currentCycleEnd: string;
+  if (todayIso <= thisMoDue) {
+    currentCycleEnd = thisMoDue;
+  } else {
+    const next = stepForwardOneMonth(y, m);
+    currentCycleEnd = resolveRecurringDay({ year: next.year, month: next.month, paymentDayRule: billDueDay });
+  }
+
+  const [cy, cm] = currentCycleEnd.split("-").map(Number) as [number, number];
+  const prev = stepBackOneMonth(cy, cm);
+  const previousCycleEnd = resolveRecurringDay({ year: prev.year, month: prev.month, paymentDayRule: billDueDay });
+
+  return { previousCycleEnd, currentCycleEnd, dueDate: currentCycleEnd };
+}
+
+/**
+ * Full three-cycle snapshot as of `todayIso` (previous closed, current
+ * open, next pending). This is what UI, Upcoming, Spensa, and MCP will
+ * consume once Slice B/C swap the consumers over.
+ */
+export function calculateCreditCardBillCycle(
+  todayIso: string,
+  config: CreditCardBillConfig,
+): CreditCardBillSnapshot {
+  const current = getCurrentBillCycle(todayIso, config.billDueDay);
+
+  const [cy, cm] = current.currentCycleEnd.split("-").map(Number) as [number, number];
+  const prev = stepBackOneMonth(cy, cm);
+  const previousCycleStartParts = stepBackOneMonth(prev.year, prev.month);
+  const previousCycleStart = resolveRecurringDay({
+    year: previousCycleStartParts.year,
+    month: previousCycleStartParts.month,
+    paymentDayRule: config.billDueDay,
+  });
+
+  const nextParts = stepForwardOneMonth(cy, cm);
+  const nextCycleEnd = resolveRecurringDay({
+    year: nextParts.year,
+    month: nextParts.month,
+    paymentDayRule: config.billDueDay,
+  });
+
+  return {
+    previousCycleStart,
+    previousCycleEnd: current.previousCycleEnd,
+    previousDueDate: current.previousCycleEnd,
+    currentCycleStart: current.previousCycleEnd,
+    currentCycleEnd: current.currentCycleEnd,
+    currentDueDate: current.currentCycleEnd,
+    nextCycleStart: current.currentCycleEnd,
+    nextCycleEnd,
+    nextDueDate: nextCycleEnd,
+    daysUntilCurrentDue: diffDaysIso(current.currentCycleEnd, todayIso),
+  };
+}
+
+/**
+ * Returns true iff the transaction (occurredAt) belongs to the cycle
+ * ending on `cycleEnd` (bounded by `prevCycleEnd` exclusive at the start,
+ * inclusive at `cycleEnd`). Pure. Use this everywhere transaction →
+ * cycle attribution is decided so one convention is enforced.
+ */
+export function isTransactionInBillCycle(
+  occurredAtIso: string,
+  prevCycleEndIso: string,
+  cycleEndIso: string,
+): boolean {
+  return occurredAtIso > prevCycleEndIso && occurredAtIso <= cycleEndIso;
+}
+
+/**
+ * Narrow adapter from an AccountRow-like shape to the pure
+ * CreditCardBillConfig the calculator takes. Returns null when the card
+ * is not yet configured. Lives here (next to the calculator) rather than
+ * in @spencare/domain-application so the adapter and the calculator can
+ * never drift apart. The input is deliberately a tiny structural type --
+ * callers pass `{ payment_due_day: … }` from any AccountRow without
+ * importing the heavier application-package types.
+ */
+export function billingConfigFromAccount(
+  account: { payment_due_day: number | null | undefined },
+): CreditCardBillConfig | null {
+  const day = account.payment_due_day;
+  if (day == null) return null;
+  return { billDueDay: day };
+}
