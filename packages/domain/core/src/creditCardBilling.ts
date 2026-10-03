@@ -248,6 +248,99 @@ export function deriveCreditCardPaymentStatus(input: {
   return days <= DUE_SOON_THRESHOLD_DAYS ? "due_soon" : "statement_closed";
 }
 
+/**
+ * The one-line bill status label shown on the Accounts card. Returns a
+ * neutral "no bill" state when there is no obligation to display (card
+ * is unconfigured, cycle had zero activity, or the obligation has
+ * already been fully paid) so a zero-outstanding card can NEVER render
+ * "Bill overdue by Xd" the way the pre-fix card did when it tried to
+ * derive status purely from calendar math.
+ *
+ * `paymentStatus` is produced server-side by
+ * `getCreditCardBillingStatus`, which calls `deriveCreditCardPaymentStatus`
+ * above. Keeping this mapping in one pure function means Accounts,
+ * Upcoming, Spensa, and MCP can all consume the same display text and
+ * never drift. Null `billingStatus` represents "card not configured
+ * for billing" and renders no row at all.
+ */
+export type CreditCardCardStatusKind =
+  | "unconfigured"
+  | "no_bill"
+  | "paid"
+  | "upcoming"
+  | "due_soon"
+  | "due_today"
+  | "overdue";
+
+export type CreditCardCardStatusTone = "neutral" | "info" | "success" | "warning" | "danger";
+
+export interface CreditCardCardStatus {
+  kind: CreditCardCardStatusKind;
+  text: string;
+  tone: CreditCardCardStatusTone;
+  /** Minor units still owed on the bill (0 when paid / no bill). */
+  remainingMinor: number;
+}
+
+export function deriveCreditCardCardStatus(input: {
+  todayIso: string;
+  /** The output of `getCreditCardBillingStatus` fields the card needs. Null when the card has no bill-due-day configured yet. */
+  billing: {
+    paymentStatus: CreditCardPaymentStatus;
+    dueDate: string | null;
+    /** Frozen bill amount for the most recently closed cycle, in minor units. Zero when the cycle had no spending. */
+    statementBalanceMinor: number;
+    /** Already paid toward this bill, in minor units. */
+    paidMinor: number;
+    remainingMinor: number;
+    obligationStatus: "unpaid" | "partial" | "paid";
+  } | null;
+}): CreditCardCardStatus {
+  if (input.billing == null) {
+    return { kind: "unconfigured", text: "No bill configured", tone: "neutral", remainingMinor: 0 };
+  }
+
+  // "No bill this cycle": the cycle closed with zero spending OR the
+  // obligation has been fully paid. In both cases the card has nothing
+  // to show the user as owed, and in particular MUST NOT show an
+  // overdue label even if the due date is in the past.
+  if (input.billing.statementBalanceMinor === 0) {
+    return { kind: "no_bill", text: "No bill due", tone: "neutral", remainingMinor: 0 };
+  }
+  if (input.billing.obligationStatus === "paid" || input.billing.remainingMinor <= 0) {
+    return { kind: "paid", text: "Bill paid", tone: "success", remainingMinor: 0 };
+  }
+
+  // Date-driven states below: the obligation is real and unpaid, so
+  // "upcoming" / "due today" / "overdue" are legitimate. We re-check
+  // `dueDate` for a null defensively; if the server lost it, fall
+  // back to the server-side status enum text rather than inventing a
+  // date-based label.
+  if (input.billing.dueDate == null) {
+    return {
+      kind: input.billing.paymentStatus === "overdue" ? "overdue" : "upcoming",
+      text: input.billing.paymentStatus === "overdue" ? "Bill overdue" : "Bill due",
+      tone: input.billing.paymentStatus === "overdue" ? "danger" : "info",
+      remainingMinor: input.billing.remainingMinor,
+    };
+  }
+
+  if (input.todayIso < input.billing.dueDate) {
+    const days = diffDaysIso(input.billing.dueDate, input.todayIso);
+    const text =
+      days === 1 ? "Bill due tomorrow" : days <= 7 ? `Bill due in ${days}d` : `Bill due in ${days}d`;
+    const tone: CreditCardCardStatusTone = days <= 3 ? "warning" : "info";
+    const kind: CreditCardCardStatusKind = days <= 3 ? "due_soon" : "upcoming";
+    return { kind, text, tone, remainingMinor: input.billing.remainingMinor };
+  }
+  if (input.todayIso === input.billing.dueDate) {
+    return { kind: "due_today", text: "Bill due today", tone: "warning", remainingMinor: input.billing.remainingMinor };
+  }
+  const daysLate = diffDaysIso(input.todayIso, input.billing.dueDate);
+  const text = daysLate === 1 ? "Bill overdue by 1d" : `Bill overdue by ${daysLate}d`;
+  return { kind: "overdue", text, tone: "danger", remainingMinor: input.billing.remainingMinor };
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 //  Bill-due-day-only model (Slice A, boundary finalized in Slice B).
 //

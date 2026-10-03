@@ -63,11 +63,17 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   return <p className="mt-4 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</p>;
 }
 
-/** Plain, server-fetched billing status for the credit card currently being viewed (null while unknown/loading, or when billing days aren't configured). */
+/** Plain, server-fetched billing status for the credit card currently being viewed (null while unknown/loading, or when billing days aren't configured). The paid/remaining fields are optional only because older server routes did not populate them; the current page.tsx fills them. */
 export interface CreditCardBillingStatusView {
   statementBalanceMinor: number;
   paymentStatus: CreditCardPaymentStatus;
   obligationStatus: "unpaid" | "partial" | "paid";
+  /** Bill due date (= most recently closed cycle's dueDate). Null when the card is new/no closed cycle yet. */
+  dueDate?: string | null;
+  /** Minor units already paid against this bill. */
+  paidMinor?: number;
+  /** Minor units still owed on this bill (0 when paid). */
+  remainingMinor?: number;
 }
 
 interface AccountDetailsSheetProps {

@@ -10,6 +10,7 @@ import {
   getCurrentBillCycle,
   isTransactionInBillCycle,
   billingConfigFromAccount,
+  deriveCreditCardCardStatus,
 } from "./creditCardBilling.js";
 
 describe("resolvePaymentDueDate", () => {
@@ -536,5 +537,201 @@ describe("billingConfigFromAccount", () => {
 
   it("passes through the last-day sentinel (32) without translating", () => {
     expect(billingConfigFromAccount({ payment_due_day: 32 })).toEqual({ billDueDay: 32 });
+  });
+});
+
+describe("deriveCreditCardCardStatus (Accounts card label, Oct 2026 production bug fix)", () => {
+  const today = "2026-10-03";
+
+  it("Production bug acceptance: IDFC with ₹0 outstanding + ₹0 bill never shows 'Bill overdue by 28d'", () => {
+    // IDFC had credit_used_minor = 0 and the cycle had no activity.
+    // Before this fix, the card did raw date math on the simulated
+    // most-recent-closed cycle and blurted "Bill overdue by 28d". The
+    // correct label is "No bill due".
+    const r = deriveCreditCardCardStatus({
+      todayIso: today,
+      billing: {
+        paymentStatus: "paid",
+        dueDate: "2026-09-05",
+        statementBalanceMinor: 0,
+        paidMinor: 0,
+        remainingMinor: 0,
+        obligationStatus: "paid",
+      },
+    });
+    expect(r.kind).toBe("no_bill");
+    expect(r.text).toBe("No bill due");
+    expect(r.tone).toBe("neutral");
+    expect(r.remainingMinor).toBe(0);
+  });
+
+  it("Paid bill after due date stays 'Bill paid', NOT overdue", () => {
+    const r = deriveCreditCardCardStatus({
+      todayIso: today,
+      billing: {
+        paymentStatus: "paid",
+        dueDate: "2026-09-05", // 28 days ago
+        statementBalanceMinor: 1275400,
+        paidMinor: 1275400,
+        remainingMinor: 0,
+        obligationStatus: "paid",
+      },
+    });
+    expect(r.kind).toBe("paid");
+    expect(r.text).toBe("Bill paid");
+    expect(r.tone).toBe("success");
+  });
+
+  it("Paid-early still shows paid once the due date passes", () => {
+    // Spec example: paid 3 Oct, due 5 Oct, today 10 Oct.
+    const r = deriveCreditCardCardStatus({
+      todayIso: "2026-10-10",
+      billing: {
+        paymentStatus: "paid",
+        dueDate: "2026-10-05",
+        statementBalanceMinor: 1000000,
+        paidMinor: 1000000,
+        remainingMinor: 0,
+        obligationStatus: "paid",
+      },
+    });
+    expect(r.kind).toBe("paid");
+  });
+
+  it("Unpaid + today > dueDate: Bill overdue by Nd (danger tone)", () => {
+    const r = deriveCreditCardCardStatus({
+      todayIso: "2026-10-10",
+      billing: {
+        paymentStatus: "overdue",
+        dueDate: "2026-10-05",
+        statementBalanceMinor: 1000000,
+        paidMinor: 0,
+        remainingMinor: 1000000,
+        obligationStatus: "unpaid",
+      },
+    });
+    expect(r.kind).toBe("overdue");
+    expect(r.text).toBe("Bill overdue by 5d");
+    expect(r.tone).toBe("danger");
+    expect(r.remainingMinor).toBe(1000000);
+  });
+
+  it("Unpaid + today == dueDate: Due today (warning)", () => {
+    const r = deriveCreditCardCardStatus({
+      todayIso: "2026-10-05",
+      billing: {
+        paymentStatus: "due_today",
+        dueDate: "2026-10-05",
+        statementBalanceMinor: 1000000,
+        paidMinor: 0,
+        remainingMinor: 1000000,
+        obligationStatus: "unpaid",
+      },
+    });
+    expect(r.kind).toBe("due_today");
+    expect(r.text).toBe("Bill due today");
+    expect(r.tone).toBe("warning");
+  });
+
+  it("Unpaid + today < dueDate: Bill due in Nd", () => {
+    const r = deriveCreditCardCardStatus({
+      todayIso: today, // 2026-10-03
+      billing: {
+        paymentStatus: "due_soon",
+        dueDate: "2026-10-10",
+        statementBalanceMinor: 1000000,
+        paidMinor: 0,
+        remainingMinor: 1000000,
+        obligationStatus: "unpaid",
+      },
+    });
+    expect(r.kind).toBe("upcoming");
+    expect(r.text).toBe("Bill due in 7d");
+    expect(r.tone).toBe("info");
+  });
+
+  it("Unpaid + dueDate within 3 days: due_soon with warning tone", () => {
+    const r = deriveCreditCardCardStatus({
+      todayIso: today, // 2026-10-03
+      billing: {
+        paymentStatus: "due_soon",
+        dueDate: "2026-10-05",
+        statementBalanceMinor: 1000000,
+        paidMinor: 0,
+        remainingMinor: 1000000,
+        obligationStatus: "unpaid",
+      },
+    });
+    expect(r.kind).toBe("due_soon");
+    expect(r.text).toBe("Bill due in 2d");
+    expect(r.tone).toBe("warning");
+  });
+
+  it("Due tomorrow: natural-language label", () => {
+    const r = deriveCreditCardCardStatus({
+      todayIso: today,
+      billing: {
+        paymentStatus: "due_soon",
+        dueDate: "2026-10-04",
+        statementBalanceMinor: 1000000,
+        paidMinor: 0,
+        remainingMinor: 1000000,
+        obligationStatus: "unpaid",
+      },
+    });
+    expect(r.text).toBe("Bill due tomorrow");
+  });
+
+  it("Partially paid + overdue: still overdue, remaining is what's left", () => {
+    const r = deriveCreditCardCardStatus({
+      todayIso: "2026-10-10",
+      billing: {
+        paymentStatus: "overdue",
+        dueDate: "2026-10-05",
+        statementBalanceMinor: 1000000,
+        paidMinor: 700000,
+        remainingMinor: 300000,
+        obligationStatus: "partial",
+      },
+    });
+    expect(r.kind).toBe("overdue");
+    expect(r.remainingMinor).toBe(300000);
+  });
+
+  it("null billing (card not configured): unconfigured label, no overdue", () => {
+    const r = deriveCreditCardCardStatus({ todayIso: today, billing: null });
+    expect(r.kind).toBe("unconfigured");
+    expect(r.text).toBe("No bill configured");
+    expect(r.tone).toBe("neutral");
+  });
+
+  it("§ data integrity: zero outstanding alone is NOT sufficient to decide paid vs no_bill", () => {
+    // statementBalanceMinor===0 means the cycle had no activity -> no_bill
+    const noActivity = deriveCreditCardCardStatus({
+      todayIso: today,
+      billing: {
+        paymentStatus: "paid",
+        dueDate: "2026-09-05",
+        statementBalanceMinor: 0,
+        paidMinor: 0,
+        remainingMinor: 0,
+        obligationStatus: "unpaid",
+      },
+    });
+    expect(noActivity.kind).toBe("no_bill");
+
+    // statementBalanceMinor>0 + obligationStatus=paid means paid
+    const paidOut = deriveCreditCardCardStatus({
+      todayIso: today,
+      billing: {
+        paymentStatus: "paid",
+        dueDate: "2026-09-05",
+        statementBalanceMinor: 1000000,
+        paidMinor: 1000000,
+        remainingMinor: 0,
+        obligationStatus: "paid",
+      },
+    });
+    expect(paidOut.kind).toBe("paid");
   });
 });

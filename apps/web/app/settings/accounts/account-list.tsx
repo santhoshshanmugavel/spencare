@@ -134,6 +134,7 @@ export function AccountList({
                 commitmentReserveMinor={commitmentReservePerAccount[account.id] ?? 0}
                 cardReserveDetails={cardReserveDetails.filter((d) => d.paymentAccountId === account.id)}
                 paymentAccountName={paymentAccountNameByCardId[account.id] ?? null}
+                billingStatus={billingStatusByCardId[account.id] ?? null}
               />
             ))}
           </div>

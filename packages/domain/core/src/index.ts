@@ -183,8 +183,12 @@ export {
   getMostRecentClosedBillCycle,
   isTransactionInBillCycle,
   billingConfigFromAccount,
+  deriveCreditCardCardStatus,
   type CreditCardBillConfig,
   type CreditCardBillSnapshot,
+  type CreditCardCardStatus,
+  type CreditCardCardStatusKind,
+  type CreditCardCardStatusTone,
 } from "./creditCardBilling.js";
 
 export {

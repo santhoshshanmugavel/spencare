@@ -57,6 +57,13 @@ export default async function AccountsSettingsPage() {
         statementBalanceMinor: status.statementBalanceMinor,
         paymentStatus: status.paymentStatus,
         obligationStatus: status.obligation.status,
+        // Due date + paid/remaining feed the Accounts card's bill
+        // status row so a paid or zero-activity cycle can never
+        // render "Bill overdue by Xd" from pure date math. Carried
+        // alongside the fields already consumed by the details sheet.
+        dueDate: status.obligation.dueDate,
+        paidMinor: status.obligation.paidMinor,
+        remainingMinor: status.obligation.remainingMinor,
       };
     }
   }

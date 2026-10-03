@@ -1,8 +1,13 @@
 "use client";
 
 import { MoreHorizontal, Landmark, Banknote, CreditCard, TrendingUp, AlertTriangle } from "lucide-react";
-import { Money as DomainMoney, billingConfigFromAccount, calculateCreditCardBillCycle } from "@spencare/domain-core";
+import {
+  Money as DomainMoney,
+  deriveCreditCardCardStatus,
+  type CreditCardCardStatus,
+} from "@spencare/domain-core";
 import type { AccountRow } from "@spencare/domain-application";
+import type { CreditCardBillingStatusView } from "@/app/settings/accounts/account-details-sheet";
 import type { CardReserveDetail } from "@spencare/domain-infra";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -84,6 +89,7 @@ export function AccountCard({
   commitmentReserveMinor = 0,
   cardReserveDetails = [],
   paymentAccountName = null,
+  billingStatus = null,
 }: {
   account: AccountRow;
   masked: boolean;
@@ -100,6 +106,8 @@ export function AccountCard({
   cardReserveDetails?: CardReserveDetail[];
   /** For credit card accounts: the name of the bank account that pays this card. Null when not configured. */
   paymentAccountName?: string | null;
+  /** For credit card accounts: the server-fetched billing status used to render the bill status row (paid / overdue / upcoming). Null means no bill info yet; the row stays silent rather than fabricating a status. */
+  billingStatus?: CreditCardBillingStatusView | null;
 }) {
   const labels = actionLabels(account.type);
 
@@ -145,6 +153,7 @@ export function AccountCard({
           commitmentReserveMinor={commitmentReserveMinor}
           cardReserveDetails={cardReserveDetails}
           paymentAccountName={paymentAccountName}
+          billingStatus={billingStatus}
         />
       </div>
     </Card>
@@ -157,31 +166,72 @@ function todayIsoLocal(): string {
 }
 
 /**
- * Single-date bill status row for the account card. Sourced from the same
- * canonical calculateCreditCardBillCycle every other surface uses, so
- * the card's at-a-glance text can never drift from account-details or
- * Upcoming.
+ * One-line bill status row for the Accounts card. Delegates every
+ * display decision to the pure `deriveCreditCardCardStatus` so this
+ * component (Accounts), the account-details sheet, and Upcoming all
+ * read the SAME status. The row consumes the server-fetched
+ * `billingStatus` (which already runs the canonical
+ * `deriveCreditCardPaymentStatus`) rather than re-deriving status
+ * from calendar math.
+ *
+ * The pre-fix row did pure date math on the simulated most-recent-
+ * closed cycle with zero awareness of whether a bill actually existed
+ * or had been paid, which blurted "Bill overdue by Xd" for any card
+ * with a past-dated preparation cycle regardless of whether the user
+ * actually owed anything. The whole class of bug lives in that one
+ * ignored distinction between "obligation exists and is overdue" vs
+ * "no obligation at all."
  */
-function CreditCardBillingRow({ account }: { account: AccountRow }) {
-  const config = billingConfigFromAccount(account);
-  if (!config) return null;
+function CreditCardBillingRow({
+  account,
+  billingStatus,
+}: {
+  account: AccountRow;
+  billingStatus: CreditCardBillingStatusView | null | undefined;
+}) {
+  // Only render for cards that have a bill due day configured. The
+  // row is informational; a card without a configured cycle gets no
+  // row rather than a "No bill configured" line that would clutter
+  // every freshly added card.
+  if (account.payment_due_day == null) return null;
 
-  const snapshot = calculateCreditCardBillCycle(todayIsoLocal(), config);
+  const billing: Parameters<typeof deriveCreditCardCardStatus>[0]["billing"] = billingStatus
+    ? {
+        paymentStatus: billingStatus.paymentStatus,
+        dueDate: billingStatus.dueDate ?? null,
+        statementBalanceMinor: billingStatus.statementBalanceMinor,
+        paidMinor: billingStatus.paidMinor ?? 0,
+        remainingMinor: billingStatus.remainingMinor ?? billingStatus.statementBalanceMinor,
+        obligationStatus: billingStatus.obligationStatus,
+      }
+    : null;
 
-  // Show the most-recently-closed bill's status when a bill is actually
-  // owed (statement already closed), else fall back to "next bill in N
-  // days" from the open cycle.
-  const dueNow = snapshot.daysUntilMostRecentDue;
-  const dueNext = snapshot.daysUntilNextDue;
-  let text: string;
-  if (dueNow === 0) text = "Bill due today";
-  else if (dueNow === -1) text = "Bill overdue by 1d";
-  else if (dueNow < 0) text = `Bill overdue by ${Math.abs(dueNow)}d`;
-  else if (dueNext === 0) text = "Bill due today";
-  else if (dueNext === 1) text = "Bill due tomorrow";
-  else text = `Bill due in ${dueNext}d`;
+  const status = deriveCreditCardCardStatus({ todayIso: todayIsoLocal(), billing });
 
-  return <p className="mt-2 text-xs text-muted-foreground">{text}</p>;
+  // An unconfigured status comes back only when billing was null, which
+  // we already filtered above; keep the fallback silent rather than
+  // showing stray copy.
+  if (status.kind === "unconfigured") return null;
+
+  return (
+    <p className={`mt-2 text-xs ${toneClassForStatus(status)}`}>{status.text}</p>
+  );
+}
+
+function toneClassForStatus(status: CreditCardCardStatus): string {
+  switch (status.tone) {
+    case "danger":
+      return "text-destructive font-medium";
+    case "warning":
+      return "text-warning font-medium";
+    case "success":
+      return "text-success font-medium";
+    case "info":
+      return "text-foreground";
+    case "neutral":
+    default:
+      return "text-muted-foreground";
+  }
 }
 
 function AccountCardBody({
@@ -192,6 +242,7 @@ function AccountCardBody({
   commitmentReserveMinor,
   cardReserveDetails,
   paymentAccountName,
+  billingStatus,
 }: {
   account: AccountRow;
   masked: boolean;
@@ -200,6 +251,7 @@ function AccountCardBody({
   commitmentReserveMinor: number;
   cardReserveDetails: CardReserveDetail[];
   paymentAccountName: string | null;
+  billingStatus: CreditCardBillingStatusView | null | undefined;
 }) {
   if (account.type === "credit_card") {
     const limit = account.credit_limit_minor ?? 0;
@@ -231,7 +283,7 @@ function AccountCardBody({
             No payment account set. Configure one to reserve this balance from your bank.
           </p>
         ) : null}
-        <CreditCardBillingRow account={account} />
+        <CreditCardBillingRow account={account} billingStatus={billingStatus} />
       </div>
     );
   }

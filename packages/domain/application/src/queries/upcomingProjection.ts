@@ -682,6 +682,15 @@ export async function getUpcomingProjection(
       // labeled rather than mislabeled as a bill amount it isn't yet.
       const isNearest = nearestDueDate != null && billDueDate === nearestDueDate;
       const amountMinor = isNearest ? billingStatus!.obligation.remainingMinor : outstanding;
+
+      // Skip the event entirely when nothing is owed. A paid or zero-
+      // activity bill must not appear as an unpaid obligation in
+      // Upcoming (totals or list); doing so is what caused the
+      // production Accounts card to also inherit a bogus "overdue"
+      // state. The user's spec is explicit: a paid obligation should
+      // not appear as "amount due."
+      if (amountMinor <= 0) continue;
+
       const subtitle = isNearest
         ? billingStatus!.obligation.status === "partial"
           ? "Remaining balance"
@@ -699,7 +708,7 @@ export async function getUpcomingProjection(
         sourceId: account.id,
         projected: true,
       });
-      if (isNearest && amountMinor > 0) creditCardPaymentDueMinor_acc.push(amountMinor);
+      if (isNearest) creditCardPaymentDueMinor_acc.push(amountMinor);
     }
   }
 
