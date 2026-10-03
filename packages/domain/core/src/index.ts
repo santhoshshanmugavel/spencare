@@ -154,6 +154,13 @@ export {
   type CommitmentAwareSpendingResult,
 } from "./commitmentBudgets.js";
 
+export {
+  derivePreparationStatus,
+  type PreparationStatus,
+  type PreparationStatusInput,
+  type PreparationStatusKind,
+} from "./preparationStatus.js";
+
 export { getTransactionDisplay, type TransactionDisplayFields } from "./transactionDisplay.js";
 
 export {

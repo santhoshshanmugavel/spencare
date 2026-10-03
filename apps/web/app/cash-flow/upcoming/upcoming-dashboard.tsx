@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CalendarClock, CreditCard, Landmark, MapPinned, PiggyBank, Plus, ShieldCheck, Target, Zap } from "lucide-react";
-import { Money as DomainMoney, type ReserveStatusResult } from "@spencare/domain-core";
+import {
+  Money as DomainMoney,
+  derivePreparationStatus,
+  type PreparationStatus,
+  type ReserveStatusResult,
+} from "@spencare/domain-core";
 import type {
   PlannedCommitmentRow,
   LoanRow,
@@ -45,6 +50,12 @@ function formatDate(iso: string): string {
   });
 }
 
+function todayLocalIso(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function formatDateHeading(iso: string): string {
   const parts = iso.split("-").map(Number);
   const d = new Date(parts[0]!, parts[1]! - 1, parts[2]!);
@@ -70,6 +81,82 @@ function DueDateLabel({ isoDate }: { isoDate: string }) {
   if (days <= 7)
     return <span className="text-xs font-medium text-warning">Due {formatDate(isoDate)}</span>;
   return <span className="text-xs text-muted-foreground">{formatDate(isoDate)}</span>;
+}
+
+/**
+ * Preparation-side status badge for a commitment's "set aside" row.
+ * Deliberately DISTINCT from DueDateLabel above (which is for actual
+ * payment due dates): a preparation milestone being past its date is
+ * NOT a payment overdue. "Ready" is a success state even when the
+ * preparation date has slipped, and the past-date-not-protected case
+ * surfaces as a warning "Preparation behind", never as a red
+ * "Overdue". Copy follows the Upcoming preparation spec verbatim.
+ */
+function PreparationStatusLabel({
+  status,
+  nextPaymentDate,
+  currency = CURRENCY,
+}: {
+  status: PreparationStatus;
+  nextPaymentDate: string | null;
+  currency?: string;
+}) {
+  const nextPaymentText = nextPaymentDate ? `Next payment · ${formatDate(nextPaymentDate)}` : null;
+
+  if (status.kind === "ready") {
+    return (
+      <>
+        {nextPaymentText ? (
+          <span className="text-xs text-muted-foreground">{nextPaymentText}</span>
+        ) : null}
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+          <ShieldCheck className="size-3" aria-hidden="true" />
+          Fully protected
+        </span>
+      </>
+    );
+  }
+
+  if (status.kind === "payment_already_paid") {
+    return (
+      <span className="text-xs font-medium text-success">Payment recorded</span>
+    );
+  }
+
+  if (status.kind === "not_applicable") {
+    return nextPaymentText ? (
+      <span className="text-xs text-muted-foreground">{nextPaymentText}</span>
+    ) : null;
+  }
+
+  // preparation_due | preparation_behind
+  const remainingText = `${minorUnitsToDisplay(status.remainingMinor, currency)} still to protect`;
+  const stateText =
+    status.kind === "preparation_behind"
+      ? "Preparation behind"
+      : status.daysUntilPreparation === 0
+      ? "Set aside today"
+      : `Set aside by ${formatDate(stepDateString(status.daysUntilPreparation))}`;
+  const stateClass =
+    status.kind === "preparation_behind" ? "text-warning" : "text-muted-foreground";
+
+  return (
+    <>
+      {nextPaymentText ? (
+        <span className="text-xs text-muted-foreground">{nextPaymentText}</span>
+      ) : null}
+      <span className={`text-xs font-medium ${stateClass}`}>{stateText}</span>
+      <span className="text-xs text-muted-foreground">{remainingText}</span>
+    </>
+  );
+}
+
+/** Helper so PreparationStatusLabel can show "Set aside by DD MMM" without re-deriving the preparation date from scratch. The signed daysUntilPreparation already comes from the pure status call. */
+function stepDateString(daysFromToday: number): string {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + daysFromToday);
+  return d.toISOString().slice(0, 10);
 }
 
 function ReserveLabel({ rs, currency = CURRENCY }: { rs: ReserveStatusResult; currency?: string }) {
@@ -404,17 +491,35 @@ export function UpcomingDashboard({
       const category = ev.categoryId ? categoryById.get(ev.categoryId) : null;
       const PrepIcon = (category ? getCategoryIcon(category.icon) : null) ?? PiggyBank;
 
-      const paymentDate = ev.preparationForDate ? formatDate(ev.preparationForDate) : null;
       const occurrenceId = ev.preparationForOccurrenceId;
       const reserveAccountId = ev.reserveAccountId;
       const reserveAccount = reserveAccountId ? (accountById.get(reserveAccountId) ?? null) : null;
 
-      // Find the corresponding payment event to get reserved/total amounts
+      // Find the corresponding payment event for reserved/total amounts
+      // AND for the "has the payment already been matched" check that
+      // feeds derivePreparationStatus. A paymentEv with reservedMinor
+      // == amountMinor is NOT the same as paid: it just means fully
+      // reserved. We only treat it as paid when the projection
+      // explicitly says so (future enrichment: match on
+      // ReserveStatusResult.status === "paid").
       const paymentEv = ev.preparationForDate
         ? paymentEventByKey.get(`${ev.sourceId}:${ev.preparationForDate}`)
         : undefined;
       const currentReserved = paymentEv?.reservedMinor ?? 0;
       const totalNeeded = paymentEv?.amountMinor ?? ev.amountMinor;
+
+      // Canonical preparation status. The signed daysUntilPreparation
+      // on the result lets the label show "Set aside today" vs
+      // "Preparation behind" without this component re-doing any
+      // date math.
+      const prepStatus = derivePreparationStatus({
+        preparationDate: ev.date,
+        todayIso: todayLocalIso(),
+        requiredMinor: totalNeeded,
+        protectedMinor: currentReserved,
+        paymentAlreadyPaid: paymentEv?.occurrenceStatus === "paid",
+        preparationNotPlanned: reserveAccountId == null,
+      });
 
       return (
         <ListRow
@@ -431,15 +536,15 @@ export function UpcomingDashboard({
           }
           subtitle={
             <span className="flex flex-wrap items-center gap-2">
-              <DueDateLabel isoDate={ev.date} />
-              {paymentDate && (
-                <span className="text-xs text-muted-foreground">toward {paymentDate} payment</span>
-              )}
-              {currentReserved > 0 && (
+              <PreparationStatusLabel
+                status={prepStatus}
+                nextPaymentDate={ev.preparationForDate ?? null}
+              />
+              {currentReserved > 0 && prepStatus.kind !== "ready" ? (
                 <span className="text-xs text-muted-foreground">
-                  {minorUnitsToDisplay(currentReserved, CURRENCY)} / {minorUnitsToDisplay(totalNeeded, CURRENCY)} protected
+                  {minorUnitsToDisplay(Math.min(currentReserved, totalNeeded), CURRENCY)} / {minorUnitsToDisplay(totalNeeded, CURRENCY)} protected
                 </span>
-              )}
+              ) : null}
               <PlanContextLinks plans={planContext?.commitmentIdToPlans.get(ev.sourceId) ?? []} />
             </span>
           }
