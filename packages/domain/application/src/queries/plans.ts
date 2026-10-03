@@ -40,6 +40,8 @@ export async function listPlans(ctx: AuthContext, options: ListFinancialPlansOpt
 export interface PlanWithSummary {
   plan: FinancialPlanRow;
   calculations: PlanCalculationResult;
+  itemCount: number;
+  transactionCount: number;
 }
 
 /**
@@ -86,7 +88,7 @@ export async function listPlansWithSummaries(ctx: AuthContext, asOfIso: string):
       transactions: transactions.map(toPlanTransactionInput),
       asOfIso,
     });
-    return { plan: planRow, calculations };
+    return { plan: planRow, calculations, itemCount: items.length, transactionCount: transactions.length };
   });
 }
 

@@ -37,6 +37,8 @@ describe("getPlans tool", () => {
           budgetStatus: { overBudget: false },
           progress: { percentOfBudgetUsed: 25 },
         } as never,
+        itemCount: 0,
+        transactionCount: 0,
       },
     ]);
     const { PLAN_TOOLS } = await import("./planTools.js");
@@ -60,6 +62,8 @@ describe("getPlans tool", () => {
       {
         plan: { id: "plan-1", name: "Thailand Trip", status: "active", base_currency: "INR", current_budget_minor: 2_000_000 } as never,
         calculations: { actualSpend: { amountMinorUnits: 500000n }, budgetStatus: { overBudget: false }, progress: { percentOfBudgetUsed: 25 } } as never,
+        itemCount: 0,
+        transactionCount: 0,
       },
     ]);
     const { PLAN_TOOLS } = await import("./planTools.js");

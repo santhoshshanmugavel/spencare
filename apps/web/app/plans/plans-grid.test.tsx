@@ -75,7 +75,12 @@ function withSummary(
         : [],
     asOfIso: "2026-01-10T00:00:00Z",
   });
-  return { plan: row, calculations: serializePlanCalculations(calculations) };
+  return {
+    plan: row,
+    calculations: serializePlanCalculations(calculations),
+    itemCount: 0,
+    transactionCount: opts.spentMinor != null ? 1 : 0,
+  };
 }
 
 describe("<PlansGrid> — empty state", () => {

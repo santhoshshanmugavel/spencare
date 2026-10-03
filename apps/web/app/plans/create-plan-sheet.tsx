@@ -35,7 +35,7 @@ export function CreatePlanSheet({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: () => void;
+  onCreated: (planId: string) => void;
 }) {
   const [budgetDisplay, setBudgetDisplay] = useState("");
   const [budgetError, setBudgetError] = useState<string | undefined>();
@@ -76,7 +76,7 @@ export function CreatePlanSheet({
         toastError(`Plan created, but the budget couldn't be saved: ${budgetResult.error.message}`);
         reset();
         setBudgetDisplay("");
-        onCreated();
+        onCreated(created.value.id);
         return;
       }
     }
@@ -84,7 +84,7 @@ export function CreatePlanSheet({
     toastConfirmed(`${created.value.name} created.`);
     reset();
     setBudgetDisplay("");
-    onCreated();
+    onCreated(created.value.id);
   }
 
   return (

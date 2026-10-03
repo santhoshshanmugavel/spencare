@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from "lucide-react";
 import { Money as DomainMoney, getTransactionDisplay } from "@spencare/domain-core";
 import type { AccountRow, CategoryRow, TransactionRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import { Money } from "@/components/spencare/money";
 import { EmptyState } from "@/components/spencare/empty-state";
 import { formatMinorUnits } from "@/lib/currency-format";
 import { accountTag, daySubtotalMinor, formatGroupDate, groupByDate, toLocalDate, transactionHint } from "@/lib/transaction-presentation";
+import { transactionTypeIcon } from "@/lib/transaction-type-icon";
 import { AddTransactionSheet } from "./add-transaction-sheet";
 import { TransactionDetailDialog } from "./transaction-detail-dialog";
 import { DeleteTransactionDialog } from "./delete-transaction-dialog";
@@ -32,26 +32,6 @@ import { DeleteTransactionDialog } from "./delete-transaction-dialog";
  * the opposite lesson from Phase 7, where ListRow was the WRONG choice
  * for Accounts. Reused, not re-derived.
  */
-
-function iconFor(type: TransactionRow["type"]) {
-  if (type === "income")
-    return (
-      <div className="flex size-9 items-center justify-center rounded-xl bg-income-subtle" aria-hidden="true">
-        <ArrowDownLeft className="size-4 text-income" />
-      </div>
-    );
-  if (type === "expense")
-    return (
-      <div className="flex size-9 items-center justify-center rounded-xl bg-expense-subtle" aria-hidden="true">
-        <ArrowUpRight className="size-4 text-expense" />
-      </div>
-    );
-  return (
-    <div className="flex size-9 items-center justify-center rounded-xl bg-transfer-subtle" aria-hidden="true">
-      <ArrowLeftRight className="size-4 text-transfer" />
-    </div>
-  );
-}
 
 function rowAriaLabel(
   t: TransactionRow,
@@ -165,7 +145,7 @@ export function TransactionList({
                   return (
                     <ListRow
                       key={t.id}
-                      icon={iconFor(t.type)}
+                      icon={transactionTypeIcon(t.type)}
                       title={displayTitle}
                       subtitle={subtitle}
                       metadata={[

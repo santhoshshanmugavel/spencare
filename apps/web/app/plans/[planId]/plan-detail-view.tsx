@@ -451,7 +451,9 @@ export function PlanDetailView({
                 key={t.id}
                 title={t.merchant ?? t.description ?? "Transaction"}
                 subtitle={formatPlanDate(t.occurred_at) ?? t.occurred_at}
-                metadata={t.category_id ? [categoryById.get(t.category_id)?.name ?? ""] : []}
+                metadata={[accountById.get(t.account_id)?.name, t.category_id ? categoryById.get(t.category_id)?.name : undefined].filter(
+                  (v): v is string => !!v,
+                )}
                 trailing={
                   <Money
                     value={DomainMoney.fromMinorUnits(BigInt(t.amount_minor), t.currency)}
@@ -513,8 +515,11 @@ export function PlanDetailView({
       <AssociateAccountDialog planId={plan.id} accounts={unlinkedAccounts} open={accountDialogOpen} onOpenChange={setAccountDialogOpen} onLinked={() => { setAccountDialogOpen(false); refresh(); }} />
       <AssociateTransactionDialog
         planId={plan.id}
+        planName={plan.name}
         currency={plan.base_currency}
         items={items}
+        accounts={accounts}
+        categories={categories}
         open={transactionDialogOpen}
         onOpenChange={setTransactionDialogOpen}
         onAssociated={() => { setTransactionDialogOpen(false); refresh(); }}

@@ -41,6 +41,8 @@ import {
   getPlanDetail,
   listPlansWithSummaries,
   listTransactions,
+  listAccounts,
+  listCategories,
   type AuthContext,
   type ListFinancialPlansOptions,
 } from "@spencare/domain-application";
@@ -96,15 +98,43 @@ export async function listPlansWithSummariesAction(asOfIso: string) {
  * general transaction search; Gate 3 §24's "never load a user's full
  * transaction history merely to render one Plan" rule is why this stays
  * capped instead of calling `listTransactions` with no limit.
+ *
+ * Matches merchant/item name/description (case-insensitive substring, as
+ * before), plus account name, category name, and amount — the picker's
+ * row now shows all of these, so search should find a transaction by any
+ * of them, not merchant/description alone.
  */
 export async function searchTransactionsForPlanAction(query: string) {
   const ctx = await requireAuthContext();
-  const transactions = await listTransactions(ctx, { limit: 100 });
+  const [transactions, accounts, categories] = await Promise.all([
+    listTransactions(ctx, { limit: 100 }),
+    listAccounts(ctx),
+    listCategories(ctx),
+  ]);
   const q = query.trim().toLowerCase();
   if (q === "") return transactions;
-  return transactions.filter((t) =>
-    [t.merchant, t.item_name, t.description].some((field) => field?.toLowerCase().includes(q)),
-  );
+
+  const accountNameById = new Map(accounts.map((a) => [a.id, a.name.toLowerCase()]));
+  const categoryNameById = new Map(categories.map((c) => [c.id, c.name.toLowerCase()]));
+  const numericQuery = q.replace(/[₹,\s]/g, "");
+
+  return transactions.filter((t) => {
+    const textFields = [t.merchant, t.item_name, t.description].filter((f): f is string => !!f);
+    if (textFields.some((field) => field.toLowerCase().includes(q))) return true;
+
+    const accountName = accountNameById.get(t.account_id);
+    if (accountName?.includes(q)) return true;
+
+    const categoryName = t.category_id ? categoryNameById.get(t.category_id) : undefined;
+    if (categoryName?.includes(q)) return true;
+
+    if (numericQuery !== "" && !Number.isNaN(Number(numericQuery))) {
+      const amountStr = (t.amount_minor / 100).toString();
+      if (amountStr.includes(numericQuery)) return true;
+    }
+
+    return false;
+  });
 }
 
 export async function getPlanAction(planId: string) {

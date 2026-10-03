@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PlanItemRow, TransactionRow } from "@spencare/domain-application";
+import type { AccountRow, CategoryRow, PlanItemRow, TransactionRow } from "@spencare/domain-application";
 import { AssociateTransactionDialog } from "./associate-transaction-dialog";
 
 vi.mock("../actions", () => ({
@@ -37,6 +37,29 @@ function txn(overrides: Partial<TransactionRow> = {}): TransactionRow {
   };
 }
 
+const accounts: AccountRow[] = [
+  {
+    id: "acc-1",
+    user_id: "u1",
+    name: "HDFC Savings",
+    type: "bank",
+    currency: "INR",
+    opening_balance_minor: 0,
+    opening_balance_at: "2026-01-01",
+    archived_at: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  } as never,
+];
+
+const categories: CategoryRow[] = [];
+
+const commonProps = {
+  planName: "Thailand Trip",
+  accounts,
+  categories,
+};
+
 const items: PlanItemRow[] = [
   {
     id: "item-1",
@@ -66,7 +89,7 @@ beforeEach(async () => {
 describe("<AssociateTransactionDialog> — accessibility", () => {
   it("has no axe violations", async () => {
     const { container } = render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     await screen.findByText("Thai Airways");
     expect(await axe(container)).toHaveNoViolations();
@@ -76,7 +99,7 @@ describe("<AssociateTransactionDialog> — accessibility", () => {
 describe("<AssociateTransactionDialog> — search and multi-select", () => {
   it("lists matching transactions and never claims to change their amount", async () => {
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     expect(await screen.findByText("Thai Airways")).toBeInTheDocument();
     expect(screen.getByText(/never change/i)).toBeInTheDocument();
@@ -84,10 +107,10 @@ describe("<AssociateTransactionDialog> — search and multi-select", () => {
 
   it("disables the attach button until at least one transaction is selected", async () => {
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     await screen.findByText("Thai Airways");
-    expect(screen.getByRole("button", { name: "Attach selected transactions" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Attach transaction" })).toBeDisabled();
   });
 
   it("selects multiple transactions, shows a live selection count, and keeps prior selections checked", async () => {
@@ -98,7 +121,7 @@ describe("<AssociateTransactionDialog> — search and multi-select", () => {
     ]);
     const user = userEvent.setup();
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     const first = await screen.findByRole("checkbox", { name: /select thai airways/i });
     const second = screen.getByRole("checkbox", { name: /select grab taxi/i });
@@ -111,7 +134,7 @@ describe("<AssociateTransactionDialog> — search and multi-select", () => {
     expect(screen.getByText("2 transactions selected")).toBeInTheDocument();
     expect(first).toHaveAttribute("data-state", "checked");
     expect(second).toHaveAttribute("data-state", "checked");
-    expect(screen.getByRole("button", { name: "Attach selected transactions" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Attach 2 transactions" })).toBeEnabled();
   });
 
   it("preserves selections when the search query changes", async () => {
@@ -119,7 +142,7 @@ describe("<AssociateTransactionDialog> — search and multi-select", () => {
     vi.mocked(searchTransactionsForPlanAction).mockResolvedValue([txn({ id: "txn-1", merchant: "Thai Airways" })]);
     const user = userEvent.setup();
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     await user.click(await screen.findByRole("checkbox", { name: /select thai airways/i }));
     expect(screen.getByText("1 transaction selected")).toBeInTheDocument();
@@ -137,13 +160,13 @@ describe("<AssociateTransactionDialog> — search and multi-select", () => {
     const onAssociated = vi.fn();
     const user = userEvent.setup();
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={onAssociated} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={onAssociated} />,
     );
     await user.click(await screen.findByRole("checkbox", { name: /select thai airways/i }));
     await user.click(screen.getByRole("checkbox", { name: /select grab taxi/i }));
     await user.click(screen.getByLabelText("Optionally attach to a Plan item"));
     await user.click(await screen.findByRole("option", { name: "Flights" }));
-    await user.click(screen.getByRole("button", { name: "Attach selected transactions" }));
+    await user.click(screen.getByRole("button", { name: "Attach 2 transactions" }));
 
     expect(setTransactionPlanAction).toHaveBeenCalledTimes(2);
     expect(setTransactionPlanAction).toHaveBeenCalledWith(PLAN_ID, "txn-1", { planId: PLAN_ID, planItemId: "item-1" });
@@ -156,11 +179,11 @@ describe("<AssociateTransactionDialog> — search and multi-select", () => {
     vi.mocked(searchTransactionsForPlanAction).mockResolvedValue([txn({ id: "txn-1", merchant: "Thai Airways" })]);
     const user = userEvent.setup();
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     const checkbox = await screen.findByRole("checkbox", { name: /select thai airways/i });
     await user.click(checkbox);
-    await user.click(screen.getByRole("button", { name: "Attach selected transactions" }));
+    await user.click(screen.getByRole("button", { name: "Attach transaction" }));
     expect(setTransactionPlanAction).toHaveBeenCalledTimes(1);
   });
 
@@ -168,7 +191,7 @@ describe("<AssociateTransactionDialog> — search and multi-select", () => {
     const { searchTransactionsForPlanAction } = await import("../actions");
     vi.mocked(searchTransactionsForPlanAction).mockResolvedValue([txn({ id: "txn-usd", currency: "USD", merchant: "Amazon US" })]);
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     expect(await screen.findByText(/different currency/i)).toBeInTheDocument();
   });
@@ -177,7 +200,7 @@ describe("<AssociateTransactionDialog> — search and multi-select", () => {
     const { searchTransactionsForPlanAction } = await import("../actions");
     vi.mocked(searchTransactionsForPlanAction).mockResolvedValue([]);
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     expect(await screen.findByText(/no matching transactions/i)).toBeInTheDocument();
   });
@@ -189,12 +212,12 @@ describe("<AssociateTransactionDialog> — reassignment is explicit, never silen
     vi.mocked(searchTransactionsForPlanAction).mockResolvedValue([txn({ plan_id: "other-plan" })]);
     const user = userEvent.setup();
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     expect(await screen.findByText(/attached to another plan/i)).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: /select thai airways/i }));
     expect(screen.getByText(/continuing will move it here instead/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Attach selected transactions" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Attach transaction" })).toBeEnabled();
   });
 
   it("warns with a plural count when multiple selected transactions are already attached elsewhere", async () => {
@@ -205,7 +228,7 @@ describe("<AssociateTransactionDialog> — reassignment is explicit, never silen
     ]);
     const user = userEvent.setup();
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
     );
     await user.click(await screen.findByRole("checkbox", { name: /select thai airways/i }));
     await user.click(screen.getByRole("checkbox", { name: /select grab taxi/i }));
@@ -219,10 +242,10 @@ describe("<AssociateTransactionDialog> — reassignment is explicit, never silen
     const onAssociated = vi.fn();
     const user = userEvent.setup();
     render(
-      <AssociateTransactionDialog planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={onAssociated} />,
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={onAssociated} />,
     );
     await user.click(await screen.findByRole("checkbox", { name: /select thai airways/i }));
-    await user.click(screen.getByRole("button", { name: "Attach selected transactions" }));
+    await user.click(screen.getByRole("button", { name: "Attach transaction" }));
     expect(setTransactionPlanAction).toHaveBeenCalledWith(PLAN_ID, "txn-1", { planId: PLAN_ID, planItemId: null });
     expect(onAssociated).toHaveBeenCalledTimes(1);
   });

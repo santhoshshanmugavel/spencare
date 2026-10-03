@@ -29,6 +29,8 @@ import { revivePlanCalculations, type SerializedPlanCalculationResult } from "@/
 export interface SerializedPlanWithSummary {
   plan: FinancialPlanRow;
   calculations: SerializedPlanCalculationResult;
+  itemCount: number;
+  transactionCount: number;
 }
 
 export function PlansGrid({
@@ -43,7 +45,13 @@ export function PlansGrid({
   const [search, setSearch] = useState("");
 
   const plans = useMemo(
-    () => initialPlans.map((p) => ({ plan: p.plan, calculations: revivePlanCalculations(p.calculations) })),
+    () =>
+      initialPlans.map((p) => ({
+        plan: p.plan,
+        calculations: revivePlanCalculations(p.calculations),
+        itemCount: p.itemCount,
+        transactionCount: p.transactionCount,
+      })),
     [initialPlans],
   );
 
@@ -53,9 +61,11 @@ export function PlansGrid({
     return plans.filter((p) => p.plan.name.toLowerCase().includes(query));
   }, [plans, query]);
 
-  function handleCreated() {
+  // Land on the new Plan's detail page (where items/transactions get added)
+  // rather than back on the list, so the user sees what they just made.
+  function handleCreated(planId: string) {
     setCreateOpen(false);
-    router.refresh();
+    router.push(`/plans/${planId}`);
   }
 
   return (
@@ -105,7 +115,7 @@ export function PlansGrid({
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map(({ plan, calculations }) => {
+          {filtered.map(({ plan, calculations, itemCount, transactionCount }) => {
             const { budgetStatus, actualSpend, committedAmount, upcomingAmount } = calculations;
             const percent = budgetStatus.hasBudget
               ? Math.min(100, Math.max(0, calculations.progress.percentOfBudgetUsed ?? 0))
@@ -171,6 +181,11 @@ export function PlansGrid({
                         ) : null}
                       </p>
                     ) : null}
+
+                    <p className="text-xs text-muted-foreground">
+                      {transactionCount} transaction{transactionCount === 1 ? "" : "s"} · {itemCount} item
+                      {itemCount === 1 ? "" : "s"}
+                    </p>
                   </CardContent>
                 </Card>
               </button>

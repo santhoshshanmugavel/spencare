@@ -58,6 +58,8 @@ export default async function PlansPage() {
           initialPlans={plansWithSummaries.map((p) => ({
             plan: p.plan,
             calculations: serializePlanCalculations(p.calculations),
+            itemCount: p.itemCount,
+            transactionCount: p.transactionCount,
           }))}
           masked={profile?.privacy_mode_enabled ?? false}
         />

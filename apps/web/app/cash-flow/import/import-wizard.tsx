@@ -401,7 +401,7 @@ function StagedRowCard({
 }) {
   const isLowConfidence = row.confidence_score < LOW_CONFIDENCE_THRESHOLD;
   const isTouched = row.review_status === "accepted" || row.review_status === "edited";
-  const rowLabel = `${row.staged_transaction_type === "income" ? "Income" : "Expense"} of ${formatMoney(row.normalized_amount_minor).toString()} from ${row.normalized_merchant ?? "an unknown merchant"} on ${row.normalized_date}`;
+  const rowLabel = `${row.staged_transaction_type === "income" ? "Income" : "Expense"} of ${formatMoneyString(row.normalized_amount_minor)} from ${row.normalized_merchant ?? "an unknown merchant"} on ${row.normalized_date}`;
 
   return (
     <Card size="sm">
