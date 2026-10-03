@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { Money as DomainMoney, getTransactionDisplay } from "@spencare/domain-core";
-import type { AccountRow, CategoryRow, PlanItemRow, TransactionRow } from "@spencare/domain-application";
+import type {
+  AccountRow,
+  CategoryRow,
+  PlanItemRow,
+  SearchTransactionsForPlanResult,
+  TransactionRow,
+} from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -21,18 +27,65 @@ function formatAmountForLabel(amountMinor: number, currency: string): string {
   return `${f.symbol}${f.integerPart}.${f.decimalPart}`;
 }
 
+type Cursor = SearchTransactionsForPlanResult["nextCursor"];
+
+type DateFilter = "all" | "this_month" | "last_month" | "last_3_months" | "last_6_months" | "this_year";
+const DATE_FILTER_LABELS: Record<DateFilter, string> = {
+  all: "All dates",
+  this_month: "This month",
+  last_month: "Last month",
+  last_3_months: "Last 3 months",
+  last_6_months: "Last 6 months",
+  this_year: "This year",
+};
+
+function dateFilterRange(filter: DateFilter): { from?: string; to?: string } {
+  if (filter === "all") return {};
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = today.getMonth(); // 0-indexed
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  if (filter === "this_month") {
+    return { from: iso(new Date(y, m, 1)), to: iso(new Date(y, m + 1, 0)) };
+  }
+  if (filter === "last_month") {
+    return { from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) };
+  }
+  if (filter === "last_3_months") {
+    return { from: iso(new Date(y, m - 2, 1)), to: iso(today) };
+  }
+  if (filter === "last_6_months") {
+    return { from: iso(new Date(y, m - 5, 1)), to: iso(today) };
+  }
+  if (filter === "this_year") {
+    return { from: `${y}-01-01`, to: iso(today) };
+  }
+  return {};
+}
+
+const ALL = "__all__";
+
 /**
- * Associates an existing transaction (and optionally one of this Plan's
- * items) with this Plan. This NEVER creates a transaction and NEVER
- * changes any financial field on one (amount/type/account/category) — it
- * only sets `plan_id`/`plan_item_id` via `setTransactionPlan`, a plain
- * 2-key UPDATE deliberately separate from the money-mutating
- * `update_transaction` RPC (Gate 3 §14).
+ * Attaches an existing transaction (and optionally one of this Plan's
+ * items) to this Plan. The attachment is metadata only -- it NEVER
+ * creates a transaction and NEVER changes any financial field on one
+ * (amount/type/account/category); it just sets `plan_id`/`plan_item_id`
+ * via `setTransactionPlan`, a 2-key UPDATE deliberately separate from
+ * the money-mutating `update_transaction` RPC (Gate 3 §14).
+ *
+ * The picker's dataset is the user's ENTIRE eligible transaction
+ * history, searched server-side with keyset pagination
+ * (`searchTransactionsForPlanAttachment`). An earlier revision loaded
+ * only the most recent 100 and filtered them in JS -- which silently
+ * hid every older match. This component now never claims to be
+ * exhaustive from a single fetch: it debounces user input, issues one
+ * server search per settled query/filter combination, and surfaces a
+ * Load more affordance for cursors.
  *
  * Row content, date grouping, and icon reuse the exact same helpers as
- * `/cash-flow/transactions` (transaction-presentation.ts,
- * transaction-type-icon.tsx) so this picker visually matches the app's
- * one real transaction list rather than a second, hand-tuned copy.
+ * `/cash-flow/transactions` so this picker visually matches the one
+ * real transaction list rather than a second hand-tuned copy.
  */
 export function AssociateTransactionDialog({
   planId,
@@ -57,44 +110,87 @@ export function AssociateTransactionDialog({
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TransactionRow[]>([]);
-  // No `loading` state is ever set synchronously inside the effect below —
-  // it is derived from whether `results` still reflects an older query.
-  // `resultsQuery` is only ever updated from inside the debounced promise's
-  // `.then` continuation (a genuine async callback, not the effect body's
-  // own synchronous execution), which keeps this hook clear of
-  // react-hooks/set-state-in-effect while still debouncing every keystroke
-  // (previously: one network round-trip per keystroke, with no delay).
-  const [resultsQuery, setResultsQuery] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<Cursor>(null);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Selection stays keyed by transaction id so it survives filter and
+  // Load-More changes -- a row the user picked in page 1 is still
+  // attached after they load page 2, filter to a category, then clear.
   const [selected, setSelected] = useState<Map<string, TransactionRow>>(new Map());
   const [planItemId, setPlanItemId] = useState<string | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const loading = open && resultsQuery !== query;
 
-  const accountById = new Map(accounts.map((a) => [a.id, a]));
-  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const [categoryId, setCategoryId] = useState<string>(ALL);
+  const [accountId, setAccountId] = useState<string>(ALL);
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 
+  // Request-sequencing guard: an older in-flight response from a stale
+  // search string must never overwrite a newer one. Each new fetch
+  // claims a monotonically increasing token and only commits its result
+  // when its token still matches the latest one at resolution time.
+  const latestRequestId = useRef(0);
+
+  const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
+  const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+
+  const filtersActive = query.trim() !== "" || categoryId !== ALL || accountId !== ALL || dateFilter !== "all";
+
+  const runSearch = useCallback(
+    async (opts: { cursor?: Cursor; append?: boolean }) => {
+      const requestId = ++latestRequestId.current;
+      if (opts.append) setLoadingMore(true);
+      else setSearching(true);
+      const { from, to } = dateFilterRange(dateFilter);
+      try {
+        const page = await searchTransactionsForPlanAction({
+          planId,
+          search: query.trim() || undefined,
+          categoryId: categoryId === ALL ? undefined : categoryId,
+          accountId: accountId === ALL ? undefined : accountId,
+          occurredFrom: from,
+          occurredTo: to,
+          cursor: opts.cursor ?? undefined,
+        });
+        if (requestId !== latestRequestId.current) return; // stale response
+        setResults((prev) => (opts.append ? [...prev, ...page.transactions] : page.transactions));
+        setNextCursor(page.nextCursor);
+      } catch (e) {
+        if (requestId !== latestRequestId.current) return;
+        toastError(e instanceof Error ? e.message : "Couldn't search transactions. Try again.");
+      } finally {
+        if (requestId === latestRequestId.current) {
+          if (opts.append) setLoadingMore(false);
+          else setSearching(false);
+          setInitialLoadDone(true);
+        }
+      }
+    },
+    [planId, query, categoryId, accountId, dateFilter],
+  );
+
+  // Debounced search on open or whenever a filter/search input settles.
+  // The debounce is applied uniformly (open-with-no-query also waits
+  // ~250ms) so typing immediately after opening doesn't fire two
+  // adjacent round-trips.
   useEffect(() => {
     if (!open) return;
-    let cancelled = false;
     const handle = setTimeout(() => {
-      searchTransactionsForPlanAction(query).then((rows) => {
-        if (cancelled) return;
-        setResults(rows.filter((t) => t.plan_id !== planId));
-        setResultsQuery(query);
-      });
+      void runSearch({});
     }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [open, query, planId]);
+    return () => clearTimeout(handle);
+  }, [open, runSearch]);
 
   function reset() {
     setQuery("");
     setResults([]);
-    setResultsQuery(null);
+    setNextCursor(null);
     setSelected(new Map());
     setPlanItemId(undefined);
+    setCategoryId(ALL);
+    setAccountId(ALL);
+    setDateFilter("all");
+    setInitialLoadDone(false);
   }
 
   function toggleSelected(t: TransactionRow) {
@@ -129,10 +225,21 @@ export function AssociateTransactionDialog({
     onAssociated();
   }
 
+  function clearFilters() {
+    setQuery("");
+    setCategoryId(ALL);
+    setAccountId(ALL);
+    setDateFilter("all");
+  }
+
   const grouped = groupByDate(results, (t) => toLocalDate(t.occurred_at));
   const elsewhereCount = [...selected.values()].filter((t) => t.plan_id !== null).length;
   const attachLabel =
-    selected.size === 0 ? "Attach transaction" : selected.size === 1 ? "Attach transaction" : `Attach ${selected.size} transactions`;
+    selected.size === 0
+      ? "Attach transaction"
+      : selected.size === 1
+      ? "Attach transaction"
+      : `Attach ${selected.size} transactions`;
 
   return (
     <Dialog
@@ -152,9 +259,12 @@ export function AssociateTransactionDialog({
         </DialogHeader>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
           <Input
-            placeholder="Search by merchant, item, account, category, or amount"
+            placeholder="Search by merchant, item, or description"
             aria-label="Search transactions"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -162,19 +272,71 @@ export function AssociateTransactionDialog({
           />
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          <Select value={categoryId} onValueChange={setCategoryId}>
+            <SelectTrigger aria-label="Filter by category" className="h-9 min-w-[160px] flex-1 sm:flex-none">
+              <SelectValue placeholder="All categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All categories</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={accountId} onValueChange={setAccountId}>
+            <SelectTrigger aria-label="Filter by account" className="h-9 min-w-[160px] flex-1 sm:flex-none">
+              <SelectValue placeholder="All accounts" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All accounts</SelectItem>
+              {accounts.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
+            <SelectTrigger aria-label="Filter by date" className="h-9 min-w-[160px] flex-1 sm:flex-none">
+              <SelectValue placeholder="All dates" />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(DATE_FILTER_LABELS) as DateFilter[]).map((f) => (
+                <SelectItem key={f} value={f}>
+                  {DATE_FILTER_LABELS[f]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="max-h-80 space-y-3 overflow-y-auto">
-          {loading ? (
+          {searching && !initialLoadDone ? (
             <p className="p-3 text-sm text-muted-foreground">Searching…</p>
           ) : results.length === 0 ? (
-            <p className="p-3 text-sm text-muted-foreground">No matching transactions found.</p>
+            <div className="space-y-2 p-3 text-sm text-muted-foreground">
+              <p>
+                {filtersActive
+                  ? "No transactions matched the current filters."
+                  : "You don't have any transactions yet to attach."}
+              </p>
+              {filtersActive ? (
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : null}
+            </div>
           ) : (
             grouped.map((group) => (
               <div key={group.date} className="space-y-1">
                 <div className="flex items-center gap-3 px-1">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground shrink-0">
+                  <h3 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {formatGroupDate(group.date)}
                   </h3>
-                  <div className="flex-1 h-px bg-border" />
+                  <div className="h-px flex-1 bg-border" />
                 </div>
                 <div className="space-y-0.5">
                   {group.items.map((t) => {
@@ -185,7 +347,10 @@ export function AssociateTransactionDialog({
                     const isSelected = selected.has(t.id);
                     const { displayTitle, effectiveItemName, displayMerchant } = getTransactionDisplay(t);
                     const subtitle = effectiveItemName && displayMerchant ? displayMerchant : transactionHint(t, category);
-                    const timeLabel = new Date(t.occurred_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+                    const timeLabel = new Date(t.occurred_at).toLocaleTimeString("en-IN", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    });
                     const dateLabel = new Date(t.occurred_at).toLocaleDateString("en-IN", {
                       day: "numeric",
                       month: "long",
@@ -208,7 +373,9 @@ export function AssociateTransactionDialog({
                         {transactionTypeIcon(t.type)}
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-medium text-foreground">{displayTitle}</span>
-                          {subtitle ? <span className="block truncate text-xs text-muted-foreground">{subtitle}</span> : null}
+                          {subtitle ? (
+                            <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
+                          ) : null}
                           <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
                             {account ? <span>{accountTag(account)}</span> : null}
                             {account && category ? <span aria-hidden="true">·</span> : null}
@@ -222,7 +389,9 @@ export function AssociateTransactionDialog({
                             </span>
                           ) : null}
                           {mismatched ? (
-                            <span className="block text-xs text-muted-foreground">{t.currency}, different currency</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {t.currency}, different currency
+                            </span>
                           ) : null}
                         </span>
                         <Money value={DomainMoney.fromMinorUnits(BigInt(t.amount_minor), t.currency)} size="body" />
@@ -233,6 +402,18 @@ export function AssociateTransactionDialog({
               </div>
             ))
           )}
+          {nextCursor && results.length > 0 ? (
+            <div className="flex justify-center pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void runSearch({ cursor: nextCursor, append: true })}
+                disabled={loadingMore}
+              >
+                {loadingMore ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         {selected.size > 0 ? (

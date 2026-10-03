@@ -92,6 +92,141 @@ export async function listTransactions(
   return (data ?? []) as TransactionRow[];
 }
 
+/**
+ * Server-side search across the user's ENTIRE eligible transaction
+ * history for the Plan "Attach a transaction" picker. Deliberately not
+ * a thin wrapper over listTransactions: the picker's dataset is "every
+ * transaction the user has ever created that's eligible to attach,"
+ * not "the first N by date" -- the previous
+ * `searchTransactionsForPlanAction` implementation loaded 100 recent
+ * rows and filtered them in JS, which silently hid every older match
+ * (users could not attach a January transaction from an October
+ * picker). This runs the match on the database and keyset-paginates
+ * the result so the picker can surface a January 2024 Amazon charge
+ * from an October 2026 session, however many transactions exist.
+ *
+ * User-scope is enforced the same way as every other read in this
+ * repo: through the RLS-scoped client plus an explicit `.eq('user_id',
+ * userId)` -- defence in depth, not a replacement for RLS. Soft-
+ * deleted rows are filtered out, and transactions already attached to
+ * `excludePlanId` are excluded so the picker can never offer the user
+ * a duplicate association.
+ */
+export interface SearchTransactionsForPlanOptions {
+  /** Case-insensitive substring; matches merchant OR item_name OR description. Trimmed before query; empty treated as "no text filter." */
+  search?: string;
+  /** Restricts to transactions in this category. */
+  categoryId?: string;
+  /** Restricts to transactions on this account. */
+  accountId?: string;
+  /** Inclusive IST calendar-date lower bound on occurred_at. */
+  occurredFrom?: string;
+  /** Inclusive IST calendar-date upper bound on occurred_at. */
+  occurredTo?: string;
+  /** Transactions already attached to this plan are excluded (no duplicate associations). */
+  excludePlanId?: string;
+  /** Keyset cursor from the previous page's last row -- {occurredAt, id}. */
+  cursor?: { occurredAt: string; id: string };
+  /** Page size; capped at 100 by the function so callers can't accidentally request thousands. */
+  pageSize?: number;
+}
+
+export interface SearchTransactionsForPlanResult {
+  transactions: TransactionRow[];
+  /** When present, pass back as `cursor` to fetch the next page. Null means no more rows. */
+  nextCursor: { occurredAt: string; id: string } | null;
+}
+
+const DEFAULT_PLAN_SEARCH_PAGE_SIZE = 50;
+const MAX_PLAN_SEARCH_PAGE_SIZE = 100;
+
+export async function searchTransactionsForPlanAttachment(
+  client: TypedSupabaseClient,
+  userId: string,
+  options: SearchTransactionsForPlanOptions = {},
+): Promise<SearchTransactionsForPlanResult> {
+  const pageSize = Math.min(
+    Math.max(1, options.pageSize ?? DEFAULT_PLAN_SEARCH_PAGE_SIZE),
+    MAX_PLAN_SEARCH_PAGE_SIZE,
+  );
+
+  let query = client
+    .from("transactions")
+    .select(TRANSACTION_COLUMNS)
+    .eq("user_id", userId)
+    .is("deleted_at", null);
+
+  if (options.accountId) query = query.eq("account_id", options.accountId);
+  if (options.categoryId) query = query.eq("category_id", options.categoryId);
+
+  if (options.occurredFrom) {
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(options.occurredFrom)
+      ? options.occurredFrom + "T00:00:00+05:30"
+      : options.occurredFrom;
+    query = query.gte("occurred_at", from);
+  }
+  if (options.occurredTo) {
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(options.occurredTo)
+      ? options.occurredTo + "T23:59:59.999+05:30"
+      : options.occurredTo;
+    query = query.lte("occurred_at", to);
+  }
+
+  if (options.excludePlanId) {
+    // "Not this plan" -- transactions attached to a DIFFERENT plan still
+    // surface (with their attached-elsewhere badge) so the user can
+    // deliberately move them; only this plan's own associations are
+    // suppressed so no duplicate can be created.
+    query = query.or(`plan_id.is.null,plan_id.neq.${options.excludePlanId}`);
+  }
+
+  if (options.search && options.search.trim() !== "") {
+    // Supabase's .or() takes a comma-separated list of
+    // `<column>.<op>.<value>` predicates. Commas and parentheses inside
+    // the value would re-split the expression, so they are stripped
+    // from the search token before being embedded. ILIKE pattern
+    // metacharacters (%, _, \) are escaped so a query of "100%" stays
+    // literal rather than becoming "match anything after 100".
+    const sanitized = options.search
+      .trim()
+      .replace(/[\\%_]/g, (c) => "\\" + c)
+      .replace(/[(),]/g, " ");
+    const pattern = `*${sanitized}*`;
+    query = query.or(
+      `merchant.ilike.${pattern},item_name.ilike.${pattern},description.ilike.${pattern}`,
+    );
+  }
+
+  if (options.cursor) {
+    // Keyset pagination over the composite (occurred_at DESC, id DESC)
+    // ordering below. "Give me rows strictly OLDER than the last one on
+    // the previous page, breaking ties by id." Expressed as:
+    //   occurred_at < cursor.occurredAt
+    //   OR (occurred_at = cursor.occurredAt AND id < cursor.id)
+    const occurredAt = options.cursor.occurredAt;
+    const id = options.cursor.id;
+    query = query.or(
+      `occurred_at.lt.${occurredAt},and(occurred_at.eq.${occurredAt},id.lt.${id})`,
+    );
+  }
+
+  query = query
+    .order("occurred_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(pageSize + 1); // +1 to detect whether another page exists
+
+  const { data, error } = await query;
+  if (error) throw error;
+  const rows = (data ?? []) as TransactionRow[];
+
+  const hasMore = rows.length > pageSize;
+  const page = hasMore ? rows.slice(0, pageSize) : rows;
+  const last = page[page.length - 1];
+  const nextCursor = hasMore && last ? { occurredAt: last.occurred_at, id: last.id } : null;
+
+  return { transactions: page, nextCursor };
+}
+
 export async function getTransaction(
   client: TypedSupabaseClient,
   userId: string,

@@ -40,11 +40,11 @@ import {
   getPlan,
   getPlanDetail,
   listPlansWithSummaries,
-  listTransactions,
-  listAccounts,
-  listCategories,
+  searchTransactionsForPlanAttachment,
   type AuthContext,
   type ListFinancialPlansOptions,
+  type SearchTransactionsForPlanOptions,
+  type SearchTransactionsForPlanResult,
 } from "@spencare/domain-application";
 import type {
   CreateFinancialPlanInput,
@@ -91,50 +91,30 @@ export async function listPlansWithSummariesAction(asOfIso: string) {
 }
 
 /**
- * Backs the "associate an existing transaction" picker on the Plan detail
- * page. Deliberately bounded (last 100 transactions, newest first, same
- * shape Cash Flow already reads) rather than a new full-text search RPC —
- * a Plan association picker is a "find something recent" tool, not a
- * general transaction search; Gate 3 §24's "never load a user's full
- * transaction history merely to render one Plan" rule is why this stays
- * capped instead of calling `listTransactions` with no limit.
+ * Backs the "attach a transaction" picker on the Plan detail page.
  *
- * Matches merchant/item name/description (case-insensitive substring, as
- * before), plus account name, category name, and amount — the picker's
- * row now shows all of these, so search should find a transaction by any
- * of them, not merchant/description alone.
+ * Routes straight to the server-side search in @spencare/domain-
+ * application: user-scoped (RLS + explicit user_id check), queries the
+ * ENTIRE eligible transaction history (not a date-bounded slice), and
+ * keyset-paginates. Earlier revisions of this action loaded `.limit(100)`
+ * and filtered client-side, which silently hid every older match -- a
+ * user with 500 transactions could not attach anything from before the
+ * most recent 100. The new query lives in domain-application so Spensa,
+ * MCP, and any future picker can share one implementation and one
+ * ownership check.
+ *
+ * Server-side search covers merchant / item_name / description via
+ * ILIKE. Account- and category-name search are deliberately NOT included
+ * here: the dialog surfaces explicit Account and Category filters that
+ * compose with the text search server-side, which is both more precise
+ * and cheaper than JOIN-ing names into every text search.
  */
-export async function searchTransactionsForPlanAction(query: string) {
+export async function searchTransactionsForPlanAction(
+  input: Omit<SearchTransactionsForPlanOptions, "excludePlanId"> & { planId: string },
+): Promise<SearchTransactionsForPlanResult> {
   const ctx = await requireAuthContext();
-  const [transactions, accounts, categories] = await Promise.all([
-    listTransactions(ctx, { limit: 100 }),
-    listAccounts(ctx),
-    listCategories(ctx),
-  ]);
-  const q = query.trim().toLowerCase();
-  if (q === "") return transactions;
-
-  const accountNameById = new Map(accounts.map((a) => [a.id, a.name.toLowerCase()]));
-  const categoryNameById = new Map(categories.map((c) => [c.id, c.name.toLowerCase()]));
-  const numericQuery = q.replace(/[₹,\s]/g, "");
-
-  return transactions.filter((t) => {
-    const textFields = [t.merchant, t.item_name, t.description].filter((f): f is string => !!f);
-    if (textFields.some((field) => field.toLowerCase().includes(q))) return true;
-
-    const accountName = accountNameById.get(t.account_id);
-    if (accountName?.includes(q)) return true;
-
-    const categoryName = t.category_id ? categoryNameById.get(t.category_id) : undefined;
-    if (categoryName?.includes(q)) return true;
-
-    if (numericQuery !== "" && !Number.isNaN(Number(numericQuery))) {
-      const amountStr = (t.amount_minor / 100).toString();
-      if (amountStr.includes(numericQuery)) return true;
-    }
-
-    return false;
-  });
+  const { planId, ...rest } = input;
+  return searchTransactionsForPlanAttachment(ctx, { ...rest, excludePlanId: planId });
 }
 
 export async function getPlanAction(planId: string) {

@@ -151,6 +151,9 @@ export {
   listTransactions,
   getTransaction,
   listCategories,
+  searchTransactionsForPlanAttachment,
+  type SearchTransactionsForPlanOptions,
+  type SearchTransactionsForPlanResult,
 } from "./queries/transactions.js";
 export {
   listBudgets,
