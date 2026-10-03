@@ -1,4 +1,4 @@
-import { getProfile, listAccounts, listCategories, listTransactions, type AuthContext, getProfileForDisplay,
+import { getProfile, listAccounts, listCategories, searchTransactions, type AuthContext, getProfileForDisplay,
 } from "@spencare/domain-application";
 import { hasCapability } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
@@ -34,8 +34,14 @@ export default async function TransactionsPage() {
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
-  const [transactions, accounts, categories, profile] = await Promise.all([
-    listTransactions(ctx),
+  // Initial SSR load uses the canonical paginated search (not the full
+  // listTransactions dump) so a user with thousands of transactions
+  // never ships the entire history over the wire on first paint. The
+  // search function is the same one the toolbar hits later for text
+  // queries and filters, so the first page and every subsequent page
+  // come from one consistent server-side implementation.
+  const [initialPage, accounts, categories, profile] = await Promise.all([
+    searchTransactions(ctx, {}),
     listAccounts(ctx),
     listCategories(ctx),
     getProfile(ctx),
@@ -72,8 +78,10 @@ export default async function TransactionsPage() {
       </div>
       <div className="mx-auto max-w-2xl py-8">
         <TransactionList
-          initialTransactions={transactions}
+          initialTransactions={initialPage.transactions}
+          initialNextCursor={initialPage.nextCursor}
           accounts={spendEligibleAccounts}
+          allAccounts={accounts}
           categories={categories}
           masked={profile?.privacy_mode_enabled ?? false}
         />

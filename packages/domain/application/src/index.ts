@@ -151,7 +151,10 @@ export {
   listTransactions,
   getTransaction,
   listCategories,
+  searchTransactions,
   searchTransactionsForPlanAttachment,
+  type SearchTransactionsOptions,
+  type SearchTransactionsResult,
   type SearchTransactionsForPlanOptions,
   type SearchTransactionsForPlanResult,
 } from "./queries/transactions.js";

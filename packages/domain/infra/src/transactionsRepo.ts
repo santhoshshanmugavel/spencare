@@ -94,25 +94,30 @@ export async function listTransactions(
 
 /**
  * Server-side search across the user's ENTIRE eligible transaction
- * history for the Plan "Attach a transaction" picker. Deliberately not
- * a thin wrapper over listTransactions: the picker's dataset is "every
- * transaction the user has ever created that's eligible to attach,"
- * not "the first N by date" -- the previous
- * `searchTransactionsForPlanAction` implementation loaded 100 recent
- * rows and filtered them in JS, which silently hid every older match
- * (users could not attach a January transaction from an October
- * picker). This runs the match on the database and keyset-paginates
- * the result so the picker can surface a January 2024 Amazon charge
- * from an October 2026 session, however many transactions exist.
+ * history. Canonical for every surface that offers transaction
+ * discovery: the Transactions page, the Plan "Attach a transaction"
+ * picker (via `excludePlanId`), and any future Spensa / linking tool
+ * so no feature ever re-implements client-side filtering of a limited
+ * window.
+ *
+ * Deliberately NOT a thin wrapper over listTransactions: a search
+ * dataset is "every transaction the user has ever created that
+ * matches the filters," not "the first N by date." The earlier Plan
+ * picker shipped the mistake of loading 100 recent rows and filtering
+ * them in JS, which silently hid every older match; the Transactions
+ * page itself was loading EVERY historical row into memory for SSR.
+ * This runs the match on the database and keyset-paginates so the
+ * list stays bounded regardless of how many transactions exist.
  *
  * User-scope is enforced the same way as every other read in this
  * repo: through the RLS-scoped client plus an explicit `.eq('user_id',
  * userId)` -- defence in depth, not a replacement for RLS. Soft-
- * deleted rows are filtered out, and transactions already attached to
- * `excludePlanId` are excluded so the picker can never offer the user
- * a duplicate association.
+ * deleted rows are filtered out. When `excludePlanId` is set,
+ * transactions already attached to that plan are excluded so a
+ * Plan-attach picker can never offer a duplicate association; general
+ * Transactions-page callers simply omit the field.
  */
-export interface SearchTransactionsForPlanOptions {
+export interface SearchTransactionsOptions {
   /** Case-insensitive substring; matches merchant OR item_name OR description. Trimmed before query; empty treated as "no text filter." */
   search?: string;
   /** Restricts to transactions in this category. */
@@ -123,7 +128,7 @@ export interface SearchTransactionsForPlanOptions {
   occurredFrom?: string;
   /** Inclusive IST calendar-date upper bound on occurred_at. */
   occurredTo?: string;
-  /** Transactions already attached to this plan are excluded (no duplicate associations). */
+  /** When set, transactions already attached to this plan are excluded. Used by the Plan "Attach a transaction" picker; general callers omit it. */
   excludePlanId?: string;
   /** Keyset cursor from the previous page's last row -- {occurredAt, id}. */
   cursor?: { occurredAt: string; id: string };
@@ -131,23 +136,28 @@ export interface SearchTransactionsForPlanOptions {
   pageSize?: number;
 }
 
-export interface SearchTransactionsForPlanResult {
+export interface SearchTransactionsResult {
   transactions: TransactionRow[];
   /** When present, pass back as `cursor` to fetch the next page. Null means no more rows. */
   nextCursor: { occurredAt: string; id: string } | null;
 }
 
-const DEFAULT_PLAN_SEARCH_PAGE_SIZE = 50;
-const MAX_PLAN_SEARCH_PAGE_SIZE = 100;
+/** @deprecated Use `SearchTransactionsOptions` + `SearchTransactionsResult`. Alias retained for backward compat with the Plan-picker callers from the earlier commit. */
+export type SearchTransactionsForPlanOptions = SearchTransactionsOptions;
+/** @deprecated Use `SearchTransactionsResult`. */
+export type SearchTransactionsForPlanResult = SearchTransactionsResult;
 
-export async function searchTransactionsForPlanAttachment(
+const DEFAULT_SEARCH_PAGE_SIZE = 50;
+const MAX_SEARCH_PAGE_SIZE = 100;
+
+export async function searchTransactions(
   client: TypedSupabaseClient,
   userId: string,
-  options: SearchTransactionsForPlanOptions = {},
-): Promise<SearchTransactionsForPlanResult> {
+  options: SearchTransactionsOptions = {},
+): Promise<SearchTransactionsResult> {
   const pageSize = Math.min(
-    Math.max(1, options.pageSize ?? DEFAULT_PLAN_SEARCH_PAGE_SIZE),
-    MAX_PLAN_SEARCH_PAGE_SIZE,
+    Math.max(1, options.pageSize ?? DEFAULT_SEARCH_PAGE_SIZE),
+    MAX_SEARCH_PAGE_SIZE,
   );
 
   let query = client
@@ -226,6 +236,9 @@ export async function searchTransactionsForPlanAttachment(
 
   return { transactions: page, nextCursor };
 }
+
+/** @deprecated Use `searchTransactions`. Alias retained for backward compat with the Plan-picker call sites from the earlier commit; both go through the same implementation. */
+export const searchTransactionsForPlanAttachment = searchTransactions;
 
 export async function getTransaction(
   client: TypedSupabaseClient,

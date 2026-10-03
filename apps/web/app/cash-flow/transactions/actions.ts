@@ -7,9 +7,12 @@ import {
   deleteTransaction,
   listCategories,
   listTransactions,
+  searchTransactions,
   transfer,
   updateTransaction,
   type AuthContext,
+  type SearchTransactionsOptions,
+  type SearchTransactionsResult,
 } from "@spencare/domain-application";
 import type { CreateCategoryInput, CreateTransactionInput, UpdateTransactionInput } from "@spencare/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -33,6 +36,24 @@ async function requireAuthContext(): Promise<AuthContext> {
 export async function listTransactionsAction() {
   const ctx = await requireAuthContext();
   return listTransactions(ctx);
+}
+
+/**
+ * The Transactions page's canonical search entry point. Delegates
+ * straight to the user-scoped `searchTransactions` in domain-
+ * application (RLS + explicit user_id check) and returns the raw
+ * paginated result for the client to merge into its list. Omitting
+ * every option returns the newest page of the user's transactions
+ * (the un-filtered browsing default); any combination of search,
+ * categoryId, accountId, occurredFrom/To, and cursor narrows the
+ * same global dataset server-side -- no field can be derived or
+ * filtered on the client.
+ */
+export async function searchTransactionsAction(
+  input: SearchTransactionsOptions = {},
+): Promise<SearchTransactionsResult> {
+  const ctx = await requireAuthContext();
+  return searchTransactions(ctx, input);
 }
 
 export async function listCategoriesAction() {

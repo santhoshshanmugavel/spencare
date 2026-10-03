@@ -2,11 +2,11 @@ import {
   getTransaction as getTransactionRow,
   listCategories as listCategoriesRow,
   listTransactions as listTransactionsRow,
-  searchTransactionsForPlanAttachment as searchTransactionsForPlanAttachmentRow,
+  searchTransactions as searchTransactionsRow,
   type CategoryRow,
   type ListTransactionsOptions,
-  type SearchTransactionsForPlanOptions,
-  type SearchTransactionsForPlanResult,
+  type SearchTransactionsOptions,
+  type SearchTransactionsResult,
   type TransactionRow,
 } from "@spencare/domain-infra";
 import type { AuthContext } from "../types.js";
@@ -28,16 +28,26 @@ export async function listCategories(ctx: AuthContext): Promise<CategoryRow[]> {
 }
 
 /**
- * Server-side, user-scoped search over the ENTIRE transaction history
- * for the Plan "Attach a transaction" picker (never a slice of a client-
- * side list). See the infra implementation header for the design intent;
- * this is just the ownership-preserving application-layer entry point.
+ * Canonical server-side, user-scoped search over the ENTIRE transaction
+ * history. Shared by the Transactions page toolbar, the Plan "Attach a
+ * transaction" picker (via `excludePlanId`), and any future transaction
+ * discovery surface so no feature re-implements client-side filtering
+ * of a limited window. See the infra implementation header for the
+ * design intent; this is just the ownership-preserving application-
+ * layer entry point.
  */
-export type { SearchTransactionsForPlanOptions, SearchTransactionsForPlanResult };
+export type { SearchTransactionsOptions, SearchTransactionsResult };
 
-export async function searchTransactionsForPlanAttachment(
+export async function searchTransactions(
   ctx: AuthContext,
-  options: SearchTransactionsForPlanOptions = {},
-): Promise<SearchTransactionsForPlanResult> {
-  return searchTransactionsForPlanAttachmentRow(ctx.supabase, ctx.userId, options);
+  options: SearchTransactionsOptions = {},
+): Promise<SearchTransactionsResult> {
+  return searchTransactionsRow(ctx.supabase, ctx.userId, options);
 }
+
+/** @deprecated Use `searchTransactions`. Alias retained for the earlier Plan-picker call sites. */
+export const searchTransactionsForPlanAttachment = searchTransactions;
+/** @deprecated Use `SearchTransactionsOptions`. */
+export type SearchTransactionsForPlanOptions = SearchTransactionsOptions;
+/** @deprecated Use `SearchTransactionsResult`. */
+export type SearchTransactionsForPlanResult = SearchTransactionsResult;
