@@ -120,7 +120,12 @@ export function DeleteTransactionDialog({
     >
       <DialogContent
         ref={contentRef}
-        className="sm:max-w-md"
+        // Mobile: let the dialog size to its content with comfortable
+        // horizontal gutter rather than defaulting to the Dialog
+        // primitive's responsive clamp (which can jam destructive
+        // controls uncomfortably close to the viewport edge on narrow
+        // phones). Desktop keeps the sm:max-w-md cap.
+        className="mx-4 w-[calc(100%-2rem)] sm:mx-auto sm:w-full sm:max-w-md"
         onOpenAutoFocus={(e) => {
           // Never let Radix's default auto-focus land on Confirm
           // (confirmation-ui-specification.md §9) -- but fully preventing

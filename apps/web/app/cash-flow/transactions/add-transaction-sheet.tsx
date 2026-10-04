@@ -415,7 +415,7 @@ export function AddTransactionSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
+      <SheetContent className="w-full pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:w-3/4 sm:pb-6">
         <SheetHeader>
           <SheetTitle>Add transaction</SheetTitle>
           <SheetDescription>Record an expense, income, or transfer between accounts.</SheetDescription>

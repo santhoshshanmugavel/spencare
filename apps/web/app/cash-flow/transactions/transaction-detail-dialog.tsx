@@ -75,7 +75,14 @@ export function TransactionDetailDialog({
   return (
     <>
       <Sheet open={open && !editing && !deleting} onOpenChange={onOpenChange}>
-        <SheetContent>
+        {/*
+         * Mobile: full-width side sheet (default is w-3/4 which leaves an
+         * awkward sliver of background visible on narrow phones). Honor
+         * the home-indicator safe-area at the bottom so the last button
+         * is never clipped. Desktop keeps the canonical sm:max-w-sm
+         * width via the primitive's own responsive class map.
+         */}
+        <SheetContent className="w-full pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:w-3/4 sm:pb-6">
           <SheetHeader>
             <SheetTitle className="text-base">{title}</SheetTitle>
             <SheetDescription asChild>

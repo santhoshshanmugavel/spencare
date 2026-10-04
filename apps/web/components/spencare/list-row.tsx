@@ -46,8 +46,24 @@ export function ListRow({
         {subtitle ? (
           <div className="truncate text-xs text-muted-foreground mt-0.5">{subtitle}</div>
         ) : null}
+        {/* Mobile: stack metadata (category / account / time / etc) directly
+            under the subtitle so the user can still see which category and
+            account a transaction belongs to without horizontal scrolling.
+            Previously these were hidden below `sm:`, which made the mobile
+            Transactions row drop the exact context fields a user needs to
+            identify a transaction. */}
+        {metadata.length > 0 ? (
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:hidden">
+            {metadata.map((item, i) => (
+              <span key={i} className="min-w-0 max-w-full truncate">
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
 
+      {/* Desktop: inline the metadata as separate columns next to the title. */}
       {metadata.map((item, i) => (
         <div key={i} className="hidden shrink-0 text-xs text-muted-foreground sm:block">
           {item}

@@ -221,4 +221,41 @@ describe("<TransactionList> — server-side search + filters", () => {
     // One Clear button lives in the toolbar; the other is the empty-state action.
     expect(screen.getAllByRole("button", { name: /clear filters/i }).length).toBeGreaterThanOrEqual(1);
   });
+
+  it("mobile Filters button renders alongside the desktop inline filters so both viewports are supported in one DOM", () => {
+    render(
+      <TransactionList
+        initialTransactions={[expense()]}
+        initialNextCursor={null}
+        accounts={[account]}
+        allAccounts={[account]}
+        categories={[category]}
+        masked={false}
+      />,
+    );
+    // Mobile branch exposes a labelled Filters button; desktop branch
+    // exposes the same two Select dropdowns. Both exist in the rendered
+    // DOM; CSS hides whichever branch doesn't match the viewport.
+    expect(screen.getByRole("button", { name: /^filters$/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Filter by category")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filter by account")).toBeInTheDocument();
+  });
+
+  it("mobile Filters button shows a count badge when a category or account filter is active", async () => {
+    const user = userEvent.setup();
+    render(
+      <TransactionList
+        initialTransactions={[expense()]}
+        initialNextCursor={null}
+        accounts={[account]}
+        allAccounts={[account]}
+        categories={[category]}
+        masked={false}
+      />,
+    );
+    // Change the desktop Category select; the mobile button should reflect the active count via its aria-label.
+    await user.click(screen.getByLabelText("Filter by category"));
+    await user.click(await screen.findByRole("option", { name: "Dining" }));
+    expect(screen.getByRole("button", { name: /filters \(1 active\)/i })).toBeInTheDocument();
+  });
 });

@@ -14,7 +14,9 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { EmptyState } from "@/components/spencare/empty-state";
@@ -97,6 +99,7 @@ export function TransactionList({
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState<string>(ALL);
   const [accountId, setAccountId] = useState<string>(ALL);
+  const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
 
   const [transactions, setTransactions] = useState<TransactionRow[]>(initialTransactions);
   const [nextCursor, setNextCursor] = useState<Cursor>(initialNextCursor);
@@ -117,6 +120,10 @@ export function TransactionList({
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
   const filtersActive = query.trim() !== "" || categoryId !== ALL || accountId !== ALL;
+  // Only Category + Account count toward the "N active" chip; the search
+  // field is always visible, so counting it here would double-signal
+  // "there's a filter active" when the user is just typing.
+  const activeFilterCount = (categoryId !== ALL ? 1 : 0) + (accountId !== ALL ? 1 : 0);
 
   const runSearch = useCallback(
     async (opts: { cursor?: Cursor; append?: boolean }) => {
@@ -200,7 +207,34 @@ export function TransactionList({
             className="pl-9"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        {/*
+         * Mobile: a single "Filters" button opens a bottom sheet with the
+         * Category + Account controls stacked at full width. That keeps
+         * the toolbar from stacking two 160px selects beside the search
+         * at phone widths, where they wrapped to a second row and still
+         * felt cramped. The sheet reuses the SAME state (categoryId /
+         * accountId) and the SAME server-side search, so the search
+         * semantics are identical across viewports.
+         *
+         * Desktop (sm:) keeps the original inline selects + Clear button.
+         */}
+        <div className="flex items-center gap-2 sm:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFiltersSheetOpen(true)}
+            aria-label={activeFilterCount > 0 ? `Filters (${activeFilterCount} active)` : "Filters"}
+            className="h-9"
+          >
+            Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+          </Button>
+          {activeFilterCount > 0 ? (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9">
+              Clear
+            </Button>
+          ) : null}
+        </div>
+        <div className="hidden flex-wrap gap-2 sm:flex">
           <Select value={categoryId} onValueChange={setCategoryId}>
             <SelectTrigger aria-label="Filter by category" className="h-9 min-w-[160px] flex-1 sm:flex-none">
               <SelectValue placeholder="All categories" />
@@ -335,6 +369,77 @@ export function TransactionList({
           </Button>
         </div>
       ) : null}
+
+      {/*
+       * Mobile filter sheet. Opens from the "Filters" button in the
+       * mobile-only toolbar branch above. Mirrors the exact Category +
+       * Account state the desktop inline selects use, so filters applied
+       * on mobile persist when the viewport is resized up to desktop and
+       * vice versa. Bottom-sheet positioning so the controls stay close
+       * to the thumb; safe-area padding so the primary action never sits
+       * under the device home-indicator.
+       */}
+      <Sheet open={filtersSheetOpen} onOpenChange={setFiltersSheetOpen}>
+        <SheetContent
+          side="bottom"
+          className="rounded-t-2xl px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 sm:px-6"
+        >
+          <SheetHeader className="mb-2 p-0 text-left">
+            <SheetTitle>Filters</SheetTitle>
+            <SheetDescription>Filter the transaction list without changing your search.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="mobile-filter-category">Category</Label>
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger id="mobile-filter-category" className="w-full">
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All categories</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mobile-filter-account">Account</Label>
+              <Select value={accountId} onValueChange={setAccountId}>
+                <SelectTrigger id="mobile-filter-account" className="w-full">
+                  <SelectValue placeholder="All accounts" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All accounts</SelectItem>
+                  {allAccounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  clearFilters();
+                  setFiltersSheetOpen(false);
+                }}
+                disabled={activeFilterCount === 0}
+              >
+                Clear filters
+              </Button>
+              <Button type="button" onClick={() => setFiltersSheetOpen(false)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <AddTransactionSheet
         open={addOpen}

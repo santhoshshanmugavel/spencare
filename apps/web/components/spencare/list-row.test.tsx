@@ -15,8 +15,12 @@ describe("<ListRow>", () => {
     );
     expect(screen.getByText("Netflix")).toBeInTheDocument();
     expect(screen.getByText("You're paying for Netflix again")).toBeInTheDocument();
-    expect(screen.getByText("Subscriptions")).toBeInTheDocument();
-    expect(screen.getByText("HDFC Bank")).toBeInTheDocument();
+    // Metadata is now rendered twice -- once in the mobile-only stacked
+    // row under the subtitle, once in the desktop-only inline columns --
+    // so each category/account text node appears in the DOM twice. The
+    // original single-match assertion predated the responsive split.
+    expect(screen.getAllByText("Subscriptions").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("HDFC Bank").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("₹499.00")).toBeInTheDocument();
   });
 
@@ -47,5 +51,25 @@ describe("<ListRow>", () => {
     render(<ListRow title="Netflix" onClick={onClick} />);
     await user.click(screen.getByRole("button"));
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders metadata (category / account / time) visibly on mobile under the subtitle rather than hiding it", () => {
+    // Pre-fix regression: metadata nodes carried `hidden sm:block`, so on
+    // phones a transaction row dropped its category / account / time
+    // entirely. The fix stacks them inside the main column with
+    // `sm:hidden` so they ARE in the DOM at mobile widths; the desktop
+    // columns stay `hidden ... sm:block` as a separate branch.
+    render(
+      <ListRow
+        title="Swiggy"
+        subtitle="Dinner"
+        metadata={[<span key="cat">Dining</span>, <span key="acct">HDFC</span>, <span key="time">9:30 PM</span>]}
+      />,
+    );
+    // Mobile stack: category / account / time all present (two copies
+    // each -- one for the mobile stack, one for the desktop columns).
+    expect(screen.getAllByText("Dining").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("HDFC").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("9:30 PM").length).toBeGreaterThanOrEqual(2);
   });
 });

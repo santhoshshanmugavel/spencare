@@ -95,7 +95,7 @@ export function EditTransactionSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
+      <SheetContent className="w-full pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:w-3/4 sm:pb-6">
         <SheetHeader>
           <SheetTitle>Edit transaction</SheetTitle>
           <SheetDescription>Update the amount, category, account, or date.</SheetDescription>
