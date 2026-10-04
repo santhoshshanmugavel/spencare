@@ -118,3 +118,145 @@ describe("<AccountDetailsSheet> — credit card billing (single-date model)", ()
     expect(screen.queryByRole("button", { name: /pay bill/i })).not.toBeInTheDocument();
   });
 });
+
+describe("<AccountDetailsSheet> — bank reserve breakdown", () => {
+  const bank: AccountRow = {
+    id: "acc-bank",
+    user_id: "u1",
+    type: "bank",
+    name: "HDFC",
+    currency: "INR",
+    balance_minor: 3621956,
+    credit_limit_minor: null,
+    credit_used_minor: null,
+    market_value_minor: null,
+    is_archived: false,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    statement_close_day: null,
+    payment_due_day: null,
+  };
+
+  const bankProps = {
+    open: true,
+    onOpenChange: () => {},
+    masked: false,
+    cardReserveMinor: 0,
+    cardReserveDetails: [],
+  };
+
+  it("shows aggregate rows with 'None' when a category has no reservation", () => {
+    render(
+      <AccountDetailsSheet
+        account={bank}
+        {...bankProps}
+        goalReserveMinor={0}
+        commitmentReserveMinor={0}
+        loanReserveMinor={0}
+      />,
+    );
+    // Three aggregate rows, each labelled "None" when zero.
+    expect(screen.getByText("Reserved for goals")).toBeInTheDocument();
+    expect(screen.getByText("Reserved for commitments")).toBeInTheDocument();
+    expect(screen.getByText("Reserved for loans")).toBeInTheDocument();
+    expect(screen.getAllByText("None").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("exposes a chevron toggle on an aggregate row with items; collapsed by default (items hidden)", () => {
+    render(
+      <AccountDetailsSheet
+        account={bank}
+        {...bankProps}
+        goalReserveMinor={2000000}
+        commitmentReserveMinor={0}
+        loanReserveMinor={0}
+        reserveBreakdown={{
+          goals: [{ id: "g1", name: "Emergency Fund", reservedMinor: 2000000, targetMinor: 5000000, targetDate: "2026-12-31" }],
+          commitments: [],
+          loans: [],
+        }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /toggle reserved for goals breakdown/i })).toBeInTheDocument();
+    // Collapsed by default: item name NOT yet in the DOM.
+    expect(screen.queryByText("Emergency Fund")).not.toBeInTheDocument();
+  });
+
+  it("expands to show per-goal items that reconcile to the aggregate", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    render(
+      <AccountDetailsSheet
+        account={bank}
+        {...bankProps}
+        goalReserveMinor={2000000}
+        commitmentReserveMinor={0}
+        loanReserveMinor={0}
+        reserveBreakdown={{
+          goals: [
+            { id: "g1", name: "Emergency Fund", reservedMinor: 1500000, targetMinor: 5000000, targetDate: null },
+            { id: "g2", name: "New Laptop", reservedMinor: 500000, targetMinor: 8000000, targetDate: null },
+          ],
+          commitments: [],
+          loans: [],
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /toggle reserved for goals breakdown/i }));
+    expect(screen.getByText("Emergency Fund")).toBeInTheDocument();
+    expect(screen.getByText("New Laptop")).toBeInTheDocument();
+    // 1500000 + 500000 = 2000000, matches the aggregate -- not displayed as a
+    // separate total row here; the invariant is enforced by page.tsx which
+    // derives both from the same source list.
+  });
+
+  it("expands commitments and labels a fully-protected one with 'Fully protected' (uses derivePreparationStatus)", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    const today = new Date();
+    const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000);
+    const nextPaymentDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+
+    render(
+      <AccountDetailsSheet
+        account={bank}
+        {...bankProps}
+        goalReserveMinor={0}
+        commitmentReserveMinor={14900}
+        loanReserveMinor={0}
+        reserveBreakdown={{
+          goals: [],
+          commitments: [
+            {
+              id: "cmt-1",
+              name: "YouTube Premium",
+              categoryName: "Subscriptions",
+              frequency: "monthly",
+              reservedMinor: 14900,
+              nextPaymentAmountMinor: 14900,
+              nextPaymentDate,
+              nextOccurrenceReservedMinor: 14900, // fully protected
+            },
+          ],
+          loans: [],
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /toggle reserved for commitments breakdown/i }));
+    expect(screen.getByText("YouTube Premium")).toBeInTheDocument();
+    expect(screen.getByText("Fully protected")).toBeInTheDocument();
+  });
+
+  it("includes the Available explanation copy so users know how the available amount is derived", () => {
+    render(
+      <AccountDetailsSheet
+        account={bank}
+        {...bankProps}
+        goalReserveMinor={0}
+        commitmentReserveMinor={0}
+        loanReserveMinor={0}
+      />,
+    );
+    expect(
+      screen.getByText(/available is your current balance after protecting money/i),
+    ).toBeInTheDocument();
+  });
+});

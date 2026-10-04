@@ -12,7 +12,11 @@ import { EmptyState } from "@/components/spencare/empty-state";
 import { AddAccountSheet } from "./add-account-sheet";
 import { EditAccountSheet } from "./edit-account-sheet";
 import { ArchiveAccountDialog } from "./archive-account-dialog";
-import { AccountDetailsSheet, type CreditCardBillingStatusView } from "./account-details-sheet";
+import {
+  AccountDetailsSheet,
+  type AccountReserveBreakdown,
+  type CreditCardBillingStatusView,
+} from "./account-details-sheet";
 
 /**
  * Grid-of-cards layout per SP-234 ("Settings > Accounts (Main Grid)"),
@@ -52,6 +56,7 @@ export function AccountList({
   paymentAccountNameByCardId = {},
   paymentSources = [],
   billingStatusByCardId = {},
+  reserveBreakdownByAccount = {},
 }: {
   initialAccounts: AccountRow[];
   masked: boolean;
@@ -68,6 +73,8 @@ export function AccountList({
   paymentSources?: CreditCardPaymentSourceRow[];
   /** Per credit card: canonical billing status (statement balance, payment status), keyed by account id. */
   billingStatusByCardId?: Record<string, CreditCardBillingStatusView>;
+  /** Per bank/cash account: itemized breakdown behind the goals / commitments / loans aggregates. Totals match the aggregate exactly (derived from the same source lists). */
+  reserveBreakdownByAccount?: Record<string, AccountReserveBreakdown>;
 }) {
   const router = useRouter();
   // Deliberately no local copy of initialAccounts in state: this list
@@ -197,6 +204,7 @@ export function AccountList({
         billingStatus={viewingDetails ? (billingStatusByCardId[viewingDetails.id] ?? null) : null}
         allAccounts={accounts}
         onBillPaid={() => { setViewingDetails(null); handleMutated(); }}
+        reserveBreakdown={viewingDetails ? reserveBreakdownByAccount[viewingDetails.id] : undefined}
       />
     </div>
   );
