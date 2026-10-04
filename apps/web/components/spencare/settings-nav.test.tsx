@@ -52,13 +52,15 @@ describe("<SettingsNav>", () => {
 });
 
 describe("<SettingsShell>", () => {
-  it("renders the nav alongside its children", () => {
+  it("renders the nav alongside its children (both the desktop column and the mobile chip strip exist in one DOM so CSS alone picks the viewport-appropriate layout)", () => {
     render(
       <SettingsShell active="mcp">
         <p>page content</p>
       </SettingsShell>,
     );
-    expect(screen.getByRole("link", { name: "MCP" })).toBeInTheDocument();
+    // Each nav link is rendered twice: once in the hidden-below-md
+    // desktop column, once in the md-hidden mobile chip strip.
+    expect(screen.getAllByRole("link", { name: "MCP" }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("page content")).toBeInTheDocument();
   });
 
@@ -69,5 +71,18 @@ describe("<SettingsShell>", () => {
       </SettingsShell>,
     );
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
+  it("surfaces a mobile-only chip strip with its own aria-labelled nav landmark alongside the desktop nav", () => {
+    render(
+      <SettingsShell active="accounts">
+        <p>content</p>
+      </SettingsShell>,
+    );
+    // Two <nav aria-label="Settings"> landmarks exist: the desktop
+    // column and the mobile chip strip. Both carry the same set of
+    // links so the Settings area is reachable at every viewport.
+    const navs = screen.getAllByRole("navigation", { name: "Settings" });
+    expect(navs.length).toBe(2);
   });
 });
