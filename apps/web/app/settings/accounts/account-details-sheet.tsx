@@ -178,7 +178,17 @@ export function AccountDetailsSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto rounded-t-2xl px-6 pb-8">
+      <SheetContent
+        side="bottom"
+        className={[
+          "max-h-[90vh] overflow-y-auto rounded-t-2xl",
+          // Tight horizontal padding on phones so narrow screens keep as
+          // much content width as possible; relaxes on tablet+. Bottom
+          // honors the home-indicator safe-area inset.
+          "px-4 sm:px-6",
+          "pb-[calc(2rem+env(safe-area-inset-bottom))]",
+        ].join(" ")}
+      >
         <SheetHeader className="mb-2">
           <div className="flex items-center gap-3 pt-2">
             <Icon className="size-5 text-muted-foreground" />

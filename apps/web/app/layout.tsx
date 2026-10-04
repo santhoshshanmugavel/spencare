@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Google_Sans_Flex, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -49,6 +49,21 @@ export const metadata: Metadata = {
     shortcut: "/favicon.png",
     apple: "/favicon.png",
   },
+};
+
+/**
+ * Mobile viewport: `viewport-fit=cover` opts the app into drawing under
+ * the iPhone notch / Dynamic Island / home indicator so the bottom-nav
+ * can anchor to the device edge while still receiving the safe-area
+ * insets we honor with `env(safe-area-inset-*)` in the shell. Browser
+ * zoom is explicitly allowed (never user-scalable=no, maximumScale=1,
+ * etc.) per the accessibility rule that pinch-to-zoom must work for
+ * users who need to magnify financial amounts.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 const CLARITY_PROJECT_ID = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID;
