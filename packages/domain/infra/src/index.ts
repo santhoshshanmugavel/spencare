@@ -73,3 +73,17 @@ export {
   listEpfoLedgerEntries,
   type ListEpfoLedgerFilter,
 } from "./epfoLedgerRepo.js";
+
+export {
+  callCreateEpfoAccount,
+  callAddEpfoEmployment,
+  callEndEpfoEmployment,
+  callUpsertEpfoContributionProfile,
+  listEpfoEmployments,
+  listEpfoContributionProfiles,
+  type EpfoEmploymentRow,
+  type EpfoContributionProfileRow,
+  type CreateEpfoAccountInput,
+  type AddEpfoEmploymentInput,
+  type UpsertEpfoContributionProfileInput,
+} from "./epfoRepo.js";

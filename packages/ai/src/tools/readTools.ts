@@ -11,7 +11,7 @@ import {
   listContributions,
   getUpcomingBills,
   getCashFlowOverview,
-  toAiAccountSummaryInput,
+  toAiAccountSummariesForContext,
   getGoalContributionPlan,
   getCreditCardBillingStatus,
   getAccount,
@@ -104,7 +104,7 @@ const getDashboardSummaryTool: ReadToolHandler = {
             currency: summary.netWorth.netWorth.currencyCode,
           },
       accounts: redactFinancialSnapshot(
-        { safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: summary.accounts.map(toAiAccountSummaryInput) },
+        { safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: toAiAccountSummariesForContext(summary.accounts) },
         privacyModeEnabled,
       ).accounts,
       goals: redactGoalSummaries(summary.goals.map((g) => ({ id: g.id, name: g.name, targetAmountMinor: g.target_amount_minor, savedAmountMinor: g.saved_amount_minor, currency: CURRENCY })), privacyModeEnabled),
@@ -122,7 +122,7 @@ const getAccountsTool: ReadToolHandler = {
   execute: async ({ ctx, privacyModeEnabled }) => {
     const accounts = await listAccounts(ctx);
     return redactFinancialSnapshot(
-      { safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: accounts.map(toAiAccountSummaryInput) },
+      { safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: toAiAccountSummariesForContext(accounts) },
       privacyModeEnabled,
     ).accounts;
   },

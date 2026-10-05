@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccountRow } from "@spencare/domain-infra";
-import { toAiAccountSummaryInput } from "./aiAccountSummary.js";
+import { toAiAccountSummaryInput, toAiAccountSummariesForContext } from "./aiAccountSummary.js";
 
 function accountRow(overrides: Partial<AccountRow> = {}): AccountRow {
   return {
@@ -52,5 +52,36 @@ describe("toAiAccountSummaryInput — shared account mapping (Phase 18 relocatio
   it("defaults credit_limit_minor/credit_used_minor to 0 if somehow null on a credit_card row (defensive)", () => {
     const result = toAiAccountSummaryInput(accountRow({ type: "credit_card", credit_limit_minor: null, credit_used_minor: null }));
     expect(result).toMatchObject({ creditLimitMinor: 0, creditUsedMinor: 0 });
+  });
+
+  it("EPFO AI safety (Phase 3 Part 2): returns null rather than a fabricated ₹0", () => {
+    // Spensa must never say "your EPFO is ₹0" when the real EPFO balance
+    // may be lakhs. Until the Phase 11 integration wires a real async
+    // ledger lookup, this mapper returns null for EPFO so EPFO is
+    // simply absent from the AI context -- a safer failure mode than
+    // a wrong number.
+    const result = toAiAccountSummaryInput(accountRow({ type: "epfo", name: "EPFO" }));
+    expect(result).toBeNull();
+  });
+});
+
+describe("toAiAccountSummariesForContext — filters out EPFO nulls", () => {
+  it("maps a mixed list, dropping EPFO entries, keeping bank/credit/investment", () => {
+    const accounts = [
+      accountRow({ id: "b1", type: "bank", name: "HDFC", balance_minor: 500000 }),
+      accountRow({ id: "e1", type: "epfo", name: "EPFO" }),
+      accountRow({ id: "c1", type: "credit_card", name: "AmEx", credit_limit_minor: 100000, credit_used_minor: 20000 }),
+      accountRow({ id: "i1", type: "investment", name: "Zerodha", market_value_minor: 300000 }),
+      accountRow({ id: "e2", type: "epfo", name: "EPFO second" }),
+    ];
+    const result = toAiAccountSummariesForContext(accounts);
+    expect(result).toHaveLength(3);
+    expect(result.map((a) => a.id)).toEqual(["b1", "c1", "i1"]);
+    // No EPFO row should ever appear in this list.
+    expect(result.find((a) => a.type === "epfo")).toBeUndefined();
+  });
+
+  it("empty input returns empty output", () => {
+    expect(toAiAccountSummariesForContext([])).toEqual([]);
   });
 });

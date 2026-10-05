@@ -33,6 +33,20 @@ export {
 } from "./commands/accounts.js";
 
 export {
+  createEpfoAccount,
+  addEpfoEmployment,
+  endEpfoEmployment,
+  upsertEpfoContributionProfile,
+} from "./commands/epfo.js";
+
+export {
+  getEpfoAccountOverview,
+  componentKnowledgeFromEntries,
+  type EpfoAccountOverview,
+  type EpfoComponentKnowledge,
+} from "./queries/epfo.js";
+
+export {
   createTransaction,
   transfer,
   updateTransaction,
@@ -263,7 +277,7 @@ export type { ConfirmationSource } from "@spencare/domain-infra";
 // The credit-safe account-to-AI-summary mapping, likewise relocated here
 // so MCP's getAccounts tool and Spensa's context/tools use the identical
 // mapping -- never a second, potentially-diverging implementation.
-export { toAiAccountSummaryInput } from "./mappers/aiAccountSummary.js";
+export { toAiAccountSummaryInput, toAiAccountSummariesForContext } from "./mappers/aiAccountSummary.js";
 
 // MCP session lifecycle + the one path to an MCP AuthContext (Phase 18).
 export {

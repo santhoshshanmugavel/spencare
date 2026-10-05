@@ -8,7 +8,7 @@ import {
   getUpcomingBills,
   getCashFlowOverview,
   getProfile,
-  toAiAccountSummaryInput,
+  toAiAccountSummariesForContext,
   type AuthContext,
 } from "@spencare/domain-application";
 import { lastDayOfMonth, redactFinancialSnapshot, redactBudgetSummaries, redactGoalSummaries, redactBillSummaries, redactCashFlowSummary } from "@spencare/domain-core";
@@ -118,7 +118,7 @@ export async function buildAiContext(ctx: AuthContext, uiContext?: AiContext["ui
       // present but non-spendable, not absent). `toAiAccountSummaryInput`
       // is what actually keeps them out of anything spendable -- never a
       // filter here.
-      accounts: accounts.map(toAiAccountSummaryInput),
+      accounts: toAiAccountSummariesForContext(accounts),
     },
     privacyModeEnabled,
   );

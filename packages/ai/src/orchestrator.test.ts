@@ -34,6 +34,7 @@ vi.mock("@spencare/domain-application", async (importOriginal) => {
     getProposal: actual.getProposal,
     describeAmountForProvider: actual.describeAmountForProvider,
     toAiAccountSummaryInput: actual.toAiAccountSummaryInput,
+    toAiAccountSummariesForContext: actual.toAiAccountSummariesForContext,
   };
 });
 

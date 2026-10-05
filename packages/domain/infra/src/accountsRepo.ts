@@ -49,18 +49,11 @@ export async function createAccount(
   userId: string,
   patch: CreateAccountPatch,
 ): Promise<AccountRow> {
-  // Phase 2 adds 'epfo' to account_type at the DB level (migration
-  // 20261005000001). The generated database.types.ts was not
-  // regenerated in this session, so the `type` field here is cast
-  // through `as never` to let the new value flow -- the DB CHECK is
-  // the authoritative gate, and Phase 2 does not create EPFO accounts
-  // via this path yet anyway (no EPFO UI). Remove this cast once
-  // `supabase gen types` has refreshed the generated enum.
   const { data, error } = await client
     .from("accounts")
     .insert({
       user_id: userId,
-      type: patch.type as never,
+      type: patch.type,
       name: patch.name,
       currency: patch.currency,
       balance_minor: patch.balanceMinor ?? 0,

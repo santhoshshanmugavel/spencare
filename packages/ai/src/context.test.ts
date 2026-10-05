@@ -18,6 +18,7 @@ vi.mock("@spencare/domain-application", async (importOriginal) => {
     getCashFlowOverview: vi.fn(),
     getProfile: vi.fn(),
     toAiAccountSummaryInput: actual.toAiAccountSummaryInput,
+    toAiAccountSummariesForContext: actual.toAiAccountSummariesForContext,
   };
 });
 

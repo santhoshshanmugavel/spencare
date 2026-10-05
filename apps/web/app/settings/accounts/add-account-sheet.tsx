@@ -8,8 +8,10 @@ import {
   createCashAccountSchema,
   createCreditCardAccountSchema,
   createInvestmentAccountSchema,
+  createEpfoAccountSchema,
   type AccountType,
   type CreateAccountInput,
+  type CreateEpfoAccountInput,
 } from "@spencare/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +30,7 @@ import { DayOfMonthSelect, dayOfMonthLabel } from "@/components/spencare/day-of-
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { parseMoneyInput } from "@/lib/money-input";
 import { calculateCreditCardBillCycle } from "@spencare/domain-core";
-import { createAccountAction } from "./actions";
+import { createAccountAction, createEpfoAccountAction } from "./actions";
 import { ChangeCurrencyDialog } from "./change-currency-dialog";
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP"];
@@ -356,6 +358,116 @@ function InvestmentForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+/**
+ * EPFO account form.
+ *
+ * Progressive-disclosure Phase 3: this surface collects only the four
+ * core fields the spec names (name, current balance, balance as-of,
+ * source). Optional employment + contribution-profile setup lives on
+ * the Account Details page after the account exists -- not here, to
+ * keep the initial surface short.
+ *
+ * Only Manual source is offered. The passbook import option is not
+ * rendered because the import pipeline does not exist yet (Phase 6);
+ * the spec forbids showing a fake import choice.
+ */
+function EpfoForm({ onDone }: { onDone: () => void }) {
+  const {
+    register,
+    control,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    resolver: zodResolver(createEpfoAccountSchema),
+    defaultValues: {
+      name: "EPFO",
+      currency: "INR",
+      openingBalanceMinor: 0,
+      asOf: new Date().toISOString(),
+    },
+  });
+  const money = useMoneyField("", "INR");
+
+  async function onSubmit(data: CreateEpfoAccountInput) {
+    const result = await createEpfoAccountAction(data);
+    if (!result.ok) {
+      toastError(result.error.message);
+      return;
+    }
+    toastConfirmed("EPFO account added.");
+    onDone();
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+      <p className="text-sm font-medium text-foreground">
+        Track your EPFO wealth across employers in one place.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        EPFO value is not the same as immediately spendable cash. You can add employer and expected
+        contribution details after creating the account.
+      </p>
+      <FormField id="epfo-name" label="Account name" error={errors.name?.message}>
+        <Input
+          id="epfo-name"
+          placeholder="EPFO"
+          aria-invalid={!!errors.name}
+          aria-describedby={errors.name ? errorId("epfo-name") : undefined}
+          {...register("name")}
+        />
+      </FormField>
+      <FormField
+        id="epfo-balance"
+        label="Current balance"
+        hint="Latest value from your EPFO passbook or UAN portal."
+        error={errors.openingBalanceMinor?.message}
+      >
+        <Controller
+          control={control}
+          name="openingBalanceMinor"
+          render={({ field }) => (
+            <Input
+              id="epfo-balance"
+              inputMode="decimal"
+              placeholder="842500"
+              value={money.display}
+              onChange={(e) => money.onChange(e.target.value, field.onChange)}
+            />
+          )}
+        />
+      </FormField>
+      <FormField id="epfo-as-of" label="Balance as of" error={errors.asOf?.message}>
+        <Controller
+          control={control}
+          name="asOf"
+          render={({ field }) => (
+            <Input
+              id="epfo-as-of"
+              type="date"
+              value={field.value?.slice(0, 10) ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                field.onChange(v ? new Date(v + "T00:00:00Z").toISOString() : "");
+              }}
+            />
+          )}
+        />
+      </FormField>
+      <FormField id="epfo-source" label="Source" hint="Only manual entry is supported today.">
+        <Select value="manual" disabled>
+          <SelectTrigger id="epfo-source"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="manual">Manual</SelectItem>
+          </SelectContent>
+        </Select>
+      </FormField>
+      <Button type="submit" size="touch" className="w-full" disabled={isSubmitting}>
+        {isSubmitting ? "Adding…" : "Add EPFO account"}
+      </Button>
+    </form>
+  );
+}
+
 export function AddAccountSheet({
   open,
   onOpenChange,
@@ -372,7 +484,7 @@ export function AddAccountSheet({
       <SheetContent>
         <SheetHeader>
           <SheetTitle>Add account</SheetTitle>
-          <SheetDescription>Manually add a bank account, credit card, cash wallet, or investment.</SheetDescription>
+          <SheetDescription>Manually add a bank account, credit card, cash wallet, investment, or EPFO.</SheetDescription>
         </SheetHeader>
         <div className="space-y-4 px-4">
           <Tabs value={type} onValueChange={(v) => setType(v as AccountType)}>
@@ -381,12 +493,14 @@ export function AddAccountSheet({
               <TabsTrigger value="credit_card">Credit card</TabsTrigger>
               <TabsTrigger value="cash">Cash</TabsTrigger>
               <TabsTrigger value="investment">Investment</TabsTrigger>
+              <TabsTrigger value="epfo">EPFO</TabsTrigger>
             </TabsList>
           </Tabs>
           {type === "bank" ? <BankForm key="bank" onDone={onCreated} /> : null}
           {type === "cash" ? <CashForm key="cash" onDone={onCreated} /> : null}
           {type === "credit_card" ? <CreditCardForm key="credit_card" onDone={onCreated} /> : null}
           {type === "investment" ? <InvestmentForm key="investment" onDone={onCreated} /> : null}
+          {type === "epfo" ? <EpfoForm key="epfo" onDone={onCreated} /> : null}
         </div>
         <SheetFooter />
       </SheetContent>

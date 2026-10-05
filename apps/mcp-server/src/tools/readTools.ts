@@ -11,6 +11,7 @@ import {
   getUpcomingBills,
   getCashFlowOverview,
   toAiAccountSummaryInput,
+  toAiAccountSummariesForContext,
   redactFinancialSnapshot,
   redactBudgetSummaries,
   redactGoalSummaries,
@@ -95,7 +96,7 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
     async () =>
       runScopedTool(ctx, "getAccounts", "read", async () => {
         const [accounts, privacyModeEnabled] = await Promise.all([listAccounts(ctx), isPrivacyModeEnabled(ctx)]);
-        return redactFinancialSnapshot({ safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: accounts.map(toAiAccountSummaryInput) }, privacyModeEnabled).accounts;
+        return redactFinancialSnapshot({ safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: toAiAccountSummariesForContext(accounts) }, privacyModeEnabled).accounts;
       }),
   );
 
@@ -130,7 +131,7 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
                 totalLiabilitiesMinor: Number(summary.netWorth.totalLiabilities.amountMinorUnits),
                 currency: summary.netWorth.netWorth.currencyCode,
               },
-          accounts: redactFinancialSnapshot({ safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: summary.accounts.map(toAiAccountSummaryInput) }, privacyModeEnabled).accounts,
+          accounts: redactFinancialSnapshot({ safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: toAiAccountSummariesForContext(summary.accounts) }, privacyModeEnabled).accounts,
           goals: redactGoalSummaries(summary.goals.map((g) => ({ id: g.id, name: g.name, targetAmountMinor: g.target_amount_minor, savedAmountMinor: g.saved_amount_minor, currency: CURRENCY })), privacyModeEnabled),
           upcomingBills: redactBillSummaries(
             summary.upcomingBills.map((p) => ({ id: p.id, merchant: p.bill_definitions.merchant_pattern, expectedAmountMinor: p.expected_amount_minor, currency: CURRENCY, expectedDate: p.expected_date })),
@@ -301,7 +302,13 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
       runScopedTool(ctx, "getAccount", "read", async () => {
         const [account, balance, privacyModeEnabled] = await Promise.all([getAccount(ctx, rawInput.accountId), getAccountBalance(ctx, rawInput.accountId), isPrivacyModeEnabled(ctx)]);
         if (!account) return null;
-        const redacted = redactFinancialSnapshot({ safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: [toAiAccountSummaryInput(account)] }, privacyModeEnabled);
+        const summary = toAiAccountSummaryInput(account);
+        // Phase 3 AI safety: EPFO is intentionally hidden from AI
+        // callers until Phase 11 wires real ledger-derived values.
+        if (summary === null) {
+          return { id: account.id, name: account.name, type: account.type, currency: account.currency, note: "ai_integration_pending" };
+        }
+        const redacted = redactFinancialSnapshot({ safeToSpend: { state: "n/a", amountMinor: 0, currency: CURRENCY }, accounts: [summary] }, privacyModeEnabled);
         return { ...redacted.accounts[0], balance: privacyModeEnabled ? { private: true } : balance };
       }),
   );

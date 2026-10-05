@@ -19,7 +19,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Money } from "@/components/spencare/money";
 import { Separator } from "@/components/ui/separator";
-import { Landmark, Banknote, CreditCard, CircleCheck, ChevronDown, ChevronRight } from "lucide-react";
+import { Landmark, Banknote, CreditCard, CircleCheck, ChevronDown, ChevronRight, Briefcase } from "lucide-react";
+import { EpfoAccountDetailsBody } from "./epfo-account-details-body";
 import { CreditCardPaymentDialog } from "@/app/cash-flow/upcoming/credit-card-actions";
 
 const CURRENCY = "INR";
@@ -173,8 +174,16 @@ export function AccountDetailsSheet({
 
   const isBank = account.type === "bank" || account.type === "cash";
   const isCC = account.type === "credit_card";
+  const isEpfo = account.type === "epfo";
 
-  const Icon = account.type === "credit_card" ? CreditCard : account.type === "cash" ? Banknote : Landmark;
+  const Icon =
+    account.type === "credit_card"
+      ? CreditCard
+      : account.type === "cash"
+        ? Banknote
+        : account.type === "epfo"
+          ? Briefcase
+          : Landmark;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -432,6 +441,8 @@ export function AccountDetailsSheet({
             </>
           );
         })()}
+
+        {isEpfo && <EpfoAccountDetailsBody accountId={account.id} currency={account.currency} masked={masked} />}
       </SheetContent>
     </Sheet>
   );

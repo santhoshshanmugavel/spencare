@@ -2587,7 +2587,7 @@ export type Database = {
       }
     }
     Enums: {
-      account_type: "bank" | "cash" | "credit_card" | "investment"
+      account_type: "bank" | "cash" | "credit_card" | "investment" | "epfo"
       ai_provider: "anthropic" | "openai" | "google" | "openrouter" | "other"
       audit_actor: "web" | "spensa" | "mcp" | "system" | "gmail"
       bill_prediction_status: "open" | "matched" | "skipped" | "overdue"
@@ -2610,7 +2610,7 @@ export type Database = {
       goal_plan_status: "active" | "paused" | "completed"
       goal_status: "active" | "completed" | "archived"
       goal_term: "short" | "long"
-      import_source_type: "csv" | "pdf_statement" | "manual" | "copy_paste"
+      import_source_type: "csv" | "pdf_statement" | "manual" | "copy_paste" | "epfo_passbook"
       import_status:
         | "uploaded"
         | "processing"
@@ -2638,6 +2638,7 @@ export type Database = {
         | "spensa"
         | "commitment"
         | "loan"
+        | "epfo"
       notification_channel: "in_app" | "email" | "telegram" | "slack"
       notification_severity: "info" | "warning" | "critical" | "success"
       plan_item_status:
@@ -2810,7 +2811,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      account_type: ["bank", "cash", "credit_card", "investment"],
+      account_type: ["bank", "cash", "credit_card", "investment", "epfo"],
       ai_provider: ["anthropic", "openai", "google", "openrouter", "other"],
       audit_actor: ["web", "spensa", "mcp", "system", "gmail"],
       bill_prediction_status: ["open", "matched", "skipped", "overdue"],
@@ -2834,7 +2835,7 @@ export const Constants = {
       goal_plan_status: ["active", "paused", "completed"],
       goal_status: ["active", "completed", "archived"],
       goal_term: ["short", "long"],
-      import_source_type: ["csv", "pdf_statement", "manual", "copy_paste"],
+      import_source_type: ["csv", "pdf_statement", "manual", "copy_paste", "epfo_passbook"],
       import_status: [
         "uploaded",
         "processing",
@@ -2864,6 +2865,7 @@ export const Constants = {
         "spensa",
         "commitment",
         "loan",
+        "epfo",
       ],
       notification_channel: ["in_app", "email", "telegram", "slack"],
       notification_severity: ["info", "warning", "critical", "success"],

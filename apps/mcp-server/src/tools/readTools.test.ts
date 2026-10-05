@@ -13,6 +13,7 @@ vi.mock("@spencare/domain-application", () => ({
   getCashFlowOverview: vi.fn(),
   getProfile: vi.fn(),
   toAiAccountSummaryInput: vi.fn((a) => a),
+  toAiAccountSummariesForContext: vi.fn((accounts) => accounts),
   redactFinancialSnapshot: vi.fn((input) => input),
   redactBudgetSummaries: vi.fn((input) => input),
   redactGoalSummaries: vi.fn((input) => input),
@@ -332,7 +333,7 @@ describe("registerReadTools — financial Plan read tools (Gate 11)", () => {
 });
 
 describe("registerReadTools — getAccounts uses the shared credit-safe mapper", () => {
-  it("maps every account through toAiAccountSummaryInput before redacting", async () => {
+  it("routes every account through toAiAccountSummariesForContext (which internally calls toAiAccountSummaryInput + filters AI-unsafe types like EPFO)", async () => {
     const domainApp = await import("@spencare/domain-application");
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
     const accounts = [{ id: "a1", type: "bank" }, { id: "a2", type: "credit_card" }];
@@ -343,6 +344,7 @@ describe("registerReadTools — getAccounts uses the shared credit-safe mapper",
     registerReadTools(server as never, readCtx(["read"]));
 
     await server.call("getAccounts");
-    expect(vi.mocked(domainApp.toAiAccountSummaryInput)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(domainApp.toAiAccountSummariesForContext)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(domainApp.toAiAccountSummariesForContext).mock.calls[0]![0]).toEqual(accounts);
   });
 });

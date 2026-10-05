@@ -284,3 +284,14 @@ export {
   type UpdateLoanInput,
   type RecordLoanPaymentInput,
 } from "./loans.js";
+
+export {
+  createEpfoAccountSchema,
+  addEpfoEmploymentSchema,
+  endEpfoEmploymentSchema,
+  upsertEpfoContributionProfileSchema,
+  type CreateEpfoAccountInput,
+  type AddEpfoEmploymentInput,
+  type EndEpfoEmploymentInput,
+  type UpsertEpfoContributionProfileInput,
+} from "./epfo.js";

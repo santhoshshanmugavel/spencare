@@ -15,8 +15,17 @@ import type { AccountRow } from "@spencare/domain-infra";
  * on-demand tools, MCP's `getAccounts` tool) goes through this one
  * function, so the mapping -- and the credit-is-never-spendable-cash
  * distinction it encodes -- is never duplicated or re-broken per surface.
+ *
+ * EPFO (Phase 3 AI safety): the mapper returns `null` for EPFO accounts
+ * until the Phase 11 Spensa integration wires the real ledger-derived
+ * breakdown. The previous Phase 2 placeholder returned a zeroed object
+ * that would have let Spensa say "your EPFO is ₹0" even when the user
+ * actually had lakhs there -- a worse failure than silence. Returning
+ * null here means Spensa simply does not see EPFO as an account until
+ * Phase 11; callers filter nulls via `toAiAccountSummariesForContext`
+ * below (see spec Phase 3 Part 2).
  */
-export function toAiAccountSummaryInput(a: AccountRow): AiAccountSummaryInput {
+export function toAiAccountSummaryInput(a: AccountRow): AiAccountSummaryInput | null {
   if (a.type === "credit_card") {
     return {
       id: a.id,
@@ -32,29 +41,27 @@ export function toAiAccountSummaryInput(a: AccountRow): AiAccountSummaryInput {
     return { id: a.id, name: a.name, type: "investment", currency: a.currency, spendable: false, marketValueMinor: a.market_value_minor ?? 0 };
   }
   if (a.type === "epfo") {
-    // Phase 2 placeholder: EPFO's AI representation requires the EPFO
-    // ledger breakdown (employee EPF, employer EPF, interest, EPS,
-    // opening balance, adjustments). That is an async lookup; wiring
-    // it through this synchronous mapper is Phase 11's work (Spensa AI
-    // context integration). For now Spensa sees EPFO as present but
-    // with zero'd components -- it will neither hallucinate nor claim
-    // the account is spendable (spendable: false is structural).
-    return {
-      id: a.id,
-      name: a.name,
-      type: "epfo",
-      currency: a.currency,
-      spendable: false,
-      totalMinor: 0,
-      components: {
-        employeeEpfMinor: 0,
-        employerEpfMinor: 0,
-        interestMinor: 0,
-        epsMinor: 0,
-        openingBalanceMinor: 0,
-        adjustmentsMinor: 0,
-      },
-    };
+    // Return null -- the Spensa AI integration (Phase 11) must call a
+    // real async EPFO balance resolver (listEpfoLedgerEntries +
+    // getEpfoBalance) before including EPFO in the AI context. Until
+    // that lands, hiding EPFO is strictly safer than exposing a zero.
+    return null;
   }
   return { id: a.id, name: a.name, type: a.type, currency: a.currency, spendable: true, balanceMinor: a.balance_minor };
+}
+
+/**
+ * Convenience filter + map that drops the nulls produced by
+ * `toAiAccountSummaryInput` (currently EPFO accounts). Callers that
+ * hand the result to an AI surface should always use this rather than
+ * `.map(toAiAccountSummaryInput)`, so the EPFO safety net isn't
+ * accidentally bypassed as new call sites are added.
+ */
+export function toAiAccountSummariesForContext(accounts: readonly AccountRow[]): AiAccountSummaryInput[] {
+  const out: AiAccountSummaryInput[] = [];
+  for (const a of accounts) {
+    const s = toAiAccountSummaryInput(a);
+    if (s !== null) out.push(s);
+  }
+  return out;
 }
