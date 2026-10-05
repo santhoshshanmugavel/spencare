@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Loader2, AlertTriangle, Sparkles, MessageSquarePlus, Send, Bot, Mic, MicOff, Copy, Check, RefreshCw, Headphones, HeadphoneOff, Paperclip, X, FileText, Image as ImageIcon } from "lucide-react";
+import { AlertTriangle, Sparkles, MessageSquarePlus, Send, Bot, Mic, MicOff, Copy, Check, RefreshCw, Headphones, HeadphoneOff, Paperclip, X, FileText, Image as ImageIcon } from "lucide-react";
+import { Loader } from "@/components/spencare/loader";
 import type { AccountRow, CategoryRow, GoalRow } from "@spencare/domain-application";
 import type { AiConversationRow, AiMessageRow } from "@spencare/ai";
 import { Button } from "@/components/ui/button";
@@ -592,7 +593,7 @@ export function SpensaChat({
               aria-label="Send"
             >
               {isStreaming ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Loader size={14} />
               ) : (
                 <Send className="size-4" />
               )}
@@ -651,7 +652,7 @@ function StreamingBubble({ text, toolName }: { text: string; toolName: string | 
       <div className="min-w-0 flex-1 pt-1">
         {toolName ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            <Loader size={12} />
             Checking your data…
           </span>
         ) : text ? (

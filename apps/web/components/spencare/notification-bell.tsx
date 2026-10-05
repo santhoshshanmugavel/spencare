@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Bell, X, Check, CheckCheck, Info, AlertTriangle, AlertCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { LoaderBlock } from "@/components/spencare/loader";
 import { formatDistanceToNow } from "date-fns";
 
 interface NotificationItem {
@@ -158,9 +159,7 @@ export function NotificationBell({ initialUnreadCount = 0 }: { initialUnreadCoun
           {/* List */}
           <div className="max-h-[480px] overflow-y-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="size-5 animate-spin rounded-full border-2 border-muted border-t-primary" />
-              </div>
+              <LoaderBlock size={28} tone="primary" className="py-12" />
             ) : notifications.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-12 text-center">
                 <Bell className="size-8 text-muted-foreground/40" aria-hidden="true" />

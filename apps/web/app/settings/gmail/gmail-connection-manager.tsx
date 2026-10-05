@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Check, Loader2, Mail, RefreshCw } from "lucide-react";
+import { AlertTriangle, Check, Mail, RefreshCw } from "lucide-react";
+import { Loader } from "@/components/spencare/loader";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import type { GmailConnectionStatus, GmailCandidateRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
@@ -215,7 +216,7 @@ export function GmailConnectionManager({
           </ul>
         </div>
         <Button size="touch" onClick={onConnect} disabled={connecting}>
-          {connecting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Mail className="size-4" aria-hidden="true" />}
+          {connecting ? <Loader size={14} /> : <Mail className="size-4" aria-hidden="true" />}
           {connecting ? "Redirecting…" : "Connect Gmail"}
         </Button>
       </div>
@@ -249,7 +250,7 @@ export function GmailConnectionManager({
           ) : null}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="touch" onClick={onSyncNow} disabled={syncing || status.syncStatus === "syncing"}>
-              {syncing || status.syncStatus === "syncing" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="size-4" aria-hidden="true" />}
+              {syncing || status.syncStatus === "syncing" ? <Loader size={14} /> : <RefreshCw className="size-4" aria-hidden="true" />}
               {syncing || status.syncStatus === "syncing" ? "Syncing…" : "Sync now"}
             </Button>
             <Button variant="destructive" size="touch" onClick={() => setDisconnectOpen(true)}>
@@ -444,7 +445,7 @@ function GmailCandidateCard({
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button size="touch" onClick={onAccept} disabled={busy || !canAccept}>
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
+              {busy ? <Loader size={14} /> : <Check className="size-4" aria-hidden="true" />}
               Accept
             </Button>
             <Button variant="outline" size="touch" onClick={onStartEdit} disabled={busy}>

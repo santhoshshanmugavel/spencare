@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState, useTransition, type ChangeEvent, type MouseEvent } from "react";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import { ImagePlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Loader } from "@/components/spencare/loader";
 import { cn } from "@/lib/utils";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { removeGoalImageAction, updateGoalImageAction } from "@/app/goals/actions";
@@ -89,8 +90,8 @@ export function GoalImageUploader({
       )}
 
       {isPending ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/70">
-          <Loader2 className="size-6 animate-spin text-foreground" aria-hidden="true" />
+        <div className="absolute inset-0 flex items-center justify-center bg-background/70 text-foreground">
+          <Loader size={24} />
           <span className="sr-only">Uploading…</span>
         </div>
       ) : (

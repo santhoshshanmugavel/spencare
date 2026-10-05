@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Trash2, ShieldAlert, Lock, Loader2, CheckCircle2 } from "lucide-react";
+import { Download, Trash2, ShieldAlert, Lock, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Loader } from "@/components/spencare/loader";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FormField, errorId } from "@/components/spencare/form-field";
@@ -103,7 +104,7 @@ export function DataBackupManager({ accountEmail, twoFactorEnabled }: { accountE
           </div>
         </div>
         <Button variant="link" className="shrink-0 px-0" onClick={onExport} disabled={exporting}>
-          {exporting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+          {exporting ? <Loader size={14} className="mr-1" /> : null}
           {exporting ? "Exporting…" : "Export"}
         </Button>
       </div>

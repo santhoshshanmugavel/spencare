@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle, Loader2, Repeat2 } from "lucide-react";
+import { AlertTriangle, Repeat2 } from "lucide-react";
 import { LoaderBlock } from "@/components/spencare/loader";
 import { Money as DomainMoney, LOW_CONFIDENCE_THRESHOLD, ACCOUNT_TYPE_LABELS } from "@spencare/domain-core";
 import type {

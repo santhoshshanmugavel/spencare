@@ -6,13 +6,13 @@ import {
   Send,
   CheckCircle2,
   ExternalLink,
-  Loader2,
   Unlink,
   Copy,
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Loader } from "@/components/spencare/loader";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import type { ChannelConnectionRow, NotificationPreferenceRow } from "@spencare/domain-application";
@@ -271,7 +271,7 @@ export function NotificationsManager({
                           className="h-8 px-2 text-xs text-destructive hover:text-destructive"
                         >
                           {disconnecting ? (
-                            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                            <Loader size={12} />
                           ) : (
                             <Unlink className="size-3.5" aria-hidden="true" />
                           )}
@@ -291,10 +291,10 @@ export function NotificationsManager({
                     )}
                   </>
                 ) : telegramPhase === "waiting" ? (
-                  <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                  <Loader size={14} className="text-muted-foreground" />
                 ) : telegramPhase === "fetching" ? (
                   <Button variant="outline" size="sm" disabled className="h-8 text-xs">
-                    <Loader2 className="size-3.5 animate-spin mr-1.5" aria-hidden="true" />
+                    <Loader size={12} className="mr-1.5" />
                     Preparing…
                   </Button>
                 ) : telegramPhase === "error" ? (
@@ -336,7 +336,7 @@ export function NotificationsManager({
                   )}
                 >
                   {testMessageState === "sending" ? (
-                    <Loader2 className="size-3.5 animate-spin mr-1.5" aria-hidden="true" />
+                    <Loader size={12} className="mr-1.5" />
                   ) : testMessageState === "sent" ? (
                     <CheckCircle2 className="size-3.5 mr-1.5" aria-hidden="true" />
                   ) : (

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Loader } from "@/components/spencare/loader";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -84,7 +85,7 @@ const STATE_META: Record<
   },
   confirming: {
     stripe: "bg-warning",
-    icon: <Loader2 className="size-4 animate-spin" aria-hidden="true" />,
+    icon: <Loader size={14} />,
     label: "Confirming…",
   },
   confirmed: {
@@ -255,7 +256,7 @@ export function ConsequentialActionPreview({
                 Cancel
               </Button>
               <Button variant="default" size="touch" disabled>
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                <Loader size={14} className="mr-1" />
                 Confirm
               </Button>
             </>
