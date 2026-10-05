@@ -13,7 +13,7 @@ import type { TypedSupabaseClient } from "./supabaseClients.js";
 export interface AccountRow {
   id: string;
   user_id: string;
-  type: "bank" | "cash" | "credit_card" | "investment";
+  type: "bank" | "cash" | "credit_card" | "investment" | "epfo";
   name: string;
   currency: string;
   balance_minor: number;
@@ -33,7 +33,7 @@ const ACCOUNT_COLUMNS =
   "id, user_id, type, name, currency, balance_minor, credit_limit_minor, credit_used_minor, market_value_minor, is_archived, created_at, updated_at, statement_close_day, payment_due_day";
 
 export interface CreateAccountPatch {
-  type: "bank" | "cash" | "credit_card" | "investment";
+  type: "bank" | "cash" | "credit_card" | "investment" | "epfo";
   name: string;
   currency: string;
   balanceMinor?: number;
@@ -49,11 +49,18 @@ export async function createAccount(
   userId: string,
   patch: CreateAccountPatch,
 ): Promise<AccountRow> {
+  // Phase 2 adds 'epfo' to account_type at the DB level (migration
+  // 20261005000001). The generated database.types.ts was not
+  // regenerated in this session, so the `type` field here is cast
+  // through `as never` to let the new value flow -- the DB CHECK is
+  // the authoritative gate, and Phase 2 does not create EPFO accounts
+  // via this path yet anyway (no EPFO UI). Remove this cast once
+  // `supabase gen types` has refreshed the generated enum.
   const { data, error } = await client
     .from("accounts")
     .insert({
       user_id: userId,
-      type: patch.type,
+      type: patch.type as never,
       name: patch.name,
       currency: patch.currency,
       balance_minor: patch.balanceMinor ?? 0,

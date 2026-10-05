@@ -60,6 +60,7 @@ const TYPE_LABELS: Record<AccountRow["type"], string> = {
   cash: "Cash",
   credit_card: "Credit card",
   investment: "Investment",
+  epfo: "EPFO",
 };
 
 function utilizationTone(usedMinor: number, limitMinor: number): { percent: number; tone: ProgressTone } {

@@ -60,6 +60,8 @@ export {
   hasCapability,
   filterByCapability,
   getSpendableMinor,
+  isIncludedInNetWorth,
+  isIncludedInSafeToSpend,
   type AccountType,
   type AccountCapability,
 } from "./accountCapabilities.js";
@@ -265,3 +267,24 @@ export {
   type AiCashFlowSummaryInput,
   type AiCashFlowSummaryRedacted,
 } from "./ai.js";
+
+export {
+  type EpfoEntryType,
+  type EpfoLedgerEntry,
+  type EpfoContributionKind,
+  type EpfoContributionMode,
+  type EpfoContributionFrequency,
+  type EpfoContributionProfile,
+  type EpfoWithdrawalStatus,
+  type EpfoWithdrawalPlan,
+  type EpfoBalanceBreakdown,
+  type ExpectedContribution,
+  type ReconciliationCheck,
+  EpfoLedgerInconsistency,
+  emptyEpfoBalance,
+  applyLedgerEntry,
+  getEpfoBalance,
+  getEpfoBalanceAsMoney,
+  materializeExpectedContribution,
+  reconcileExpectedToActual,
+} from "./epfo/index.js";

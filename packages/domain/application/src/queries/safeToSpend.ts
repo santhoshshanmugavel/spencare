@@ -1,4 +1,11 @@
-import { Money, calculateSafeToSpend, getSpendableMinor, type SafeToSpendResult } from "@spencare/domain-core";
+import {
+  Money,
+  calculateSafeToSpend,
+  getSpendableMinor,
+  isIncludedInSafeToSpend,
+  ACCOUNT_CAPABILITIES,
+  type SafeToSpendResult,
+} from "@spencare/domain-core";
 import {
   getActiveGoalsReservedTotal,
   getUpcomingBillsTotal,
@@ -61,8 +68,14 @@ function currentPeriodStart(): string {
 
 export async function getSafeToSpend(ctx: AuthContext): Promise<SafeToSpendResult> {
   const accounts = await listAccountsRow(ctx.supabase, ctx.userId, {});
-  const ownedAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
-  const creditAccounts = accounts.filter((a) => a.type === "credit_card");
+  // Capability-driven inclusion (Phase 2 cleanup, Spec 2.20): "owned
+  // spendable" is any account the capability map marks
+  // safeToSpendEligible=true. For bank + cash that is unchanged; for
+  // credit_card / investment / EPFO it is false, so they stay excluded
+  // from the Safe-to-Spend input. If a new type ships with
+  // safeToSpendEligible=true, it participates automatically.
+  const ownedAccounts = accounts.filter((a) => isIncludedInSafeToSpend(a.type));
+  const creditAccounts = accounts.filter((a) => ACCOUNT_CAPABILITIES[a.type].netWorthLiability);
 
   const toSpendable = (a: (typeof accounts)[number], currency: string) =>
     Money.fromMinorUnits(

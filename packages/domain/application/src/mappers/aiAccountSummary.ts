@@ -31,5 +31,30 @@ export function toAiAccountSummaryInput(a: AccountRow): AiAccountSummaryInput {
   if (a.type === "investment") {
     return { id: a.id, name: a.name, type: "investment", currency: a.currency, spendable: false, marketValueMinor: a.market_value_minor ?? 0 };
   }
+  if (a.type === "epfo") {
+    // Phase 2 placeholder: EPFO's AI representation requires the EPFO
+    // ledger breakdown (employee EPF, employer EPF, interest, EPS,
+    // opening balance, adjustments). That is an async lookup; wiring
+    // it through this synchronous mapper is Phase 11's work (Spensa AI
+    // context integration). For now Spensa sees EPFO as present but
+    // with zero'd components -- it will neither hallucinate nor claim
+    // the account is spendable (spendable: false is structural).
+    return {
+      id: a.id,
+      name: a.name,
+      type: "epfo",
+      currency: a.currency,
+      spendable: false,
+      totalMinor: 0,
+      components: {
+        employeeEpfMinor: 0,
+        employerEpfMinor: 0,
+        interestMinor: 0,
+        epsMinor: 0,
+        openingBalanceMinor: 0,
+        adjustmentsMinor: 0,
+      },
+    };
+  }
   return { id: a.id, name: a.name, type: a.type, currency: a.currency, spendable: true, balanceMinor: a.balance_minor };
 }

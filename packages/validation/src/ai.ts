@@ -66,7 +66,11 @@ export type ProposeTransferInput = z.infer<typeof proposeTransferSchema>;
 // superset object for MCP; the domain command re-validates with the
 // discriminated schema before executing.
 export const proposeCreateAccountSchema = z.object({
-  type: z.enum(["bank", "cash", "credit_card", "investment"]),
+  // 'epfo' is accepted at this MCP boundary so the Phase 12 `proposeCreateEpfoAccount`
+  // flow has a path through confirm_command, but the Phase 2 web `addAccount`
+  // tab still only exposes bank/cash/credit_card/investment -- EPFO add-account
+  // UI arrives in Phase 3.
+  type: z.enum(["bank", "cash", "credit_card", "investment", "epfo"]),
   name: z.string().trim().min(1, "Enter a name.").max(80, "Name is too long."),
   currency: z.string().length(3).regex(/^[A-Z]{3}$/, "Currency must be a 3-letter ISO 4217 code."),
   balanceMinor: z.number().int().max(1_000_000_000_000).optional(),

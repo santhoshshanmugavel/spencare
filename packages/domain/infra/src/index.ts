@@ -68,3 +68,8 @@ export {
   type CreateLoanPatch,
   type UpdateLoanPatch,
 } from "./loansRepo.js";
+
+export {
+  listEpfoLedgerEntries,
+  type ListEpfoLedgerFilter,
+} from "./epfoLedgerRepo.js";

@@ -8,15 +8,32 @@ import {
   type AccountType,
 } from "./accountCapabilities.js";
 
-const ALL_TYPES: AccountType[] = ["bank", "cash", "credit_card", "investment"];
+const ALL_TYPES: AccountType[] = ["bank", "cash", "credit_card", "investment", "epfo"];
 
 describe("ACCOUNT_CAPABILITIES", () => {
-  it("defines exactly the four fixed account types, no fifth type", () => {
-    expect(Object.keys(ACCOUNT_CAPABILITIES).sort()).toEqual(["bank", "cash", "credit_card", "investment"]);
+  it("defines exactly the five live account types (Phase 2 adds EPFO)", () => {
+    expect(Object.keys(ACCOUNT_CAPABILITIES).sort()).toEqual(
+      ["bank", "cash", "credit_card", "epfo", "investment"],
+    );
   });
 
-  it("Bank and Cash are identical, full-capability accounts", () => {
-    expect(ACCOUNT_CAPABILITIES.bank).toEqual(ACCOUNT_CAPABILITIES.cash);
+  it("Bank and Cash share the original nine capability flags identically (bank differs only in supportsImport, which is a Phase 2 concept)", () => {
+    // Pre-Phase-2 the two were strictly identical. Phase 2 introduces
+    // supportsImport = true for bank (CSV / PDF statements) and false
+    // for cash (no statement to import). Every other flag -- including
+    // every one of the nine pre-Phase-2 flags -- remains identical.
+    const originalFlags = (c: typeof ACCOUNT_CAPABILITIES.bank) => ({
+      expenseSource: c.expenseSource,
+      incomeTarget: c.incomeTarget,
+      transferSource: c.transferSource,
+      transferDestination: c.transferDestination,
+      goalFunding: c.goalFunding,
+      goalContributionSource: c.goalContributionSource,
+      safeToSpendEligible: c.safeToSpendEligible,
+      netWorthAsset: c.netWorthAsset,
+      netWorthLiability: c.netWorthLiability,
+    });
+    expect(originalFlags(ACCOUNT_CAPABILITIES.bank)).toEqual(originalFlags(ACCOUNT_CAPABILITIES.cash));
     expect(ACCOUNT_CAPABILITIES.bank).toMatchObject({
       expenseSource: true,
       incomeTarget: true,
@@ -30,8 +47,8 @@ describe("ACCOUNT_CAPABILITIES", () => {
     });
   });
 
-  it("Credit Card: expense-only, transfer-destination-only, never goal funding, EXCLUDED from Safe-to-Spend (Phase 29 reversal), a Net Worth liability", () => {
-    expect(ACCOUNT_CAPABILITIES.credit_card).toEqual({
+  it("Credit Card: expense-only, transfer-destination-only, never goal funding, EXCLUDED from Safe-to-Spend (Phase 29 reversal), a Net Worth liability (nine original flags unchanged)", () => {
+    expect(ACCOUNT_CAPABILITIES.credit_card).toMatchObject({
       expenseSource: true,
       incomeTarget: false,
       transferSource: false,
@@ -44,8 +61,8 @@ describe("ACCOUNT_CAPABILITIES", () => {
     });
   });
 
-  it("Investment: not a transaction/transfer account, goal-funding metadata only, excluded from Safe-to-Spend, a Net Worth asset", () => {
-    expect(ACCOUNT_CAPABILITIES.investment).toEqual({
+  it("Investment: not a transaction/transfer account, goal-funding metadata only, excluded from Safe-to-Spend, a Net Worth asset (nine original flags unchanged)", () => {
+    expect(ACCOUNT_CAPABILITIES.investment).toMatchObject({
       expenseSource: false,
       incomeTarget: false,
       transferSource: false,
@@ -55,6 +72,34 @@ describe("ACCOUNT_CAPABILITIES", () => {
       safeToSpendEligible: false,
       netWorthAsset: true,
       netWorthLiability: false,
+    });
+  });
+
+  it("EPFO: wealth source (NetWorth yes, S2S no), own ledger, interest + withdrawals + transfers + imports + expected contributions + reconciliation + future connector; NOT an expense/income source, NOT a commitment funder, NOT a direct goal-contribution source (goal FUNDING yes, CONTRIBUTION source no)", () => {
+    expect(ACCOUNT_CAPABILITIES.epfo).toEqual({
+      // pre-existing nine
+      expenseSource: false,
+      incomeTarget: false,
+      transferSource: false,
+      transferDestination: false,
+      goalFunding: true,
+      goalContributionSource: false,
+      safeToSpendEligible: false,
+      netWorthAsset: true,
+      netWorthLiability: false,
+      // Phase 2 new
+      canFundGoalAllocation: true,
+      canFundPlanAllocation: true,
+      canFundCommitmentAllocation: false,
+      hasSpecializedLedger: true,
+      supportsOpeningBalance: true,
+      supportsImport: true,
+      supportsInterest: true,
+      supportsWithdrawals: true,
+      supportsTransfers: true,
+      supportsExpectedContributions: true,
+      supportsReconciliation: true,
+      supportsFutureConnector: true,
     });
   });
 
@@ -128,5 +173,9 @@ describe("getSpendableMinor", () => {
 
   it("Investment: null -- never a fabricated spendable figure, callers must exclude it entirely", () => {
     expect(getSpendableMinor({ type: "investment", balanceMinor: null, creditLimitMinor: null, creditUsedMinor: null })).toBeNull();
+  });
+
+  it("EPFO: null (same reason as investment -- it is wealth, not cash)", () => {
+    expect(getSpendableMinor({ type: "epfo", balanceMinor: null, creditLimitMinor: null, creditUsedMinor: null })).toBeNull();
   });
 });

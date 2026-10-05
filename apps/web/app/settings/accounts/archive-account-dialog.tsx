@@ -39,6 +39,8 @@ function accountTypeLabel(type: AccountRow["type"]): string {
       return "Credit Card";
     case "investment":
       return "Investment";
+    case "epfo":
+      return "EPFO";
   }
 }
 

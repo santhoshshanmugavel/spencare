@@ -62,7 +62,29 @@ export function calculateCreditUtilization(usedMinor: number, limitMinor: number
 export type AiAccountSummaryInput =
   | { id: string; name: string; type: "bank" | "cash"; currency: string; spendable: true; balanceMinor: number }
   | { id: string; name: string; type: "credit_card"; currency: string; spendable: false; creditLimitMinor: number; creditUsedMinor: number }
-  | { id: string; name: string; type: "investment"; currency: string; spendable: false; marketValueMinor: number };
+  | { id: string; name: string; type: "investment"; currency: string; spendable: false; marketValueMinor: number }
+  // EPFO is NOT spendable cash. The totalMinor + components breakdown is
+  // derived from the EPFO ledger (see domain-core/epfo/getEpfoBalance),
+  // never from accounts.market_value_minor (which stays NULL for EPFO).
+  // Spensa must present EPFO explicitly as wealth, never bucket it with
+  // bank/cash balance -- the `spendable: false` discriminator is what
+  // enforces that in the system prompt.
+  | {
+      id: string;
+      name: string;
+      type: "epfo";
+      currency: string;
+      spendable: false;
+      totalMinor: number;
+      components: {
+        employeeEpfMinor: number;
+        employerEpfMinor: number;
+        interestMinor: number;
+        epsMinor: number;
+        openingBalanceMinor: number;
+        adjustmentsMinor: number;
+      };
+    };
 
 export type AiAccountSummaryRedacted =
   | { id: string; name: string; type: "bank" | "cash"; currency: string; spendable: true; balance: MaybePrivateAmount }
@@ -77,7 +99,21 @@ export type AiAccountSummaryRedacted =
       availableCredit: MaybePrivateAmount;
       creditUtilization: MaybePrivateRatio | null;
     }
-  | { id: string; name: string; type: "investment"; currency: string; spendable: false; marketValue: MaybePrivateAmount };
+  | { id: string; name: string; type: "investment"; currency: string; spendable: false; marketValue: MaybePrivateAmount }
+  | {
+      id: string;
+      name: string;
+      type: "epfo";
+      currency: string;
+      spendable: false;
+      total: MaybePrivateAmount;
+      employeeEpf: MaybePrivateAmount;
+      employerEpf: MaybePrivateAmount;
+      interest: MaybePrivateAmount;
+      eps: MaybePrivateAmount;
+      openingBalance: MaybePrivateAmount;
+      adjustments: MaybePrivateAmount;
+    };
 
 function redactAccountSummary(a: AiAccountSummaryInput, masked: boolean): AiAccountSummaryRedacted {
   if (a.type === "credit_card") {
@@ -102,6 +138,23 @@ function redactAccountSummary(a: AiAccountSummaryInput, masked: boolean): AiAcco
       currency: a.currency,
       spendable: false,
       marketValue: redactAmount({ amountMinor: a.marketValueMinor, currency: a.currency }, masked),
+    };
+  }
+  if (a.type === "epfo") {
+    const r = (minor: number) => redactAmount({ amountMinor: minor, currency: a.currency }, masked);
+    return {
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      currency: a.currency,
+      spendable: false,
+      total: r(a.totalMinor),
+      employeeEpf: r(a.components.employeeEpfMinor),
+      employerEpf: r(a.components.employerEpfMinor),
+      interest: r(a.components.interestMinor),
+      eps: r(a.components.epsMinor),
+      openingBalance: r(a.components.openingBalanceMinor),
+      adjustments: r(a.components.adjustmentsMinor),
     };
   }
   return {

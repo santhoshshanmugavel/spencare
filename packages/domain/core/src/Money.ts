@@ -223,6 +223,88 @@ export class Money {
   }
 
   /**
+   * Exact rational multiplication: `this * (num / den)` with BANKER'S
+   * ROUNDING on the final minor-unit result. Pure bigint arithmetic
+   * throughout -- never crosses into IEEE-754, so results are deterministic
+   * regardless of amount magnitude.
+   *
+   * Introduced in Phase 2 for EPFO contribution profiles that configure
+   * percentages (e.g. "12% of basic + DA"): the Phase 2 audit flagged
+   * that `Money` had no multiplication helper and that every existing
+   * financial path was integer-additive only (sum/subtract). This is the
+   * ONLY sanctioned way to compute a percentage of a Money amount; call
+   * sites must NOT do `amount * 0.12` or `Number(minor) * pct` -- that
+   * would reintroduce the exact float-arithmetic hazard ADR-0002 bans.
+   *
+   * ROUNDING: banker's rounding (round-half-to-even), the IEEE-754
+   * default and the convention used by most Indian financial
+   * calculations when a decimal rule is not specified in the source
+   * document. For a 12.5-paise result we round to the nearest even
+   * paise (12 -> 12, 13 -> 12, 125 -> 12 or 12 depending on prior half,
+   * matching Decimal.ROUND_HALF_EVEN). This is tested exhaustively.
+   *
+   * ERRORS:
+   *   - throws InvalidMoneyError if den is zero
+   *   - throws InvalidMoneyError if either num or den is non-integer
+   *     (bigints inherently are, but the TS compiler can't stop a caller
+   *      from passing `BigInt(0.5)` which becomes 0n and silently
+   *      produces zero -- that is a bug the caller introduced, not one
+   *      Money must mask).
+   *
+   * SIGNS: standard: (positive * negative) and (negative * positive)
+   * both yield a negative result; (negative * negative) yields positive.
+   */
+  multiplyRational(num: bigint, den: bigint): Money {
+    if (typeof num !== "bigint" || typeof den !== "bigint") {
+      throw new InvalidMoneyError(
+        "multiplyRational(num, den) requires both arguments to be bigints",
+      );
+    }
+    if (den === 0n) {
+      throw new InvalidMoneyError("multiplyRational: denominator cannot be zero");
+    }
+    // Normalize so the denominator is always positive; move any sign to
+    // the numerator. Keeps the half-tie branch below sign-agnostic.
+    let n = num;
+    let d = den;
+    if (d < 0n) {
+      n = -n;
+      d = -d;
+    }
+
+    const product = this.minorUnits * n;
+    // Exact-divisible fast path.
+    if (product % d === 0n) {
+      return new Money(product / d, this.currency);
+    }
+
+    // Banker's rounding: look at the remainder scaled by 2 against the
+    // denominator -- less -> round down (toward -infinity in the
+    // product's sign-adjusted direction, which is toward zero for
+    // standard round-down-to-nearest), greater -> round up, equal
+    // (tie) -> round to even.
+    // We operate on absolute values for the half-check and reapply the
+    // sign at the end so negative results tie-break the same way.
+    const absProduct = product < 0n ? -product : product;
+    const quotient = absProduct / d;
+    const remainder = absProduct - quotient * d;
+    const twiceRemainder = remainder * 2n;
+
+    let rounded: bigint;
+    if (twiceRemainder < d) {
+      rounded = quotient; // round down
+    } else if (twiceRemainder > d) {
+      rounded = quotient + 1n; // round up
+    } else {
+      // Exact half: round to even (banker's).
+      rounded = quotient % 2n === 0n ? quotient : quotient + 1n;
+    }
+
+    const signed = product < 0n ? -rounded : rounded;
+    return new Money(signed, this.currency);
+  }
+
+  /**
    * Debug-only string representation — NOT for display. No currency symbol,
    * no digit grouping. UI formatting is exclusively the UI-layer <Money>
    * component's responsibility.

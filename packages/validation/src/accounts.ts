@@ -9,7 +9,7 @@ import { z } from "zod";
  * unresolved, documented, not silently picked).
  */
 
-export const ACCOUNT_TYPES = ["bank", "cash", "credit_card", "investment"] as const;
+export const ACCOUNT_TYPES = ["bank", "cash", "credit_card", "investment", "epfo"] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
 const nameSchema = z.string().trim().min(1, "Enter a name.").max(80, "Name is too long.");

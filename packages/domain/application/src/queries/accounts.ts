@@ -30,7 +30,13 @@ export type AccountBalance =
       creditUsedMinor: number;
       availableCreditMinor: number;
     }
-  | { type: "investment"; currency: string; marketValueMinor: number };
+  | { type: "investment"; currency: string; marketValueMinor: number }
+  // EPFO: totalMinor is derived from the EPFO ledger (never from a cached
+  // column on `accounts`). This mapper returns zero -- the real value
+  // flows from the Phase 2 getNetWorth path (which calls getEpfoBalance
+  // directly) and from the Phase 11 Spensa mapping. UI consumers that
+  // need the real EPFO balance call getEpfoBalance via its ledger query.
+  | { type: "epfo"; currency: string; totalMinor: number };
 
 export interface CreditCardStatementSummary {
   accountId: string;
@@ -158,6 +164,9 @@ export async function getAccountBalance(
       currency: account.currency,
       marketValueMinor: account.market_value_minor ?? 0,
     };
+  }
+  if (account.type === "epfo") {
+    return { type: "epfo", currency: account.currency, totalMinor: 0 };
   }
   return { type: account.type, currency: account.currency, balanceMinor: account.balance_minor };
 }
