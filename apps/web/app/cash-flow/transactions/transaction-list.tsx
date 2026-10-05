@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Loader, LoaderBlock } from "@/components/spencare/loader";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { EmptyState } from "@/components/spencare/empty-state";
@@ -271,7 +272,9 @@ export function TransactionList({
 
       {searching && transactions.length === 0 ? (
         <Card>
-          <CardContent className="p-4 text-sm text-muted-foreground">Searching…</CardContent>
+          <CardContent className="p-4">
+            <LoaderBlock message="Searching…" />
+          </CardContent>
         </Card>
       ) : transactions.length === 0 ? (
         <Card>
@@ -365,7 +368,13 @@ export function TransactionList({
             onClick={() => void runSearch({ cursor: nextCursor, append: true })}
             disabled={loadingMore}
           >
-            {loadingMore ? "Loading…" : "Load more"}
+            {loadingMore ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader size={16} aria-label="Loading more transactions" /> Loading…
+              </span>
+            ) : (
+              "Load more"
+            )}
           </Button>
         </div>
       ) : null}

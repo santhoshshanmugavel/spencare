@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Money } from "@/components/spencare/money";
+import { Loader, LoaderBlock } from "@/components/spencare/loader";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { formatMinorUnits } from "@/lib/currency-format";
 import { accountTag, formatGroupDate, groupByDate, toLocalDate, transactionHint } from "@/lib/transaction-presentation";
@@ -315,7 +316,7 @@ export function AssociateTransactionDialog({
 
         <div className="max-h-80 space-y-3 overflow-y-auto">
           {searching && !initialLoadDone ? (
-            <p className="p-3 text-sm text-muted-foreground">Searching…</p>
+            <LoaderBlock message="Searching…" className="p-3" />
           ) : results.length === 0 ? (
             <div className="space-y-2 p-3 text-sm text-muted-foreground">
               <p>
@@ -410,7 +411,13 @@ export function AssociateTransactionDialog({
                 onClick={() => void runSearch({ cursor: nextCursor, append: true })}
                 disabled={loadingMore}
               >
-                {loadingMore ? "Loading…" : "Load more"}
+                {loadingMore ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader size={16} aria-label="Loading more transactions" /> Loading…
+                  </span>
+                ) : (
+                  "Load more"
+                )}
               </Button>
             </div>
           ) : null}

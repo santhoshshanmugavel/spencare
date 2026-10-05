@@ -12,6 +12,7 @@ import {
   type IncomeFrequency,
 } from "@spencare/validation";
 import { Button } from "@/components/ui/button";
+import { LoaderBlock } from "@/components/spencare/loader";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -177,13 +178,11 @@ export function OnboardingWizard({ initial }: { initial: OnboardingInitialValues
   if (isFinishing) {
     return (
       <div className="flex min-h-dvh w-full flex-col items-center justify-center gap-4 bg-background px-4 text-center">
-        <div
-          className="size-10 animate-spin rounded-full border-4 border-primary border-t-transparent"
-          aria-hidden="true"
+        <LoaderBlock
+          size={56}
+          tone="primary"
+          message="Setting up your personalized experience…"
         />
-        <p role="status" aria-live="polite" className="text-lg font-medium text-foreground">
-          Setting up your personalized experience…
-        </p>
         <p className="text-sm text-muted-foreground">
           Your financial data stays private and encrypted.
         </p>

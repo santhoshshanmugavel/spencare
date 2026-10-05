@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { AlertTriangle, Loader2, Repeat2 } from "lucide-react";
+import { LoaderBlock } from "@/components/spencare/loader";
 import { Money as DomainMoney, LOW_CONFIDENCE_THRESHOLD, ACCOUNT_TYPE_LABELS } from "@spencare/domain-core";
 import type {
   AccountRow,
@@ -316,9 +317,12 @@ function UploadStep({
 function ProcessingStep() {
   return (
     <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center" role="status" aria-live="polite">
-        <Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
-        <p className="text-sm text-muted-foreground">Processing your statement — this can take a moment for larger files.</p>
+      <CardContent className="py-6" role="status" aria-live="polite">
+        <LoaderBlock
+          size={48}
+          tone="primary"
+          message="Processing your statement — this can take a moment for larger files."
+        />
       </CardContent>
     </Card>
   );
