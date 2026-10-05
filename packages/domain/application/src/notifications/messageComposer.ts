@@ -44,6 +44,21 @@ export interface NotificationMessage {
   telegramBody?: string;
 }
 
+export interface ComposeOptions {
+  /**
+   * When true, financial notifications are rendered with a privacy-safe
+   * variant that masks amounts and entity names. Security + integration
+   * events are never masked -- they must stay actionable regardless of
+   * privacy mode. See `isFinanciallySensitiveEvent` below.
+   *
+   * The caller (notification delivery engine) is responsible for reading
+   * `profiles.privacy_mode_enabled` and passing it in. Templates NEVER
+   * reach for the profile themselves -- the decision is centralized here
+   * (Spec Phase 0.1).
+   */
+  privacyMode?: boolean;
+}
+
 function fmt(amountMinor: number, currency = "INR"): string {
   const major = amountMinor / 100;
   if (currency === "INR") {
@@ -56,6 +71,27 @@ function daysLabel(days: number): string {
   if (days === 1) return "tomorrow";
   if (days === 0) return "today";
   return `in ${days} days`;
+}
+
+/**
+ * Events whose message must stay actionable even in Privacy Mode (Spec
+ * Phase 0.2 "amounts, balances, spending, goal/commitment/plan/loan/CC
+ * amounts" are masked; security + integration + summary categories are
+ * not financial-value disclosures). The engine still delivers everything
+ * -- the choice is only whether to swap in the privacy-safe template.
+ */
+const NEVER_MASKED_EVENTS: ReadonlySet<NotificationEventType> = new Set([
+  "SECURITY_PASSWORD_CHANGED",
+  "SECURITY_NEW_LOGIN",
+  "SECURITY_2FA_CHANGED",
+  "GMAIL_CONNECTED",
+  "GMAIL_CONNECTION_ERROR",
+  "MCP_CONNECTED",
+  "MCP_REVOKED",
+]);
+
+export function isFinanciallySensitiveEvent(eventType: NotificationEventType): boolean {
+  return !NEVER_MASKED_EVENTS.has(eventType);
 }
 
 /**
@@ -77,7 +113,17 @@ function planContextSuffix(planNames: string[] | undefined): string {
 export function composeNotificationMessage(
   eventType: NotificationEventType,
   context: Record<string, unknown>,
+  options?: ComposeOptions,
 ): NotificationMessage {
+  // Centralized privacy decision (Spec Phase 0.1): if privacy is on AND
+  // this event discloses financial values, swap in the privacy-safe
+  // template BEFORE any channel-specific formatting runs. This way the
+  // same stripped payload reaches in-app + Telegram, and templates below
+  // never need to remember to check privacyMode themselves.
+  if (options?.privacyMode && isFinanciallySensitiveEvent(eventType)) {
+    return composePrivateMessage(eventType);
+  }
+
   const message = composeCore(eventType, context);
   const suffix = planContextSuffix(context.planNames as string[] | undefined);
   if (!suffix) return message;
@@ -86,6 +132,151 @@ export function composeNotificationMessage(
     body: message.body + suffix,
     telegramBody: (message.telegramBody ?? message.body) + suffix,
   };
+}
+
+/**
+ * Privacy-safe templates. One short, context-preserving line per event
+ * category, with no amounts and no entity names (goal/commitment/account/
+ * bill names). Matches the Spec Phase 0.3 example:
+ *
+ *   Detailed:  "₹20,000 added to Emergency Fund."
+ *   Private:   "Goal contribution recorded."
+ *
+ * These are not just the detailed messages minus the numbers -- they are
+ * deliberately short, so the recipient knows a thing happened and can
+ * open Spencare to read details, but no sensitive financial content is
+ * exposed in a notification shade or Telegram chat preview.
+ *
+ * `telegramBody` is intentionally identical to `body` here -- there is
+ * nothing extra to say in Telegram when the point is to say less.
+ */
+function composePrivateMessage(eventType: NotificationEventType): NotificationMessage {
+  switch (eventType) {
+    // ---- Budget ----
+    case "BUDGET_50":
+    case "BUDGET_80":
+    case "BUDGET_90":
+    case "BUDGET_100":
+    case "BUDGET_OVER":
+      return { title: "Budget update", body: "There's an update on one of your budgets." };
+
+    // ---- Balance ----
+    case "BALANCE_LOW":
+    case "BALANCE_ZERO":
+    case "BALANCE_NEGATIVE":
+      return { title: "Account balance alert", body: "One of your accounts needs attention." };
+
+    // ---- Credit utilization ----
+    case "CREDIT_50":
+    case "CREDIT_80":
+    case "CREDIT_90":
+    case "CREDIT_100":
+      return { title: "Credit utilization alert", body: "A credit card is approaching its limit." };
+
+    // ---- Goal ----
+    case "GOAL_CONTRIBUTION":
+      return { title: "Goal contribution recorded", body: "A contribution was added to a goal." };
+    case "GOAL_25":
+    case "GOAL_50":
+    case "GOAL_75":
+    case "GOAL_90":
+      return { title: "Goal progress", body: "One of your goals made progress." };
+    case "GOAL_COMPLETED":
+      return { title: "Goal complete", body: "One of your goals reached its target." };
+    case "GOAL_PLAN_UPCOMING":
+    case "GOAL_PLAN_DUE":
+      return { title: "Goal contribution reminder", body: "A planned goal contribution is coming up." };
+    case "GOAL_PLAN_MISSED":
+      return { title: "Goal contribution overdue", body: "A planned goal contribution is overdue." };
+
+    // ---- Bills ----
+    case "BILL_7_DAYS":
+    case "BILL_3_DAYS":
+    case "BILL_1_DAY":
+    case "BILL_DUE_TODAY":
+      return { title: "Bill reminder", body: "An upcoming bill is on the way." };
+    case "BILL_OVERDUE":
+      return { title: "Bill may be overdue", body: "A bill was expected and hasn't been recorded." };
+    case "BILL_AMOUNT_CHANGED":
+      return { title: "Bill updated", body: "The expected amount on a bill changed." };
+
+    // ---- Commitments ----
+    case "COMMITMENT_7_DAYS":
+    case "COMMITMENT_3_DAYS":
+    case "COMMITMENT_1_DAY":
+    case "COMMITMENT_DUE_TODAY":
+      return { title: "Commitment reminder", body: "An upcoming commitment is on the way." };
+    case "COMMITMENT_OVERDUE":
+      return { title: "Commitment overdue", body: "A commitment is overdue." };
+    case "COMMITMENT_SHORTFALL":
+      return { title: "Commitment needs more saved", body: "A commitment still needs funding." };
+    case "COMMITMENT_AUTO_PAID":
+      return { title: "Commitment payment recorded", body: "A commitment payment was auto-recorded." };
+    case "COMMITMENT_AUTO_PAY_FAILED":
+      return { title: "Commitment auto-record failed", body: "A commitment payment could not be recorded automatically." };
+    case "COMMITMENT_AUTO_PROTECTED":
+      return { title: "Commitment funds protected", body: "Spencare automatically protected funds for a commitment." };
+    case "COMMITMENT_PREPARATION":
+      return { title: "Commitment preparation reminder", body: "Time to set aside funds for an upcoming commitment." };
+
+    // ---- Loans ----
+    case "LOAN_7_DAYS":
+    case "LOAN_3_DAYS":
+    case "LOAN_1_DAY":
+    case "LOAN_DUE_TODAY":
+      return { title: "Loan payment reminder", body: "A loan installment is coming up." };
+    case "LOAN_OVERDUE":
+      return { title: "Loan payment overdue", body: "A loan installment is overdue." };
+
+    // ---- Credit card billing ----
+    case "CC_STATEMENT_7_DAYS":
+    case "CC_STATEMENT_TODAY":
+      return { title: "Credit card statement update", body: "A credit card statement is being generated." };
+    case "CC_PAYMENT_7_DAYS":
+    case "CC_PAYMENT_3_DAYS":
+    case "CC_PAYMENT_1_DAY":
+    case "CC_PAYMENT_TODAY":
+      return { title: "Credit card payment reminder", body: "A credit card payment is coming up." };
+    case "CC_PAYMENT_OVERDUE":
+      return { title: "Credit card payment overdue", body: "A credit card payment is overdue." };
+
+    // ---- Plan items ----
+    case "PLAN_ITEM_7_DAYS":
+    case "PLAN_ITEM_3_DAYS":
+    case "PLAN_ITEM_1_DAY":
+    case "PLAN_ITEM_DUE_TODAY":
+      return { title: "Plan item reminder", body: "A planned item is coming up." };
+    case "PLAN_ITEM_OVERDUE":
+      return { title: "Plan item may be overdue", body: "A planned item was expected and hasn't been recorded." };
+
+    // ---- Plan budget ----
+    case "PLAN_BUDGET_80":
+    case "PLAN_BUDGET_OVER":
+      return { title: "Plan budget update", body: "There's an update on one of your plan budgets." };
+    case "PLAN_COMPLETED":
+      return { title: "Plan complete", body: "You completed one of your plans." };
+
+    // ---- Transactions ----
+    case "TRANSACTION_LARGE":
+      return { title: "Large transaction recorded", body: "A transaction worth reviewing was added." };
+    case "TRANSACTION_UNUSUAL":
+      return { title: "Unusual transaction", body: "A transaction outside your normal patterns was recorded." };
+
+    // ---- Summaries ----
+    case "DAILY_SUMMARY":
+      return { title: "Your daily summary", body: "Your daily summary is ready in Spencare." };
+    case "WEEKLY_SUMMARY":
+      return { title: "Your weekly summary", body: "Your weekly summary is ready in Spencare." };
+    case "MONTHLY_SUMMARY":
+      return { title: "Your monthly summary", body: "Your monthly summary is ready in Spencare." };
+
+    // ---- Security / integration events: never reach here (bypassed by
+    // ---- isFinanciallySensitiveEvent). Fall through to a safe default
+    // ---- so a future financial event forgetting its branch degrades
+    // ---- safely instead of leaking context.
+    default:
+      return { title: "Spencare update", body: "Something worth knowing happened in your account." };
+  }
 }
 
 function composeCore(

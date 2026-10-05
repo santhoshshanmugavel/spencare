@@ -12,6 +12,7 @@ import {
   updateNotificationDelivery,
   listNotificationPreferences,
   getChannelConnectionMetadata,
+  getProfile,
   isChannelEnabled,
   isEventTypeEnabled,
   isQuietHoursActive,
@@ -62,7 +63,22 @@ export async function deliverNotification(
   input: DeliverNotificationInput,
   _stats?: NotificationRunStats,
 ): Promise<{ notificationId: string | null; channels: string[] }> {
-  const message = composeNotificationMessage(input.eventType, input.financialContext);
+  // Privacy Mode (Spec Phase 0.1-0.3): the engine loads profile truth
+  // ONCE and passes it to the composer so that both in-app and Telegram
+  // receive the same privacy-safe payload. Templates never check privacy
+  // themselves. If the profile read fails we default to privacy ON --
+  // safer to under-disclose than to leak amounts on a bad read.
+  let privacyMode = false;
+  try {
+    const profile = await getProfile(serviceRoleSupabase, input.userId);
+    privacyMode = profile?.privacy_mode_enabled ?? false;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[notifications/engine] privacy mode read failed, defaulting to ON:", msg);
+    privacyMode = true;
+  }
+
+  const message = composeNotificationMessage(input.eventType, input.financialContext, { privacyMode });
 
   // Create notification row
   const notification = await createNotification(serviceRoleSupabase, {
