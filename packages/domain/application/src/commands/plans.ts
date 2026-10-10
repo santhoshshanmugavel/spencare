@@ -295,16 +295,19 @@ export const reopenPlan: Command<FinancialPlanIdInput, FinancialPlanRow> = {
 };
 
 /**
- * Hard delete — intentionally narrow (Gate 0's own open question about
- * hard-delete was never resolved by Gate 1, so this command applies the
- * most conservative reading: only a `draft` Plan with zero attached
- * transactions/items/associations may be hard-deleted; everything else
- * must be archived instead). Never deletes a transaction, Goal,
- * Commitment, or Account — the DB's ON DELETE CASCADE only reaches this
- * Plan's own child link/item rows, and ON DELETE SET NULL on
- * transactions.plan_id means a (structurally unreachable, given the
- * zero-transactions check below) attached transaction would simply be
- * unattached, never deleted.
+ * Hard delete — available for any Plan regardless of status or content.
+ * The DB's ON DELETE CASCADE removes only this Plan's own child rows
+ * (items, goal/commitment/account links). ON DELETE SET NULL on
+ * transactions.plan_id / plan_item_id detaches any attached transactions
+ * without deleting them — the underlying financial transaction record,
+ * its amount, account, and category are never touched. Goals, Commitments,
+ * and Accounts themselves are preserved; only the Plan-specific link rows
+ * are removed by cascade.
+ *
+ * The "only empty draft Plans may be deleted" restriction was a deliberate
+ * placeholder (Gate 0 open question) — now resolved: the DB schema already
+ * supports safe deletion at any state via cascade / SET NULL, so the
+ * command no longer needs to enforce the conservative empty-draft gate.
  */
 export const deletePlan: Command<FinancialPlanIdInput, void> = {
   name: "deletePlan",
@@ -312,22 +315,6 @@ export const deletePlan: Command<FinancialPlanIdInput, void> = {
   async execute(ctx: AuthContext, input: FinancialPlanIdInput): Promise<Result<void>> {
     const existing = await getFinancialPlanRow(ctx.supabase, ctx.userId, input.planId);
     if (!existing) return err({ code: "plan_not_found", message: "That Plan no longer exists." });
-    if (existing.status !== "draft") {
-      return err({ code: "invalid_transition", message: "Only a draft Plan can be deleted. Archive this Plan instead." });
-    }
-    const [items, goalLinks, commitmentLinks, accountLinks, transactions] = await Promise.all([
-      listPlanItemRows(ctx.supabase, ctx.userId, input.planId),
-      listPlanGoalLinkRows(ctx.supabase, ctx.userId, input.planId),
-      listPlanCommitmentLinkRows(ctx.supabase, ctx.userId, input.planId),
-      listPlanAccountLinkRows(ctx.supabase, ctx.userId, input.planId),
-      listTransactionsForPlan(ctx.supabase, ctx.userId, input.planId),
-    ]);
-    if (items.length || goalLinks.length || commitmentLinks.length || accountLinks.length || transactions.length) {
-      return err({
-        code: "plan_not_empty",
-        message: "This Plan has items or associations. Archive it instead of deleting.",
-      });
-    }
     try {
       await deleteFinancialPlanRow(ctx.supabase, ctx.userId, input.planId);
       return ok(undefined);

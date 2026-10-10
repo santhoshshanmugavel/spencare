@@ -13,13 +13,11 @@ import { toastConfirmed, toastError } from "@/lib/toast";
 import { deletePlanAction } from "../actions";
 
 /**
- * Only ever shown for an empty `draft` Plan (the detail view gates this —
- * `deletePlan` itself also refuses server-side if any item/link/transaction
- * exists). The copy deliberately does NOT say "all associated financial
- * data will be deleted" — per Gate 4's explicit accuracy rule, since a
- * non-empty Plan can never reach this dialog in the first place, and even
- * if it somehow did, the server enforces SET NULL (unattaching, never
- * deleting) on `transactions.plan_id`/`plan_item_id`.
+ * Permanently deletes a Plan. Available for any Plan regardless of status
+ * or content. The DB cascade removes plan items and links; attached
+ * transactions are detached (plan_id SET NULL) rather than deleted — the
+ * underlying financial record, amount, account, and category are never
+ * touched. Goals, Commitments, and Accounts themselves are preserved.
  */
 export function DeletePlanDialog({
   plan,
@@ -37,7 +35,7 @@ export function DeletePlanDialog({
 
   const preview: ActionPreview = {
     commandType: "deletePlan",
-    summary: `Delete "${plan.name}"? This Plan has no items, linked Goals/Commitments/Accounts, or attached transactions yet, so nothing else is affected. This can't be undone.`,
+    summary: `Delete "${plan.name}"? Plan items will be permanently removed. Attached transactions will be detached and kept in Cash Flow — no financial data is deleted. This can't be undone.`,
     fields: [{ label: "Plan", value: plan.name, emphasis: true }],
     undoable: false,
   };

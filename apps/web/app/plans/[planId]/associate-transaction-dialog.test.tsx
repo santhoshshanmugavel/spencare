@@ -214,6 +214,31 @@ describe("<AssociateTransactionDialog> — search and multi-select", () => {
   });
 });
 
+describe("<AssociateTransactionDialog> — relationship status correctness (Issue B fix)", () => {
+  it("does not show 'Attached to another Plan' when plan_id equals the current plan (same-plan is not elsewhere)", async () => {
+    const { searchTransactionsForPlanAction } = await import("../actions");
+    // Simulate the edge case: a transaction has plan_id = PLAN_ID (current plan) but appears in
+    // search results (e.g. stale cache). It must NOT be labeled as "Attached to another Plan."
+    vi.mocked(searchTransactionsForPlanAction).mockResolvedValue(page([txn({ plan_id: PLAN_ID })]));
+    render(
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+    );
+    await screen.findByText("Thai Airways");
+    expect(screen.queryByText(/attached to another plan/i)).not.toBeInTheDocument();
+  });
+
+  it("does not warn about a move when the only selected transaction belongs to the current plan", async () => {
+    const { searchTransactionsForPlanAction } = await import("../actions");
+    vi.mocked(searchTransactionsForPlanAction).mockResolvedValue(page([txn({ plan_id: PLAN_ID })]));
+    const user = userEvent.setup();
+    render(
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
+    );
+    await user.click(await screen.findByRole("checkbox", { name: /select thai airways/i }));
+    expect(screen.queryByText(/continuing will move/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("<AssociateTransactionDialog> — reassignment is explicit, never silent (Gate 6 §38/§39)", () => {
   it("labels a transaction already attached to another Plan and warns before moving it", async () => {
     const { searchTransactionsForPlanAction } = await import("../actions");

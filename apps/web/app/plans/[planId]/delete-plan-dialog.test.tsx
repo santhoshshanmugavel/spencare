@@ -44,10 +44,13 @@ describe("<DeletePlanDialog>", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("never claims 'all associated financial data will be deleted' — describes SET NULL accurately instead", () => {
+  it("never claims financial data will be deleted — describes SET NULL (detach) and cascade (items) accurately", () => {
     render(<DeletePlanDialog plan={plan} open onOpenChange={() => {}} />);
     expect(screen.queryByText(/all associated financial data will be deleted/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/no items, linked goals\/commitments\/accounts, or attached transactions yet/i).length).toBeGreaterThan(0);
+    // Dialog must accurately state that transactions are detached, not deleted,
+    // and that plan items are removed.
+    expect(screen.getAllByText(/attached transactions will be detached/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/no financial data is deleted/i).length).toBeGreaterThan(0);
   });
 
   it("confirming calls deletePlanAction and navigates back to the list", async () => {

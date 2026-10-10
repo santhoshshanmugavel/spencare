@@ -252,7 +252,7 @@ describe("<PlanDetailView> — header and lifecycle", () => {
     expect(updatePlanStatusAction).toHaveBeenCalledWith(PLAN_ID, { targetStatus: "paused" });
   });
 
-  it("only offers Delete for an empty draft Plan", async () => {
+  it("always offers Delete regardless of plan status or content", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
       <PlanDetailView initialDetail={buildDetail({ status: "draft" })} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
@@ -272,7 +272,7 @@ describe("<PlanDetailView> — header and lifecycle", () => {
       />,
     );
     await openActionsMenu(user, "Thailand Trip");
-    expect(screen.queryByRole("menuitem", { name: "Delete Plan" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Delete Plan" })).toBeInTheDocument();
   });
 });
 

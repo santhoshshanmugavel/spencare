@@ -529,23 +529,24 @@ describe("Plans commands", () => {
       expect(plans.has(created.value.id)).toBe(false);
     });
 
-    it("refuses to delete a non-draft Plan", async () => {
+    it("deletes a non-draft (active) Plan", async () => {
       const { createPlan, updatePlanStatus, deletePlan } = await import("./plans.js");
       const created = await createPlan.execute(ctxFor(USER_A), { name: "Trip", baseCurrency: "INR" });
       if (!created.ok) throw new Error("setup failed");
       await updatePlanStatus.execute(ctxFor(USER_A), { planId: created.value.id, targetStatus: "active" });
       const result = await deletePlan.execute(ctxFor(USER_A), { planId: created.value.id });
-      expect(result.ok).toBe(false);
+      expect(result.ok).toBe(true);
+      expect(plans.has(created.value.id)).toBe(false);
     });
 
-    it("refuses to delete a draft Plan that has items", async () => {
+    it("deletes a draft Plan that has items (items are cascade-removed)", async () => {
       const { createPlan, addPlanItem, deletePlan } = await import("./plans.js");
       const created = await createPlan.execute(ctxFor(USER_A), { name: "Trip", baseCurrency: "INR" });
       if (!created.ok) throw new Error("setup failed");
       await addPlanItem.execute(ctxFor(USER_A), { planId: created.value.id, name: "Flight" });
       const result = await deletePlan.execute(ctxFor(USER_A), { planId: created.value.id });
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.code).toBe("plan_not_empty");
+      expect(result.ok).toBe(true);
+      expect(plans.has(created.value.id)).toBe(false);
     });
   });
 
@@ -785,45 +786,43 @@ describe("Plans commands", () => {
     });
   });
 
-  // ── Gate 7: Plan deletion is rejected (never a cascade) when any
-  //    Goal/Commitment/Account association still exists — the only safe way
-  //    to "remove" a Plan with associations is to archive it (a pure status
-  //    flip), never a hard delete that could imply the associations (or
-  //    anything they point at) were removed. ──────────────────────────────
-  describe("deletePlan rejects when associations exist (Gate 7 §7/§16/§25/§35)", () => {
-    it("refuses to delete a draft Plan with a linked Goal", async () => {
+  // ── Gate 7 (revised): Plan deletion succeeds even when Goal/Commitment/Account
+  //    associations exist — the DB cascade removes the link rows, but the linked
+  //    entities themselves (Goal, Commitment, Account) are never touched.
+  //    Financial data integrity: goals/commitments/accounts survive the delete. ──
+  describe("deletePlan succeeds with associations; linked entities are never touched (Gate 7 §7/§16/§25/§35)", () => {
+    it("deletes a draft Plan with a linked Goal; the Goal itself is preserved", async () => {
       const { createPlan, associatePlanGoal, deletePlan } = await import("./plans.js");
       const created = await createPlan.execute(ctxFor(USER_A), { name: "Trip", baseCurrency: "INR" });
       if (!created.ok) throw new Error("setup failed");
       await associatePlanGoal.execute(ctxFor(USER_A), { planId: created.value.id, goalId: "4fe7eae4-0f04-4d7a-815b-594bf98b0f67" });
       const result = await deletePlan.execute(ctxFor(USER_A), { planId: created.value.id });
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.code).toBe("plan_not_empty");
-      expect(plans.has(created.value.id)).toBe(true);
+      expect(result.ok).toBe(true);
+      expect(plans.has(created.value.id)).toBe(false);
       expect(goals.get("4fe7eae4-0f04-4d7a-815b-594bf98b0f67")).toBeDefined();
     });
 
-    it("refuses to delete a draft Plan with a linked Commitment", async () => {
+    it("deletes a draft Plan with a linked Commitment; the Plan row is removed", async () => {
       const { createPlan, associatePlanCommitment, deletePlan } = await import("./plans.js");
       const created = await createPlan.execute(ctxFor(USER_A), { name: "Trip", baseCurrency: "INR" });
       if (!created.ok) throw new Error("setup failed");
       await associatePlanCommitment.execute(ctxFor(USER_A), { planId: created.value.id, commitmentId: "dae91f58-01c6-455e-b4ab-539bb9eed0e5" });
       const result = await deletePlan.execute(ctxFor(USER_A), { planId: created.value.id });
-      expect(result.ok).toBe(false);
-      expect(plans.has(created.value.id)).toBe(true);
+      expect(result.ok).toBe(true);
+      expect(plans.has(created.value.id)).toBe(false);
     });
 
-    it("refuses to delete a draft Plan with a linked Account", async () => {
+    it("deletes a draft Plan with a linked Account; the Plan row is removed", async () => {
       const { createPlan, associatePlanAccount, deletePlan } = await import("./plans.js");
       const created = await createPlan.execute(ctxFor(USER_A), { name: "Trip", baseCurrency: "INR" });
       if (!created.ok) throw new Error("setup failed");
       await associatePlanAccount.execute(ctxFor(USER_A), { planId: created.value.id, accountId: "33493e79-ae7d-474f-9646-51668168af45" });
       const result = await deletePlan.execute(ctxFor(USER_A), { planId: created.value.id });
-      expect(result.ok).toBe(false);
-      expect(plans.has(created.value.id)).toBe(true);
+      expect(result.ok).toBe(true);
+      expect(plans.has(created.value.id)).toBe(false);
     });
 
-    it("refuses to delete a draft Plan with all three associations at once, and none of the linked entities are ever touched", async () => {
+    it("deletes a draft Plan with all three associations; all linked entities survive untouched", async () => {
       const { createPlan, associatePlanGoal, associatePlanCommitment, associatePlanAccount, deletePlan } = await import("./plans.js");
       const created = await createPlan.execute(ctxFor(USER_A), { name: "Trip", baseCurrency: "INR" });
       if (!created.ok) throw new Error("setup failed");
@@ -831,8 +830,8 @@ describe("Plans commands", () => {
       await associatePlanCommitment.execute(ctxFor(USER_A), { planId: created.value.id, commitmentId: "dae91f58-01c6-455e-b4ab-539bb9eed0e5" });
       await associatePlanAccount.execute(ctxFor(USER_A), { planId: created.value.id, accountId: "33493e79-ae7d-474f-9646-51668168af45" });
       const result = await deletePlan.execute(ctxFor(USER_A), { planId: created.value.id });
-      expect(result.ok).toBe(false);
-      expect(plans.has(created.value.id)).toBe(true);
+      expect(result.ok).toBe(true);
+      expect(plans.has(created.value.id)).toBe(false);
       expect(goals.get("4fe7eae4-0f04-4d7a-815b-594bf98b0f67")).toBeDefined();
       expect(commitments.get("dae91f58-01c6-455e-b4ab-539bb9eed0e5")).toBeDefined();
       expect(accounts.get("33493e79-ae7d-474f-9646-51668168af45")).toBeDefined();

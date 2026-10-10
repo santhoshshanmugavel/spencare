@@ -31,7 +31,7 @@ import { Progress } from "@/components/ui/progress";
 import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { EmptyState } from "@/components/spencare/empty-state";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PLAN_STATUS_LABELS, PLAN_ITEM_STATUS_LABELS } from "@/lib/plan-status-labels";
 import { formatPlanDate } from "@/lib/plan-date-format";
 import { toastConfirmed, toastError } from "@/lib/toast";
@@ -136,7 +136,9 @@ export function PlanDetailView({
   const unlinkedCommitments = commitments.filter((c) => !commitmentLinks.some((l) => l.commitment_id === c.id));
   const unlinkedAccounts = accounts.filter((a) => !accountLinks.some((l) => l.account_id === a.id));
 
-  const canDelete = plan.status === "draft" && items.length === 0 && goalLinks.length === 0 && commitmentLinks.length === 0 && accountLinks.length === 0 && transactions.length === 0;
+  // Any plan may be deleted — the server command and DB cascade handle
+  // content safely (items cascade, transactions SET NULL, links cascade).
+  const canDelete = true;
 
   const nextStatuses = useMemo(
     () =>
@@ -252,11 +254,10 @@ export function PlanDetailView({
             {plan.status !== "archived" ? (
               <DropdownMenuItem onSelect={() => setArchiveOpen(true)}>Archive Plan</DropdownMenuItem>
             ) : null}
-            {canDelete ? (
-              <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
-                Delete Plan
-              </DropdownMenuItem>
-            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+              Delete Plan
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

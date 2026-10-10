@@ -230,7 +230,7 @@ export function AssociateTransactionDialog({
       toastError(failed.error.message);
       return;
     }
-    const movedCount = transactions.filter((t) => t.plan_id !== null && !archivedPlanIds.has(t.plan_id)).length;
+    const movedCount = transactions.filter((t) => t.plan_id !== null && t.plan_id !== planId && !archivedPlanIds.has(t.plan_id)).length;
     const attachedCount = transactions.length - movedCount;
     const parts: string[] = [];
     if (attachedCount > 0) parts.push(`${attachedCount} transaction${attachedCount === 1 ? "" : "s"} attached`);
@@ -248,7 +248,7 @@ export function AssociateTransactionDialog({
   }
 
   const grouped = groupByDate(results, (t) => toLocalDate(t.occurred_at));
-  const elsewhereCount = [...selected.values()].filter((t) => t.plan_id !== null && !archivedPlanIds.has(t.plan_id)).length;
+  const elsewhereCount = [...selected.values()].filter((t) => t.plan_id !== null && t.plan_id !== planId && !archivedPlanIds.has(t.plan_id)).length;
   const attachLabel =
     selected.size === 0
       ? "Attach transaction"
@@ -358,7 +358,12 @@ export function AssociateTransactionDialog({
                     const account = accountById.get(t.account_id);
                     const category = t.category_id ? categoryById.get(t.category_id) : undefined;
                     const mismatched = t.currency !== currency;
-                    const attachedElsewhere = t.plan_id !== null && !archivedPlanIds.has(t.plan_id);
+                    // A transaction attached to the CURRENT plan is shown separately in the
+                    // Plan's own Transactions section and must not be offered here — the
+                    // server-side `excludePlanId` filter already excludes it, but if the
+                    // row surfaces anyway (e.g. stale cache) we must not mislabel it as
+                    // "Attached to another Plan".
+                    const attachedElsewhere = t.plan_id !== null && t.plan_id !== planId && !archivedPlanIds.has(t.plan_id);
                     const isSelected = selected.has(t.id);
                     const { displayTitle, effectiveItemName, displayMerchant } = getTransactionDisplay(t);
                     const subtitle = effectiveItemName && displayMerchant ? displayMerchant : transactionHint(t, category);
