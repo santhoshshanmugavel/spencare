@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Money } from "@/components/spencare/money";
 import { toastConfirmed, toastError } from "@/lib/toast";
 import { parseMoneyInput, minorUnitsToDisplay } from "@/lib/money-input";
-import { payCreditCardAction } from "./actions";
+import { payCreditCardAction, markCreditCardBillPaidAction } from "./actions";
 
 const CURRENCY = "INR";
 
@@ -150,17 +150,39 @@ export function CreditCardPaymentDialog({
             )}
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={loading || !fromAccountId || !amountMinor}
-          >
-            <CircleCheck className="size-4 mr-2" />
-            {loading ? "Recording..." : "Record payment"}
-          </Button>
+        <DialogFooter className="flex-col gap-2 sm:flex-col sm:gap-2">
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirm}
+              disabled={loading || !fromAccountId || !amountMinor}
+            >
+              <CircleCheck className="size-4 mr-2" />
+              {loading ? "Recording..." : "Record payment"}
+            </Button>
+          </div>
+          <div className="text-center">
+            <button
+              type="button"
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+              disabled={loading}
+              onClick={async () => {
+                setLoading(true);
+                const result = await markCreditCardBillPaidAction({
+                  creditCardAccountId: creditCardAccount.id,
+                });
+                setLoading(false);
+                if (!result.ok) { toastError((result as { ok: false; error: { message: string } }).error.message); return; }
+                toastConfirmed(`${creditCardAccount.name} bill marked as paid.`);
+                onOpenChange(false);
+                onPaid();
+              }}
+            >
+              Already paid this bill outside the app?
+            </button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

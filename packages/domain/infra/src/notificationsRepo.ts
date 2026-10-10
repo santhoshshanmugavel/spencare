@@ -2,7 +2,7 @@ import type { TypedSupabaseClient } from "./supabaseClients.js";
 import type { Json } from "./generated/database.types.js";
 
 export type NotificationSeverity = "info" | "warning" | "critical" | "success";
-export type NotificationCategory = "budget" | "goal" | "account" | "bill" | "transaction" | "security" | "report" | "spensa" | "commitment" | "loan";
+export type NotificationCategory = "budget" | "goal" | "account" | "bill" | "transaction" | "security" | "report" | "spensa" | "commitment" | "loan" | "vehicle";
 export type NotificationChannel = "in_app" | "email" | "telegram" | "slack";
 export type DeliveryStatus = "pending" | "delivered" | "failed" | "skipped";
 

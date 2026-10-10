@@ -72,7 +72,7 @@ describe("registerReadTools — scope enforcement", () => {
   it("a read-scoped session can call a read tool successfully", async () => {
     const domainApp = await import("@spencare/domain-application");
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
-    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, cardPaymentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, commitmentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, loanReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
+    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, goalReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, cardPaymentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, upcomingBillsTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, commitmentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, loanReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
 
     const { registerReadTools } = await import("./readTools.js");
     const server = fakeServer();
@@ -101,7 +101,7 @@ describe("registerReadTools — Privacy Mode", () => {
   it("redacts the Safe-to-Spend figure when Privacy Mode is enabled", async () => {
     const domainApp = await import("@spencare/domain-application");
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: true } as never);
-    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, cardPaymentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, commitmentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, loanReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
+    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, goalReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, cardPaymentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, upcomingBillsTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, commitmentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, loanReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
     vi.mocked(domainApp.redactFinancialSnapshot).mockImplementation((input) => ({
       safeToSpend: { state: (input as { safeToSpend: { state: string } }).safeToSpend.state, amount: { private: true } },
       accounts: [],
@@ -346,5 +346,95 @@ describe("registerReadTools — getAccounts uses the shared credit-safe mapper",
     await server.call("getAccounts");
     expect(vi.mocked(domainApp.toAiAccountSummariesForContext)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(domainApp.toAiAccountSummariesForContext).mock.calls[0]![0]).toEqual(accounts);
+  });
+});
+
+// ── getSafeToSpend serialization completeness ─────────────────────────────────
+// Verifies all 11 fields are present and all monetary values are integers
+// (never floating-point). This is a regression guard for the serialization
+// gap found in the 2026-10-10 audit: goalReservedMinor, budgetRemainingMinor,
+// and upcomingBillsMinor were previously absent.
+describe("registerReadTools — getSafeToSpend serialization completeness", () => {
+  function fullMockResult() {
+    return {
+      state: "budget_and_goals",
+      amount: { amountMinorUnits: 155_654n, currencyCode: "INR" },
+      availableBalance: { amountMinorUnits: 2_998_637n, currencyCode: "INR" },
+      ownedSpendableTotal: { amountMinorUnits: 2_998_637n, currencyCode: "INR" },
+      creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
+      goalReservedTotal: { amountMinorUnits: 2_000_000n, currencyCode: "INR" },
+      cardPaymentReservedTotal: { amountMinorUnits: 316_940n, currencyCode: "INR" },
+      budgetRemaining: { amountMinorUnits: 351_488n, currencyCode: "INR" },
+      upcomingBillsTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
+      commitmentReservedTotal: { amountMinorUnits: 195_834n, currencyCode: "INR" },
+      loanReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
+    };
+  }
+
+  it("serializes all 11 monetary fields and the Safe-to-Spend figure matches the snapshot", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
+    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue(fullMockResult() as never);
+    // Re-assert identity behaviour in case a prior test's mockImplementation persists through clearAllMocks.
+    vi.mocked(domainApp.redactFinancialSnapshot).mockImplementation((input: unknown) => input as never);
+
+    const { registerReadTools } = await import("./readTools.js");
+    const server = fakeServer();
+    registerReadTools(server as never, readCtx(["read"]));
+
+    const result = await server.call("getSafeToSpend");
+    expect(result.isError).toBeUndefined();
+
+    const d = result.data as Record<string, unknown>;
+
+    // All 11 fields must be present.
+    expect(d).toHaveProperty("state");
+    expect(d).toHaveProperty("amountMinor");
+    expect(d).toHaveProperty("currency");
+    expect(d).toHaveProperty("ownedSpendableMinor");
+    expect(d).toHaveProperty("creditAvailableMinor");
+    expect(d).toHaveProperty("goalReservedMinor");
+    expect(d).toHaveProperty("cardPaymentReservedMinor");
+    expect(d).toHaveProperty("budgetRemainingMinor");
+    expect(d).toHaveProperty("upcomingBillsMinor");
+    expect(d).toHaveProperty("commitmentReservedMinor");
+    expect(d).toHaveProperty("loanReservedMinor");
+
+    // The Safe-to-Spend figure must match the production snapshot.
+    expect(d.amountMinor).toBe(155_654);
+
+    // Every monetary field that is not null must be an integer (no fractional paise).
+    const monetaryFields = [
+      "amountMinor", "ownedSpendableMinor", "creditAvailableMinor",
+      "goalReservedMinor", "cardPaymentReservedMinor",
+      "upcomingBillsMinor", "commitmentReservedMinor", "loanReservedMinor",
+    ];
+    for (const field of monetaryFields) {
+      expect(Number.isInteger(d[field]), `${field} must be an integer`).toBe(true);
+    }
+
+    // budgetRemainingMinor is nullable but when present must be an integer.
+    if (d.budgetRemainingMinor !== null) {
+      expect(Number.isInteger(d.budgetRemainingMinor), "budgetRemainingMinor must be an integer").toBe(true);
+    }
+  });
+
+  it("budgetRemainingMinor is null when state has no active budget", async () => {
+    const domainApp = await import("@spencare/domain-application");
+    vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
+    vi.mocked(domainApp.redactFinancialSnapshot).mockImplementation((input: unknown) => input as never);
+    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({
+      ...fullMockResult(),
+      state: "goals_only",
+      budgetRemaining: undefined,
+    } as never);
+
+    const { registerReadTools } = await import("./readTools.js");
+    const server = fakeServer();
+    registerReadTools(server as never, readCtx(["read"]));
+
+    const result = await server.call("getSafeToSpend");
+    expect(result.isError).toBeUndefined();
+    expect((result.data as Record<string, unknown>).budgetRemainingMinor).toBeNull();
   });
 });

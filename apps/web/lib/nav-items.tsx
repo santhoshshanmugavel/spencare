@@ -1,4 +1,4 @@
-import { Home as HomeIcon, Sparkles, ArrowLeftRight, MapPinned, Target, Settings as SettingsIcon } from "lucide-react";
+import { Home as HomeIcon, Sparkles, ArrowLeftRight, MapPinned, Target, Settings as SettingsIcon, Car } from "lucide-react";
 import type { NavigationRailItem } from "@/components/spencare/navigation-rail";
 
 /**
@@ -22,5 +22,6 @@ export const PRIMARY_NAV_ITEMS: NavigationRailItem[] = [
   { key: "cash-flow", label: "Cash Flow", icon: <ArrowLeftRight className="size-5" />, href: "/cash-flow" },
   { key: "plans", label: "Plans", icon: <MapPinned className="size-5" />, href: "/plans" },
   { key: "goals", label: "Goals", icon: <Target className="size-5" />, href: "/goals" },
+  { key: "vehicles", label: "Vehicles", icon: <Car className="size-5" />, href: "/vehicles" },
   { key: "settings", label: "Settings", icon: <SettingsIcon className="size-5" />, href: "/settings/profile" },
 ];

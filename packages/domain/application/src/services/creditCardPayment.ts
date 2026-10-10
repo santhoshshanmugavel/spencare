@@ -460,6 +460,36 @@ export async function getCreditCardBillingStatus(
   return { snapshot, statementBalanceMinor, obligation, paymentStatus };
 }
 
+/**
+ * Directly marks an obligation as fully paid without requiring a transfer
+ * transaction. Use when the user has paid outside Spencare (bank transfer,
+ * UPI, NEFT) and wants to clear the overdue status without double-recording
+ * the transaction.
+ *
+ * Idempotent: returns ok=true silently when the obligation is already paid.
+ */
+export async function forceMarkCreditCardObligationPaid(
+  ctx: AuthContext,
+  obligationId: string,
+): Promise<{ ok: boolean; reason?: string }> {
+  const obligation = await getCreditCardObligation(ctx, obligationId);
+  if (!obligation) return { ok: false, reason: "Obligation not found." };
+  if (obligation.status === "paid") return { ok: true };
+
+  const { error } = await ctx.supabase
+    .from("credit_card_payment_obligations" as never)
+    .update({
+      paid_minor: obligation.statementBalanceMinor,
+      status: "paid",
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", obligationId)
+    .eq("user_id", ctx.userId);
+
+  if (error) return { ok: false, reason: error.message };
+  return { ok: true };
+}
+
 function subtractOneDay(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
   const dt = new Date(Date.UTC(y, m - 1, d));

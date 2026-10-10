@@ -329,6 +329,10 @@ function makeBillingStatusCtx(input: {
             select: () => ({
               eq: () => ({
                 eq: () => ({
+                  // getCreditCardObligation uses 2 eqs (id + user_id) -- return null so
+                  // matchCreditCardPayment short-circuits as "unmatched" without further DB calls
+                  maybeSingle: () => Promise.resolve({ data: null, error: null }),
+                  // upsertCreditCardObligation / getActiveObligationForAccount use 3 eqs
                   eq: () => ({
                     maybeSingle: () => Promise.resolve({ data: obligation, error: null }),
                   }),

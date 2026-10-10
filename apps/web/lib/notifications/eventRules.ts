@@ -740,3 +740,111 @@ export async function checkPlanCompletion(input: PlanCompletionRuleInput, _stats
     dedupeKey: `plan_completed_${planId}_${completedAtIso ?? "unknown"}`,
   }, _stats);
 }
+
+// ---- Vehicle reminder checks ----
+
+interface VehicleReminderRuleInput extends UserTarget {
+  serviceRoleSupabase: TypedSupabaseClient;
+  reminderId: string;
+  vehicleId: string;
+  vehicleName: string;
+  reminderType: string;
+  title: string;
+  sourceType: string | null;
+  // Date-based fields (set when due_date is present)
+  dueDateIso?: string | null;
+  daysUntilDue?: number | null;
+  // Odometer-based fields (set when due_odometer is present)
+  kmRemaining?: number | null;
+}
+
+export async function checkVehicleReminder(input: VehicleReminderRuleInput, _stats?: NotificationRunStats): Promise<void> {
+  const { serviceRoleSupabase, userId, userEmail, reminderId, vehicleId, vehicleName, reminderType, title, dueDateIso, daysUntilDue, kmRemaining, sourceType } = input;
+
+  const isOdometerBased = kmRemaining != null;
+  const isDocument = reminderType === "document_expiry" || sourceType === "document";
+
+  let eventType: DeliverNotificationInput["eventType"];
+  let severity: DeliverNotificationInput["severity"];
+  let dedupeKey: string;
+
+  if (isOdometerBased) {
+    const isOverdue = kmRemaining < 0;
+    if (isOverdue) {
+      eventType = "VEHICLE_ODOMETER_OVERDUE";
+      severity = "critical";
+    } else {
+      eventType = "VEHICLE_ODOMETER_DUE";
+      severity = kmRemaining <= 500 ? "warning" : "info";
+    }
+    // Bucket into 500km / 1000km / 2000km windows; overdue fires once per 100km
+    const odomBucket = isOverdue
+      ? `overdue_${Math.floor(Math.abs(kmRemaining) / 100) * 100}`
+      : kmRemaining <= 500 ? "500km"
+      : kmRemaining <= 1000 ? "1000km"
+      : "2000km";
+    dedupeKey = `vehicle_reminder_${reminderId}_${eventType}_${odomBucket}`;
+    await deliverNotification(serviceRoleSupabase, {
+      userId, userEmail,
+      eventType,
+      financialContext: { vehicleName, title, kmRemaining, reminderType },
+      category: "vehicle",
+      severity,
+      entityType: "vehicle",
+      entityId: vehicleId,
+      actionUrl: `/vehicles/${vehicleId}`,
+      dedupeKey,
+    }, _stats);
+    return;
+  }
+
+  // Date-based path
+  const days = daysUntilDue ?? 0;
+  const isOverdue = days < 0;
+
+  if (isDocument) {
+    if (isOverdue) {
+      eventType = "VEHICLE_DOCUMENT_EXPIRED";
+      severity = "critical";
+    } else if (days <= 1) {
+      eventType = "VEHICLE_DOCUMENT_EXPIRING_1";
+      severity = "critical";
+    } else if (days <= 7) {
+      eventType = "VEHICLE_DOCUMENT_EXPIRING_7";
+      severity = "warning";
+    } else {
+      eventType = "VEHICLE_DOCUMENT_EXPIRING_30";
+      severity = "info";
+    }
+  } else {
+    if (isOverdue) {
+      eventType = "VEHICLE_MAINTENANCE_OVERDUE";
+      severity = "critical";
+    } else {
+      eventType = "VEHICLE_MAINTENANCE_DUE";
+      severity = days <= 7 ? "warning" : "info";
+    }
+  }
+
+  // Dedupe key encodes the reminder state at the current date bucket:
+  // - overdue: fires once per day until dismissed
+  // - not yet due: fires once at 30d, 7d, 1d windows
+  const dateBucket = isOverdue
+    ? (dueDateIso ?? "unknown")
+    : days <= 1 ? "1d"
+    : days <= 7 ? "7d"
+    : "30d";
+  dedupeKey = `vehicle_reminder_${reminderId}_${eventType}_${dateBucket}`;
+
+  await deliverNotification(serviceRoleSupabase, {
+    userId, userEmail,
+    eventType,
+    financialContext: { vehicleName, title, dueDateIso, daysUntilDue: days, reminderType },
+    category: "vehicle",
+    severity,
+    entityType: "vehicle",
+    entityId: vehicleId,
+    actionUrl: `/vehicles/${vehicleId}`,
+    dedupeKey,
+  }, _stats);
+}

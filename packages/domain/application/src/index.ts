@@ -548,6 +548,7 @@ export {
   applyPaymentToObligation,
   matchCreditCardPayment,
   getCreditCardBillingStatus,
+  forceMarkCreditCardObligationPaid,
   type CreditCardObligation,
   type ObligationStatus,
   type PaymentMatchResult,

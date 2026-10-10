@@ -35,7 +35,11 @@ export type NotificationEventType =
   | "TRANSACTION_LARGE" | "TRANSACTION_UNUSUAL"
   | "SECURITY_PASSWORD_CHANGED" | "SECURITY_NEW_LOGIN" | "SECURITY_2FA_CHANGED"
   | "GMAIL_CONNECTED" | "GMAIL_CONNECTION_ERROR" | "MCP_CONNECTED" | "MCP_REVOKED"
-  | "WEEKLY_SUMMARY" | "MONTHLY_SUMMARY" | "DAILY_SUMMARY";
+  | "WEEKLY_SUMMARY" | "MONTHLY_SUMMARY" | "DAILY_SUMMARY"
+  | "VEHICLE_MAINTENANCE_DUE" | "VEHICLE_MAINTENANCE_OVERDUE"
+  | "VEHICLE_ODOMETER_DUE" | "VEHICLE_ODOMETER_OVERDUE"
+  | "VEHICLE_DOCUMENT_EXPIRING_30" | "VEHICLE_DOCUMENT_EXPIRING_7" | "VEHICLE_DOCUMENT_EXPIRING_1" | "VEHICLE_DOCUMENT_EXPIRED"
+  | "VEHICLE_FUEL_LOGGED";
 
 export interface NotificationMessage {
   title: string;
@@ -261,6 +265,26 @@ function composePrivateMessage(eventType: NotificationEventType): NotificationMe
       return { title: "Large transaction recorded", body: "A transaction worth reviewing was added." };
     case "TRANSACTION_UNUSUAL":
       return { title: "Unusual transaction", body: "A transaction outside your normal patterns was recorded." };
+
+    // ---- Vehicle events ----
+    case "VEHICLE_MAINTENANCE_DUE":
+      return { title: "Maintenance due", body: "A scheduled service is coming up for one of your vehicles." };
+    case "VEHICLE_MAINTENANCE_OVERDUE":
+      return { title: "Maintenance overdue", body: "A service item is past due on one of your vehicles." };
+    case "VEHICLE_ODOMETER_DUE":
+      return { title: "Service due by mileage", body: "A scheduled service is coming up based on odometer reading." };
+    case "VEHICLE_ODOMETER_OVERDUE":
+      return { title: "Service overdue by mileage", body: "A service item is past its odometer threshold on one of your vehicles." };
+    case "VEHICLE_DOCUMENT_EXPIRING_30":
+      return { title: "Document expiring soon", body: "A vehicle document is expiring soon." };
+    case "VEHICLE_DOCUMENT_EXPIRING_7":
+      return { title: "Document expiring this week", body: "A vehicle document expires this week." };
+    case "VEHICLE_DOCUMENT_EXPIRING_1":
+      return { title: "Document expires tomorrow", body: "A vehicle document expires tomorrow." };
+    case "VEHICLE_DOCUMENT_EXPIRED":
+      return { title: "Document expired", body: "A vehicle document has expired." };
+    case "VEHICLE_FUEL_LOGGED":
+      return { title: "Fuel entry logged", body: "A fuel entry was recorded for one of your vehicles." };
 
     // ---- Summaries ----
     case "DAILY_SUMMARY":
@@ -926,6 +950,97 @@ function composeCore(
         title: "Your daily summary",
         body: inAppBody,
         telegramBody: lines.join("\n"),
+      };
+    }
+
+    // ---- Vehicle events ----
+    case "VEHICLE_MAINTENANCE_DUE": {
+      const { vehicleName, title: serviceTitle, nextDueDate } = c as {
+        vehicleName: string; title: string; nextDueDate: string | null;
+      };
+      const when = nextDueDate ? ` on ${nextDueDate}` : "";
+      return {
+        title: `${serviceTitle} due`,
+        body: `${serviceTitle} is due${when} for ${vehicleName}.`,
+        telegramBody: `🔧 <b>Maintenance due for ${vehicleName}</b>\n\n${serviceTitle} is scheduled${when}.\n\n<a href="https://spencare.vercel.app/vehicles">Open Spencare</a>`,
+      };
+    }
+    case "VEHICLE_MAINTENANCE_OVERDUE": {
+      const { vehicleName, title: serviceTitle } = c as { vehicleName: string; title: string };
+      return {
+        title: `${serviceTitle} overdue`,
+        body: `${serviceTitle} is overdue on ${vehicleName}.`,
+        telegramBody: `⚠️ <b>Maintenance overdue for ${vehicleName}</b>\n\n${serviceTitle} is past due.\n\n<a href="https://spencare.vercel.app/vehicles">Open Spencare</a>`,
+      };
+    }
+    case "VEHICLE_ODOMETER_DUE": {
+      const { vehicleName, title: serviceTitle, kmRemaining } = c as {
+        vehicleName: string; title: string; kmRemaining: number;
+      };
+      return {
+        title: `${serviceTitle} due in ${kmRemaining} km`,
+        body: `${serviceTitle} is due in ${kmRemaining} km for ${vehicleName}.`,
+        telegramBody: `🔧 <b>Service due for ${vehicleName}</b>\n\n${serviceTitle} is scheduled in ${kmRemaining} km.\n\n<a href="https://spencare.vercel.app/vehicles">Open Spencare</a>`,
+      };
+    }
+    case "VEHICLE_ODOMETER_OVERDUE": {
+      const { vehicleName, title: serviceTitle, kmRemaining } = c as {
+        vehicleName: string; title: string; kmRemaining: number;
+      };
+      const overdue = Math.abs(kmRemaining);
+      return {
+        title: `${serviceTitle} overdue by ${overdue} km`,
+        body: `${serviceTitle} on ${vehicleName} is ${overdue} km overdue.`,
+        telegramBody: `⚠️ <b>Service overdue for ${vehicleName}</b>\n\n${serviceTitle} is ${overdue} km past its service interval.\n\n<a href="https://spencare.vercel.app/vehicles">Open Spencare</a>`,
+      };
+    }
+    case "VEHICLE_DOCUMENT_EXPIRING_30": {
+      const { vehicleName, documentTitle, expiryDate } = c as {
+        vehicleName: string; documentTitle: string; expiryDate: string;
+      };
+      return {
+        title: `${documentTitle} expiring in 30 days`,
+        body: `${documentTitle} for ${vehicleName} expires on ${expiryDate}.`,
+        telegramBody: `📄 <b>${documentTitle} expiring soon</b>\n\nVehicle: ${vehicleName}\nExpiry: ${expiryDate}\n\n<a href="https://spencare.vercel.app/vehicles">Open Spencare</a>`,
+      };
+    }
+    case "VEHICLE_DOCUMENT_EXPIRING_7": {
+      const { vehicleName, documentTitle, expiryDate } = c as {
+        vehicleName: string; documentTitle: string; expiryDate: string;
+      };
+      return {
+        title: `${documentTitle} expiring in 7 days`,
+        body: `${documentTitle} for ${vehicleName} expires on ${expiryDate}.`,
+        telegramBody: `📄 <b>${documentTitle} expiring in 7 days</b>\n\nVehicle: ${vehicleName}\nExpiry: ${expiryDate}\n\n<a href="https://spencare.vercel.app/vehicles">Open Spencare</a>`,
+      };
+    }
+    case "VEHICLE_DOCUMENT_EXPIRING_1": {
+      const { vehicleName, documentTitle, expiryDate } = c as {
+        vehicleName: string; documentTitle: string; expiryDate: string;
+      };
+      return {
+        title: `${documentTitle} expires tomorrow`,
+        body: `${documentTitle} for ${vehicleName} expires tomorrow (${expiryDate}).`,
+        telegramBody: `🚨 <b>${documentTitle} expires tomorrow</b>\n\nVehicle: ${vehicleName}\nExpiry: ${expiryDate}\n\n<a href="https://spencare.vercel.app/vehicles">Open Spencare</a>`,
+      };
+    }
+    case "VEHICLE_DOCUMENT_EXPIRED": {
+      const { vehicleName, documentTitle } = c as { vehicleName: string; documentTitle: string };
+      return {
+        title: `${documentTitle} expired`,
+        body: `${documentTitle} for ${vehicleName} has expired. Renew it now.`,
+        telegramBody: `🚨 <b>${documentTitle} expired</b>\n\nVehicle: ${vehicleName}\nPlease renew immediately.\n\n<a href="https://spencare.vercel.app/vehicles">Open Spencare</a>`,
+      };
+    }
+    case "VEHICLE_FUEL_LOGGED": {
+      const { vehicleName, fuelLitres, totalCostMinor, currency: fuelCurrency } = c as {
+        vehicleName: string; fuelLitres: number; totalCostMinor: number | null; currency: string;
+      };
+      const costPart = totalCostMinor !== null ? ` for ${fmt(totalCostMinor, fuelCurrency)}` : "";
+      return {
+        title: "Fuel logged",
+        body: `${fuelLitres.toFixed(2)} L added to ${vehicleName}${costPart}.`,
+        telegramBody: `⛽ <b>Fuel logged for ${vehicleName}</b>\n\n${fuelLitres.toFixed(2)} L${costPart}\n\n<a href="https://spencare.vercel.app/vehicles">Open Spencare</a>`,
       };
     }
 

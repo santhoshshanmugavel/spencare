@@ -19,6 +19,7 @@ import {
   removeLoan,
   getCreditCardBillingStatus,
   matchCreditCardPayment,
+  forceMarkCreditCardObligationPaid,
   listAccounts,
   type AuthContext,
   type RecurrenceInterval,
@@ -490,6 +491,35 @@ export async function markLoanPaidAction(input: {
   } catch (e) {
     return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to record loan payment." } };
   }
+}
+
+/**
+ * Marks the current outstanding credit card bill as paid without creating a
+ * transfer transaction. Use when the user has already paid via their bank
+ * (UPI/NEFT) and the payment is not recorded in Spencare as a transfer.
+ *
+ * Finds the active obligation via getCreditCardBillingStatus (which also
+ * attempts auto-match first), then force-marks it paid if still unpaid.
+ */
+export async function markCreditCardBillPaidAction(input: {
+  creditCardAccountId: string;
+}) {
+  const ctx = await requireAuthContext();
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const accounts = await listAccounts(ctx);
+  const cardAccount = accounts.find((a) => a.id === input.creditCardAccountId);
+  if (!cardAccount) return { ok: false as const, error: { message: "Credit card account not found." } };
+  const billing = await getCreditCardBillingStatus(ctx, cardAccount, todayIso);
+  if (!billing) return { ok: false as const, error: { message: "No active billing cycle found for this card." } };
+  if (billing.obligation.status === "paid") {
+    revalidateAll();
+    return { ok: true as const };
+  }
+  const result = await forceMarkCreditCardObligationPaid(ctx, billing.obligation.id);
+  if (!result.ok) return { ok: false as const, error: { message: result.reason ?? "Could not mark bill as paid." } };
+  revalidateAll();
+  revalidatePath("/cash-flow/transactions");
+  return { ok: true as const };
 }
 
 export async function payCreditCardAction(input: {

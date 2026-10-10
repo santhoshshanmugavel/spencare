@@ -9,6 +9,7 @@ import {
   checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder,
   checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder,
   checkCreditCardBillingReminder, checkPlanItemReminder, checkPlanBudgetRisk, checkPlanCompletion,
+  checkVehicleReminder,
 } from "./eventRules";
 import { resolveRecurringDay } from "@spencare/domain-core";
 import { savingDatesForOccurrence } from "@spencare/domain-core";
@@ -649,6 +650,126 @@ async function runChecksForUser(
       checksRun++;
     } catch {
       notificationsFailed++;
+    }
+  }
+
+  // ---- Vehicle reminders ----
+  // Window: reminders due in the next 30 days, plus overdue up to 14 days.
+  const vehicleWindowAhead = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const vehicleWindowAgo = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dbV = serviceRoleSupabase as any;
+
+  const { data: vehicleReminders } = await dbV.from("vehicle_reminders")
+    .select("id, vehicle_id, reminder_type, title, due_date, source_type")
+    .eq("user_id", userId)
+    .eq("is_dismissed", false)
+    .eq("is_completed", false)
+    .not("due_date", "is", null)
+    .gte("due_date", vehicleWindowAgo)
+    .lte("due_date", vehicleWindowAhead)
+    .order("due_date", { ascending: true });
+
+  // Collect all vehicle IDs across date-based reminders (and potentially
+  // odometer-based ones fetched below). Fetch vehicle data once, filtering
+  // out archived vehicles so their reminders are silently skipped.
+  const dateReminderVehicleIds = (vehicleReminders as Array<{ vehicle_id: string }> | null)?.map((r) => r.vehicle_id) ?? [];
+
+  // ---- Odometer-based reminders ----
+  // Fetch separately: these have due_odometer set instead of due_date.
+  // We alert when km remaining falls within 2000km, or when overdue.
+  const { data: odometerReminders } = await dbV.from("vehicle_reminders")
+    .select("id, vehicle_id, reminder_type, title, due_odometer, source_type")
+    .eq("user_id", userId)
+    .eq("is_dismissed", false)
+    .eq("is_completed", false)
+    .not("due_odometer", "is", null);
+
+  const odomReminderVehicleIds = (odometerReminders as Array<{ vehicle_id: string }> | null)?.map((r) => r.vehicle_id) ?? [];
+
+  // Fetch vehicles for all reminder types in one query, including status and
+  // current_odometer so we can filter archived vehicles and compute km remaining.
+  const allVehicleIds = [...new Set([...dateReminderVehicleIds, ...odomReminderVehicleIds])];
+
+  const vehicleNameMap: Record<string, string> = {};
+  const vehicleOdometerMap: Record<string, number> = {};
+
+  if (allVehicleIds.length > 0) {
+    const { data: vehicles } = await dbV.from("vehicles")
+      .select("id, name, status, current_odometer")
+      .in("id", allVehicleIds);
+    for (const v of (vehicles ?? []) as Array<{ id: string; name: string; status: string; current_odometer: number | null }>) {
+      if (v.status === "archived") continue;
+      vehicleNameMap[v.id] = v.name;
+      if (v.current_odometer != null) vehicleOdometerMap[v.id] = v.current_odometer;
+    }
+  }
+
+  // Process date-based reminders (skip archived vehicles).
+  if ((vehicleReminders as unknown[] | null)?.length) {
+    for (const reminder of (vehicleReminders ?? []) as Array<{
+      id: string; vehicle_id: string; reminder_type: string; title: string;
+      due_date: string; source_type: string | null;
+    }>) {
+      try {
+        if (!reminder.due_date) continue;
+        if (!(reminder.vehicle_id in vehicleNameMap)) continue; // archived vehicle
+        const dueDate = new Date(reminder.due_date + "T00:00:00Z");
+        const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const vehicleName = vehicleNameMap[reminder.vehicle_id];
+        await checkVehicleReminder({
+          serviceRoleSupabase,
+          userId,
+          userEmail,
+          reminderId: reminder.id,
+          vehicleId: reminder.vehicle_id,
+          vehicleName,
+          reminderType: reminder.reminder_type,
+          title: reminder.title,
+          dueDateIso: reminder.due_date,
+          daysUntilDue,
+          sourceType: reminder.source_type,
+        }, stats);
+        checksRun++;
+      } catch {
+        notificationsFailed++;
+      }
+    }
+  }
+
+  // Process odometer-based reminders.
+  // Only alert when within 2000km (or overdue). Skip if we do not have
+  // current_odometer data (vehicle never had a fuel entry).
+  if ((odometerReminders as unknown[] | null)?.length) {
+    for (const reminder of (odometerReminders ?? []) as Array<{
+      id: string; vehicle_id: string; reminder_type: string; title: string;
+      due_odometer: number; source_type: string | null;
+    }>) {
+      try {
+        if (!(reminder.vehicle_id in vehicleNameMap)) continue; // archived vehicle
+        const currentOdometer = vehicleOdometerMap[reminder.vehicle_id];
+        if (currentOdometer == null) continue; // no odometer data yet
+        // Both values are in tenths of km; convert difference to whole km.
+        const kmRemaining = Math.round((reminder.due_odometer - currentOdometer) / 10);
+        if (kmRemaining > 2000) continue; // not yet in alert window
+        const vehicleName = vehicleNameMap[reminder.vehicle_id];
+        await checkVehicleReminder({
+          serviceRoleSupabase,
+          userId,
+          userEmail,
+          reminderId: reminder.id,
+          vehicleId: reminder.vehicle_id,
+          vehicleName,
+          reminderType: reminder.reminder_type,
+          title: reminder.title,
+          kmRemaining,
+          sourceType: reminder.source_type,
+        }, stats);
+        checksRun++;
+      } catch {
+        notificationsFailed++;
+      }
     }
   }
 

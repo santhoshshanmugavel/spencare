@@ -379,3 +379,36 @@ describe("calculateSafeToSpend — card payment reserve (Phase 22)", () => {
     expect(typeof result.cardPaymentReservedTotal.amountMinorUnits).toBe("bigint");
   });
 });
+
+// ── Production-snapshot regression ────────────────────────────────────────────
+// Inputs captured from a live getSafeToSpend call; expected output verified by
+// hand-tracing calculateSafeToSpend line-by-line (see audit session 2026-10-10).
+//
+// Waterfall (budget_and_goals state):
+//   cashAfterReserves = 2,998,637 - 2,000,000 - 316,940 = 681,697
+//   budgetRemaining   = 8,137,600 - 7,786,112 = 351,488
+//   base              = MIN(351,488, 681,697)  = 351,488
+//   subtract bills    = 351,488 - 0            = 351,488
+//   subtract commits  = 351,488 - 195,834      = 155,654  ← expected Safe-to-Spend
+describe("calculateSafeToSpend — production snapshot (2026-10-10)", () => {
+  it("produces ₹1,556.54 (155,654 paise) given the live account snapshot", () => {
+    const result = calculateSafeToSpend({
+      cashBalances: [money(2_998_637)],
+      goalReservedTotal: money(2_000_000),
+      cardPaymentReservedTotal: money(316_940),
+      upcomingBillsTotal: money(0),
+      commitmentReservedTotal: money(195_834),
+      loanReservedTotal: money(0),
+      budget: { totalAmount: money(8_137_600), totalSpent: money(7_786_112) },
+      hasActiveGoals: true,
+      hasActiveBudget: true,
+    });
+
+    expect(result.state).toBe("budget_and_goals");
+    expect(result.amount.amountMinorUnits).toBe(155_654n);
+    expect(result.budgetRemaining?.amountMinorUnits).toBe(351_488n);
+    expect(result.goalReservedTotal.amountMinorUnits).toBe(2_000_000n);
+    expect(result.cardPaymentReservedTotal.amountMinorUnits).toBe(316_940n);
+    expect(result.commitmentReservedTotal.amountMinorUnits).toBe(195_834n);
+  });
+});
