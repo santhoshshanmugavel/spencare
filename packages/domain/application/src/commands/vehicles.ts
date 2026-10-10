@@ -15,6 +15,7 @@ import {
   upsertReminderForMaintenance,
   upsertReminderForDocument,
   updateVehicle as updateVehicleRowPatch,
+  updateVehicleCurrentOdometerIfHigher,
   type VehicleRow,
   type VehicleFuelEntryRow,
   type VehicleExpenseRow,
@@ -152,10 +153,12 @@ export const createFuelEntry: Command<CreateFuelEntryInput, VehicleFuelEntryRow>
     }
     try {
       const row = await createFuelEntryRow(ctx.supabase, ctx.userId, input);
-      // Keep vehicle's current_odometer up to date if this entry is higher.
-      await updateVehicleRowPatch(ctx.supabase, ctx.userId, input.vehicleId, {
-        currentOdometer: input.odometer,
-      }).catch(() => {
+      await updateVehicleCurrentOdometerIfHigher(
+        ctx.supabase,
+        ctx.userId,
+        input.vehicleId,
+        input.odometer,
+      ).catch(() => {
         // Non-fatal: odometer sync failure doesn't roll back the fuel entry.
       });
       return ok(row);

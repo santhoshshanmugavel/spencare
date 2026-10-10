@@ -16,6 +16,8 @@ import {
   deleteVehicleDocument,
   dismissVehicleReminder,
   createTransaction,
+  getVehicle,
+  getExistingImportGuids,
   type CreateVehicleInput,
   type UpdateVehicleInput,
   type CreateFuelEntryInput,
@@ -149,7 +151,11 @@ export interface BulkImportFuelEntry {
   isFullTank: boolean;
   isMissed: boolean;
   importGuid: string;
+  stationName?: string | null;
+  notes?: string | null;
 }
+
+const MAX_IMPORT_BATCH = 500;
 
 export async function bulkImportFuelEntriesAction(
   vehicleId: string,
@@ -157,6 +163,13 @@ export async function bulkImportFuelEntriesAction(
 ) {
   const ctx = await getAuthContext();
   if (!ctx) return { ok: false as const, error: { code: "unauthenticated", message: "Not signed in." } };
+
+  if (entries.length > MAX_IMPORT_BATCH) {
+    return { ok: false as const, error: { code: "batch_too_large", message: `Import is limited to ${MAX_IMPORT_BATCH} rows per batch.` } };
+  }
+
+  const vehicle = await getVehicle(ctx, vehicleId);
+  if (!vehicle) return { ok: false as const, error: { code: "not_found", message: "Vehicle not found." } };
 
   const results = { imported: 0, skipped: 0, errors: 0 };
   for (const e of entries) {
@@ -465,4 +478,62 @@ export async function linkVehicleExpenseToTransactionAction(
   revalidatePath(`/vehicles/${vehicleId}`);
   revalidatePath("/cash-flow");
   return { ok: true as const, value: { expenseId, transactionId } };
+}
+
+export async function bulkImportGenericFuelEntriesAction(
+  vehicleId: string,
+  entries: BulkImportFuelEntry[],
+) {
+  const ctx = await getAuthContext();
+  if (!ctx) return { ok: false as const, error: { code: "unauthenticated", message: "Not signed in." } };
+
+  if (entries.length > MAX_IMPORT_BATCH) {
+    return { ok: false as const, error: { code: "batch_too_large", message: `Import is limited to ${MAX_IMPORT_BATCH} rows per batch.` } };
+  }
+
+  const vehicle = await getVehicle(ctx, vehicleId);
+  if (!vehicle) return { ok: false as const, error: { code: "not_found", message: "Vehicle not found." } };
+
+  const results = { imported: 0, skipped: 0, errors: 0 };
+  const possibleDuplicates: Array<{ occurredAt: string; odometer: number; fuelQuantityMl: number }> = [];
+  for (const e of entries) {
+    const result = await createFuelEntry.execute(ctx, {
+      vehicleId,
+      occurredAt: e.occurredAt,
+      odometer: e.odometer,
+      fuelQuantityMl: e.fuelQuantityMl,
+      totalCostMinor: e.totalCostMinor,
+      currency: e.currency,
+      fuelType: e.fuelType,
+      isFullTank: e.isFullTank,
+      isMissed: e.isMissed,
+      importSource: "generic_csv",
+      importGuid: e.importGuid,
+    });
+    if (result.ok) {
+      results.imported++;
+    } else if (result.error.code === "create_failed") {
+      results.skipped++;
+      possibleDuplicates.push({ occurredAt: e.occurredAt, odometer: e.odometer, fuelQuantityMl: e.fuelQuantityMl });
+    } else {
+      results.errors++;
+    }
+  }
+  revalidatePath(`/vehicles/${vehicleId}`);
+  return { ok: true as const, value: { ...results, possibleDuplicates } };
+}
+
+export async function checkImportDuplicatesAction(
+  vehicleId: string,
+  source: string,
+  guids: string[],
+): Promise<{ ok: true; value: string[] } | { ok: false; error: { code: string; message: string } }> {
+  const ctx = await getAuthContext();
+  if (!ctx) return { ok: false as const, error: { code: "unauthenticated", message: "Not signed in." } };
+  try {
+    const existing = await getExistingImportGuids(ctx, vehicleId, source, guids);
+    return { ok: true as const, value: existing };
+  } catch (e) {
+    return { ok: false as const, error: { code: "query_failed", message: e instanceof Error ? e.message : "Failed to check duplicates." } };
+  }
 }

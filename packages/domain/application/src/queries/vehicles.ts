@@ -7,6 +7,7 @@ import {
   listMaintenanceRecords as listMaintenanceRecordsRow,
   listVehicleDocuments as listVehicleDocumentsRow,
   listVehicleReminders as listVehicleRemindersRow,
+  getExistingImportGuids as getExistingImportGuidsRow,
   type ListFuelEntriesOptions,
   type VehicleRow,
   type VehicleFuelEntryRow,
@@ -83,6 +84,15 @@ export async function listVehicleReminders(
   includeDismissed = false,
 ): Promise<VehicleReminderRow[]> {
   return listVehicleRemindersRow(ctx.supabase, ctx.userId, vehicleId, includeDismissed);
+}
+
+export async function getExistingImportGuids(
+  ctx: AuthContext,
+  vehicleId: string,
+  source: string,
+  guids: string[],
+): Promise<string[]> {
+  return getExistingImportGuidsRow(ctx.supabase, ctx.userId, vehicleId, source, guids);
 }
 
 // ============================================================

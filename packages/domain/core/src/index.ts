@@ -232,6 +232,16 @@ export {
   parseFuelioCurrencyMinor,
   formatOdometer,
   formatFuelLitres,
+  parseGenericCSV,
+  suggestColumnMapping,
+  validateGenericRow,
+  hasAmbiguousDates,
+  type GenericCsvParseResult,
+  type GenericCsvField,
+  type GenericCsvColumnMap,
+  type ValidatedGenericRow,
+  type InvalidGenericRow,
+  type GenericRowResult,
 } from "./vehicles.js";
 
 export {

@@ -330,6 +330,20 @@ export async function updateVehicle(
   return data as VehicleRow;
 }
 
+export async function updateVehicleCurrentOdometerIfHigher(
+  client: TypedSupabaseClient,
+  userId: string,
+  vehicleId: string,
+  newOdometer: number,
+): Promise<void> {
+  await db(client)
+    .from("vehicles")
+    .update({ current_odometer: newOdometer })
+    .eq("user_id", userId)
+    .eq("id", vehicleId)
+    .lt("current_odometer", newOdometer);
+}
+
 export async function deleteVehicle(
   client: TypedSupabaseClient,
   userId: string,
@@ -373,6 +387,27 @@ export async function listFuelEntries(
   const { data, error } = await query;
   if (error) throw new Error(`listFuelEntries: ${error.message}`);
   return (data ?? []) as VehicleFuelEntryRow[];
+}
+
+export async function getExistingImportGuids(
+  client: TypedSupabaseClient,
+  userId: string,
+  vehicleId: string,
+  source: string,
+  guids: string[],
+): Promise<string[]> {
+  if (guids.length === 0) return [];
+  const { data, error } = await db(client)
+    .from("vehicle_fuel_entries")
+    .select("import_guid")
+    .eq("user_id", userId)
+    .eq("vehicle_id", vehicleId)
+    .eq("import_source", source)
+    .in("import_guid", guids);
+  if (error) throw new Error(`getExistingImportGuids: ${error.message}`);
+  return (data ?? [])
+    .map((r: { import_guid: string | null }) => r.import_guid)
+    .filter((g: string | null): g is string => g !== null);
 }
 
 export async function getFuelEntry(

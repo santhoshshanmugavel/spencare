@@ -719,6 +719,375 @@ export function formatFuelLitres(ml: bigint): string {
 }
 
 // ============================================================
+// Generic CSV import
+// ============================================================
+
+/**
+ * Result of parsing a flat (non-Fuelio) CSV file.
+ * isFuelio is true when Fuelio section markers are detected; callers should
+ * redirect to the Fuelio import flow in that case.
+ */
+export interface GenericCsvParseResult {
+  headers: string[];
+  /** Raw rows as arrays of strings (one element per column). */
+  rows: string[][];
+  isFuelio: boolean;
+}
+
+/**
+ * Parse a flat CSV file, stripping a UTF-8 BOM if present.
+ * Returns null when the file is empty or has only one non-empty line.
+ */
+export function parseGenericCSV(content: string): GenericCsvParseResult | null {
+  const raw = content.startsWith("﻿") ? content.slice(1) : content;
+  const lines = raw.split(/\r?\n/);
+  const isFuelio = lines.some((l) => l.trim() === "## Vehicle" || l.trim() === "## Log");
+  const nonEmpty = lines.filter((l) => l.trim() !== "");
+  if (nonEmpty.length < 2) return null;
+  const firstLine = nonEmpty[0];
+  if (firstLine === undefined) return null;
+  const headers = parseCsvLine(firstLine).map((h) => h.trim());
+  if (headers.length === 0) return null;
+  const rows = nonEmpty.slice(1).map(parseCsvLine);
+  return { headers, rows, isFuelio };
+}
+
+/**
+ * Domain fields that a generic CSV column may be mapped to.
+ * "ignore" means the column is present but should not be imported.
+ */
+export type GenericCsvField =
+  | "date"
+  | "odometer"
+  | "fuelQuantity"
+  | "totalCost"
+  | "currency"
+  | "fuelType"
+  | "isFullTank"
+  | "isMissed"
+  | "stationName"
+  | "notes"
+  | "ignore";
+
+/** Maps column index to the domain field it should populate. */
+export type GenericCsvColumnMap = Record<number, GenericCsvField>;
+
+/**
+ * Return a best-effort initial mapping from column indices to domain fields
+ * based on header names. All results are suggestions; the user must confirm.
+ */
+export function suggestColumnMapping(headers: string[]): GenericCsvColumnMap {
+  const map: GenericCsvColumnMap = {};
+  const used = new Set<GenericCsvField>();
+
+  const matchers: [GenericCsvField, string[]][] = [
+    ["date", ["date", "datetime", "time", "filled", "fill date", "tanken", "datum", "tanked on"]],
+    ["odometer", ["odometer", "odo", "mileage", "km reading", "mile", "reading", "kilometre", "kilometer", "kms"]],
+    ["fuelQuantity", ["qty", "quantity", "litres", "liters", "gallons", "volume", "fuel (", "fuel qty", "ml", "liter"]],
+    ["totalCost", ["total cost", "total price", "cost", "price", "amount paid", "total", "spending", "paid", "charge"]],
+    ["isFullTank", ["full tank", "full fill", "complete fill", "topped", "full up", "full,"]],
+    ["stationName", ["station", "petrol station", "gas station", "location", "place", "pump", "brand"]],
+    ["notes", ["notes", "remarks", "comments", "note", "memo"]],
+    ["fuelType", ["fuel type", "fueltype", "type", "grade", "fuel grade"]],
+    ["currency", ["currency", " cur ", "curr", "ccy", "iso"]],
+    ["isMissed", ["missed", "skip", "incomplete"]],
+  ];
+
+  for (let i = 0; i < headers.length; i++) {
+    const h = (headers[i] ?? "").toLowerCase().trim();
+    let found: GenericCsvField = "ignore";
+    for (const [field, terms] of matchers) {
+      if (!used.has(field) && terms.some((t) => h.includes(t))) {
+        found = field;
+        used.add(field);
+        break;
+      }
+    }
+    map[i] = found;
+  }
+  return map;
+}
+
+export interface ValidatedGenericRow {
+  valid: true;
+  occurredAt: string;
+  /** Odometer in tenths of unit (x10). */
+  odometerDkm: bigint;
+  fuelQuantityMl: bigint;
+  totalCostMinor: bigint | null;
+  currency: string;
+  fuelType: string;
+  isFullTank: boolean;
+  isMissed: boolean;
+  stationName: string | null;
+  notes: string | null;
+  /** Deterministic key for duplicate detection. */
+  importGuid: string;
+  sourceRow: number;
+}
+
+export interface InvalidGenericRow {
+  valid: false;
+  sourceRow: number;
+  errors: string[];
+}
+
+export type GenericRowResult = ValidatedGenericRow | InvalidGenericRow;
+
+/**
+ * Validate a single raw CSV row against the provided column mapping.
+ * sourceRow is the 1-based display row number (2 = first data row).
+ */
+export function validateGenericRow(
+  row: string[],
+  map: GenericCsvColumnMap,
+  sourceRow: number,
+  defaultCurrency: string,
+  fuelUnit: "litre" | "gallon_us" | "gallon_uk",
+  dateFormat: "dmy" | "mdy" = "dmy",
+): GenericRowResult {
+  const errors: string[] = [];
+
+  const get = (field: GenericCsvField): string => {
+    for (const [idx, f] of Object.entries(map)) {
+      if (f === field) return (row[Number(idx)] ?? "").trim();
+    }
+    return "";
+  };
+
+  // Date (required)
+  const dateRaw = get("date");
+  const occurredAt = parseDateString(dateRaw, dateFormat);
+  if (!occurredAt) {
+    errors.push(
+      dateRaw
+        ? `"${dateRaw}" is not a recognised date. Use YYYY-MM-DD or DD/MM/YYYY.`
+        : "Date is required.",
+    );
+  }
+
+  // Odometer (required)
+  const odoRaw = get("odometer");
+  let odometerDkm: bigint | null = null;
+  if (odoRaw) {
+    try { odometerDkm = parseFuelioOdometer(odoRaw); } catch { odometerDkm = null; }
+  }
+  if (odometerDkm === null || odometerDkm < 0n) {
+    errors.push(odoRaw ? `"${odoRaw}" is not a valid odometer reading.` : "Odometer is required.");
+  }
+
+  // Fuel quantity (required by schema)
+  const fuelRaw = get("fuelQuantity");
+  let fuelQuantityMl: bigint | null = null;
+  if (!fuelRaw) {
+    errors.push("Fuel quantity is required. Map a column to Fuel quantity.");
+  } else {
+    fuelQuantityMl = parseDecimalScaled(fuelRaw, fuelUnitToMlMultiplier(fuelUnit));
+    if (fuelQuantityMl === null || fuelQuantityMl <= 0n) {
+      errors.push(`"${fuelRaw}" is not a valid fuel quantity.`);
+      fuelQuantityMl = null;
+    }
+  }
+
+  // Total cost (optional)
+  const costRaw = get("totalCost");
+  let totalCostMinor: bigint | null = null;
+  if (costRaw) {
+    try {
+      const parsed = parseFuelioCurrencyMinor(costRaw);
+      if (parsed !== null && parsed > 0n) totalCostMinor = parsed;
+    } catch { totalCostMinor = null; }
+  }
+
+  // Currency (optional, default from vehicle)
+  const currencyRaw = get("currency").toUpperCase();
+  const currency = currencyRaw || defaultCurrency;
+
+  // Fuel type (optional)
+  const fuelTypeRaw = get("fuelType");
+  const fuelType = normalizeFuelTypeName(fuelTypeRaw) || "petrol";
+
+  // Full tank (optional, default false)
+  const isFullTank = parseBooleanToken(get("isFullTank"));
+
+  // Missed (optional, default false)
+  const isMissed = parseBooleanToken(get("isMissed"));
+
+  // Station name (optional)
+  const stationName = get("stationName") || null;
+
+  // Notes (optional)
+  const notes = get("notes") || null;
+
+  if (errors.length > 0) return { valid: false, sourceRow, errors };
+
+  const importGuid =
+    `${occurredAt}|${odometerDkm!.toString()}|${fuelQuantityMl!.toString()}`;
+
+  return {
+    valid: true,
+    occurredAt: occurredAt!,
+    odometerDkm: odometerDkm!,
+    fuelQuantityMl: fuelQuantityMl!,
+    totalCostMinor,
+    currency,
+    fuelType,
+    isFullTank,
+    isMissed,
+    stationName,
+    notes,
+    importGuid,
+    sourceRow,
+  };
+}
+
+// ============================================================
+// Generic CSV parse helpers
+// ============================================================
+
+function fuelUnitToMlMultiplier(unit: "litre" | "gallon_us" | "gallon_uk"): bigint {
+  if (unit === "gallon_us") return 3785n;
+  if (unit === "gallon_uk") return 4546n;
+  return 1000n; // litres
+}
+
+/**
+ * Parse a decimal string and multiply by an integer multiplier, dividing by
+ * 1000 to apply the decimal portion.
+ * "10.08" with multiplier 1000 -> 10080n (millilitres from litres).
+ * "3.5" with multiplier 3785 -> 13247n (mL from US gallons, integer arithmetic).
+ * Returns null if the string is empty or cannot be parsed.
+ */
+function parseDecimalScaled(raw: string, multiplier: bigint): bigint | null {
+  if (!raw.trim()) return null;
+  const parts = raw.trim().replace(/,/g, "").split(".");
+  const intStr = parts[0] ?? "0";
+  const fracStr = parts[1] ?? "";
+  try {
+    const intVal = BigInt(intStr);
+    const frac3 = fracStr.padEnd(3, "0").slice(0, 3);
+    const fracVal = BigInt(frac3);
+    return (intVal * 1000n + fracVal) * multiplier / 1000n;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse a date string in several common formats. Returns ISO YYYY-MM-DD or null.
+ * ISO and named-month formats are always unambiguous.
+ * For numeric two-part dates where both parts are <= 12, dateFormat selects the
+ * interpretation: "dmy" (default) = DD/MM/YYYY, "mdy" = MM/DD/YYYY.
+ */
+function parseDateString(raw: string, dateFormat: "dmy" | "mdy" = "dmy"): string | null {
+  if (!raw.trim()) return null;
+  const s = raw.trim();
+
+  // ISO: YYYY-MM-DD or YYYY/MM/DD
+  const iso = s.match(/^(\d{4})[-\/](\d{2})[-\/](\d{2})/);
+  if (iso) {
+    const [, y, m, d] = iso;
+    if (isValidDate(Number(y), Number(m), Number(d))) return `${y}-${m}-${d}`;
+  }
+
+  // Numeric two-part: handles DD/MM/YYYY, MM/DD/YYYY, and the ambiguous overlap
+  const num = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (num) {
+    const first = num[1] ?? "";
+    const second = num[2] ?? "";
+    const y = num[3] ?? "";
+    const fv = Number(first);
+    const sv = Number(second);
+    if (sv > 12 && fv <= 12) {
+      // Second part > 12: unambiguously the day; first part is the month (MM/DD)
+      const pm = first.padStart(2, "0");
+      const pd = second.padStart(2, "0");
+      if (isValidDate(Number(y), fv, sv)) return `${y}-${pm}-${pd}`;
+    } else if (fv > 12 && sv <= 12) {
+      // First part > 12: unambiguously the day; second part is the month (DD/MM)
+      const pd = first.padStart(2, "0");
+      const pm = second.padStart(2, "0");
+      if (isValidDate(Number(y), sv, fv)) return `${y}-${pm}-${pd}`;
+    } else if (dateFormat === "mdy") {
+      // Both <= 12: explicit MM/DD format -- first=month, second=day
+      const pm = first.padStart(2, "0");
+      const pd = second.padStart(2, "0");
+      if (isValidDate(Number(y), fv, sv)) return `${y}-${pm}-${pd}`;
+    } else {
+      // Both <= 12: explicit DD/MM format (default) -- first=day, second=month
+      const pd = first.padStart(2, "0");
+      const pm = second.padStart(2, "0");
+      if (isValidDate(Number(y), sv, fv)) return `${y}-${pm}-${pd}`;
+    }
+  }
+
+  // "D MMM YYYY" or "DD MMM YYYY"
+  const months: Record<string, string> = {
+    jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+    jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+  };
+  const named = s.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+  if (named) {
+    const [, d, mon, y] = named;
+    const m = months[(mon ?? "").toLowerCase()];
+    if (m) {
+      const pd = (Number(d)).toString().padStart(2, "0");
+      if (isValidDate(Number(y), Number(m), Number(d))) return `${y}-${m}-${pd}`;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Returns true if any date cell in the mapped rows contains a numeric date
+ * where both the first and second parts are <= 12, making the DD/MM vs MM/DD
+ * interpretation ambiguous.
+ */
+export function hasAmbiguousDates(rows: string[][], map: GenericCsvColumnMap): boolean {
+  const dateColIdx = Object.entries(map).find(([, f]) => f === "date")?.[0];
+  if (dateColIdx === undefined) return false;
+  const idx = Number(dateColIdx);
+  for (const row of rows) {
+    const raw = (row[idx] ?? "").trim();
+    if (!raw) continue;
+    // Skip ISO (YYYY-...) and named-month formats
+    if (/^\d{4}[-\/]/.test(raw)) continue;
+    if (/\d\s+[A-Za-z]{3}\s+\d{4}/.test(raw)) continue;
+    const m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-]\d{4}/);
+    if (m) {
+      const fv = Number(m[1]);
+      const sv = Number(m[2]);
+      if (fv <= 12 && sv <= 12) return true;
+    }
+  }
+  return false;
+}
+
+function isValidDate(y: number, m: number, d: number): boolean {
+  if (y < 1900 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+
+function parseBooleanToken(raw: string): boolean {
+  const s = raw.trim().toLowerCase();
+  return s === "1" || s === "yes" || s === "true" || s === "y" || s === "full" || s === "x";
+}
+
+function normalizeFuelTypeName(raw: string): FuelEntryFuelType | "" {
+  const s = raw.toLowerCase().trim();
+  if (!s) return "";
+  if (s.includes("premium") || s.includes("super")) return "petrol_premium";
+  if (s.includes("petrol") || s.includes("gasoline") || s.includes("unleaded") || s.includes("ron")) return "petrol";
+  if (s.includes("diesel") || s.includes("hsd")) return "diesel";
+  if (s.includes("cng") || s.includes("compressed natural")) return "cng";
+  if (s.includes("lpg") || s.includes("autogas")) return "lpg";
+  if (s.includes("electric") || s.includes(" ev") || s.includes("kwh")) return "electric";
+  return "";
+}
+
+// ============================================================
 // Private parse utilities
 // ============================================================
 

@@ -594,6 +594,7 @@ export {
   listVehicleDocuments,
   listVehicleReminders,
   getVehicleDashboard,
+  getExistingImportGuids,
   type VehicleRow,
   type VehicleFuelEntryRow,
   type VehicleExpenseRow,

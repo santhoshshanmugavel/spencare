@@ -9,12 +9,14 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { getProfile, getProfileForDisplay } from "@spencare/domain-application";
 import { FuelioImport } from "./fuelio-import";
+import { GenericImport } from "./generic-import";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
-export default async function FuelioImportPage({ params }: Props) {
+export default async function FuelImportPage({ params }: Props) {
   const { id } = await params;
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -51,8 +53,23 @@ export default async function FuelioImportPage({ params }: Props) {
         />
       }
     >
-      <div className="mx-auto max-w-2xl py-8">
-        <FuelioImport vehicle={vehicle} />
+      <div className="mx-auto max-w-2xl py-8 space-y-4">
+        <div>
+          <h1 className="text-xl font-semibold">Import fuel log</h1>
+          <p className="text-sm text-muted-foreground mt-1">{vehicle.name}</p>
+        </div>
+        <Tabs defaultValue="generic">
+          <TabsList>
+            <TabsTrigger value="generic">Generic CSV</TabsTrigger>
+            <TabsTrigger value="fuelio">Fuelio</TabsTrigger>
+          </TabsList>
+          <TabsContent value="generic" className="mt-4">
+            <GenericImport vehicle={vehicle} />
+          </TabsContent>
+          <TabsContent value="fuelio" className="mt-4">
+            <FuelioImport vehicle={vehicle} />
+          </TabsContent>
+        </Tabs>
       </div>
     </AppShell>
   );
