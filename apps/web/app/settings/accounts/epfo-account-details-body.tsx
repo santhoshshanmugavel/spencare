@@ -6,8 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   addEpfoEmploymentSchema,
   upsertEpfoContributionProfileSchema,
+  recordEpfoContributionSchema,
+  correctEpfoBalanceSchema,
   type AddEpfoEmploymentInput,
   type UpsertEpfoContributionProfileInput,
+  type RecordEpfoContributionInput,
+  type CorrectEpfoBalanceInput,
 } from "@spencare/validation";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import { Money } from "@/components/spencare/money";
@@ -24,6 +28,8 @@ import {
   addEpfoEmploymentAction,
   endEpfoEmploymentAction,
   upsertEpfoContributionProfileAction,
+  recordEpfoContributionAction,
+  correctEpfoBalanceAction,
 } from "./actions";
 
 /**
@@ -61,6 +67,9 @@ export function EpfoAccountDetailsBody({
   const [error, setError] = useState<string | null>(null);
   const [showAddEmployment, setShowAddEmployment] = useState(false);
   const [editingProfileKind, setEditingProfileKind] = useState<"employee_epf" | "employer_epf" | "eps" | null>(null);
+
+  const [showRecordContribution, setShowRecordContribution] = useState(false);
+  const [showCorrectBalance, setShowCorrectBalance] = useState(false);
 
   const [isPending, startTransition] = useTransition();
 
@@ -130,6 +139,16 @@ export function EpfoAccountDetailsBody({
         </div>
       </section>
 
+      {/* --- This month contributions ----------------------------- */}
+      {overview.currentPeriod.summary.anyEvents ? (
+        <section aria-label="This month's contributions">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            This month — {formatPeriodLabel(overview.currentPeriod.periodKey)}
+          </h3>
+          <ThisMonthSummary summary={overview.currentPeriod.summary} currency={currency} masked={masked} />
+        </section>
+      ) : null}
+
       {/* --- Component breakdown --------------------------------- */}
       <section aria-label="Balance components">
         <h3 className="mb-2 text-sm font-semibold text-foreground">Balance components</h3>
@@ -198,6 +217,33 @@ export function EpfoAccountDetailsBody({
               Add an active employment first so the profile can be scoped to it.
             </p>
           ) : null}
+        </div>
+      </section>
+
+      {/* --- Record contribution --------------------------------- */}
+      <section aria-label="Record contribution">
+        <div className="mb-2 flex items-end justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Record contribution</h3>
+          {!showRecordContribution && (
+            <Button size="sm" variant="outline" onClick={() => setShowRecordContribution(true)}>
+              Add entry
+            </Button>
+          )}
+        </div>
+        <div className="rounded-xl border bg-card">
+          {!showRecordContribution ? (
+            <p className="p-4 text-sm text-muted-foreground">
+              Record an actual contribution to track what EPFO received this period.
+            </p>
+          ) : (
+            <RecordContributionForm
+              accountId={accountId}
+              employmentId={overview.employments.find((e) => e.is_active)?.id ?? null}
+              currency={currency}
+              onClose={() => setShowRecordContribution(false)}
+              onSaved={() => { setShowRecordContribution(false); void refresh(); }}
+            />
+          )}
         </div>
       </section>
 
@@ -296,6 +342,33 @@ export function EpfoAccountDetailsBody({
                 );
               })}
             </ul>
+          )}
+        </div>
+      </section>
+      {/* --- Correct balance ------------------------------------- */}
+      <section aria-label="Correct balance">
+        <div className="mb-2 flex items-end justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Correct balance</h3>
+          {!showCorrectBalance && (
+            <Button size="sm" variant="outline" onClick={() => setShowCorrectBalance(true)}>
+              Adjust
+            </Button>
+          )}
+        </div>
+        <div className="rounded-xl border bg-card">
+          {!showCorrectBalance ? (
+            <p className="p-4 text-sm text-muted-foreground">
+              Write an adjustment entry when your EPFO records don't match.
+              This creates a new ledger entry — original entries are never edited.
+            </p>
+          ) : (
+            <CorrectBalanceForm
+              accountId={accountId}
+              currentTotalMinor={overview.balance.totalMinor}
+              currency={currency}
+              onClose={() => setShowCorrectBalance(false)}
+              onSaved={() => { setShowCorrectBalance(false); void refresh(); }}
+            />
           )}
         </div>
       </section>
@@ -627,6 +700,309 @@ function ContributionProfileForm({
 // Tiny clone of add-account-sheet's useMoneyField, kept local so EPFO
 // stays self-contained and does not import a React hook from a sibling
 // client component (which Next's bundler disallows).
+function formatPeriodLabel(periodKey: string): string {
+  const parts = periodKey.split("-").map(Number);
+  const year = parts[0]!;
+  const month = parts[1]!;
+  const d = new Date(Date.UTC(year, month - 1, 1));
+  return d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
+// ============================================================
+// This month summary
+// ============================================================
+
+type PeriodSummaryPayload = OverviewPayload["currentPeriod"]["summary"];
+
+const STATUS_DISPLAY: Record<string, { label: string; className: string }> = {
+  EXPECTED: { label: "Expected", className: "text-muted-foreground" },
+  RECONCILIATION_PENDING: { label: "Pending", className: "text-amber-600 dark:text-amber-400" },
+  MATCHED: { label: "Matched", className: "text-success" },
+  MISMATCH: { label: "Mismatch", className: "text-destructive" },
+};
+
+function ThisMonthSummary({ summary, currency, masked }: { summary: PeriodSummaryPayload; currency: string; masked: boolean }) {
+  const KINDS = [
+    { key: "employee_epf" as const, label: "Employee EPF" },
+    { key: "employer_epf" as const, label: "Employer EPF" },
+    { key: "eps" as const, label: "EPS" },
+  ];
+  return (
+    <div className="divide-y divide-border rounded-xl border bg-card">
+      {KINDS.map(({ key, label }) => {
+        const data = summary.byKind[key];
+        if (!data) return null;
+        const expected = DomainMoney.fromMinorUnits(BigInt(data.expectedMinor), currency);
+        const actual = data.hasActual ? DomainMoney.fromMinorUnits(BigInt(data.actualMinor), currency) : null;
+        const st = STATUS_DISPLAY[data.status] ?? STATUS_DISPLAY.EXPECTED!;
+        return (
+          <div key={key} className="px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">{label}</span>
+              <span className={`text-xs font-medium ${st.className}`}>{st.label}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                Expected: <Money value={expected} masked={masked} size="numeric" />
+              </span>
+              {actual != null ? (
+                <span>
+                  Recorded: <Money value={actual} masked={masked} size="numeric" />
+                </span>
+              ) : (
+                <span className="italic">Not yet recorded</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================
+// Record contribution form
+// ============================================================
+
+function RecordContributionForm({
+  accountId,
+  employmentId,
+  currency,
+  onClose,
+  onSaved,
+}: {
+  accountId: string;
+  employmentId: string | null;
+  currency: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const {
+    register,
+    handleSubmit,
+    control,
+    formState: { errors, isSubmitting },
+  } = useForm<RecordEpfoContributionInput>({
+    resolver: zodResolver(recordEpfoContributionSchema),
+    defaultValues: {
+      accountId,
+      employmentId,
+      kind: "employee_epf",
+      amountMinor: 0,
+      occurredAt: new Date().toISOString(),
+      description: "",
+      externalReference: "",
+    },
+  });
+
+  const amountField = useMoneyField("", currency);
+
+  async function onSubmit(data: RecordEpfoContributionInput) {
+    const result = await recordEpfoContributionAction({
+      ...data,
+      description: data.description?.trim() || null,
+      externalReference: data.externalReference?.trim() || null,
+    });
+    if (!result.ok) {
+      toastError(result.error.message);
+      return;
+    }
+    toastConfirmed("Contribution recorded.");
+    onSaved();
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-3 p-4">
+      <input type="hidden" {...register("accountId")} />
+      <input type="hidden" {...register("employmentId")} />
+      <FormField id="rec-kind" label="Type" error={errors.kind?.message}>
+        <Controller
+          control={control}
+          name="kind"
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger id="rec-kind"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="employee_epf">Employee EPF</SelectItem>
+                <SelectItem value="employer_epf">Employer EPF</SelectItem>
+                <SelectItem value="eps">EPS</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
+      </FormField>
+      <FormField id="rec-amount" label="Amount" error={(errors as Record<string, { message?: string }>).amountMinor?.message}>
+        <Controller
+          control={control}
+          name="amountMinor"
+          render={({ field }) => (
+            <Input
+              id="rec-amount"
+              inputMode="decimal"
+              placeholder="1800"
+              value={amountField.display}
+              onChange={(e) => amountField.onChange(e.target.value, field.onChange)}
+            />
+          )}
+        />
+      </FormField>
+      <FormField id="rec-date" label="Date" error={errors.occurredAt?.message}>
+        <Input
+          id="rec-date"
+          type="date"
+          defaultValue={new Date().toISOString().slice(0, 10)}
+          {...register("occurredAt", {
+            setValueAs: (v: string) => (v ? new Date(v + "T00:00:00").toISOString() : v),
+          })}
+        />
+      </FormField>
+      <FormField id="rec-desc" label="Description (optional)" error={errors.description?.message}>
+        <Input id="rec-desc" placeholder="Monthly EPF credit" {...register("description")} />
+      </FormField>
+      <FormField id="rec-ref" label="Reference number (optional)" error={errors.externalReference?.message}>
+        <Input id="rec-ref" placeholder="EPFO transaction ref" {...register("externalReference")} />
+      </FormField>
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={isSubmitting}>
+          {isSubmitting ? "Saving…" : "Record contribution"}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+      </div>
+    </form>
+  );
+}
+
+// ============================================================
+// Correct balance form
+// ============================================================
+
+function CorrectBalanceForm({
+  accountId,
+  currentTotalMinor,
+  currency,
+  onClose,
+  onSaved,
+}: {
+  accountId: string;
+  currentTotalMinor: string;
+  currency: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [direction, setDirection] = useState<"add" | "reduce">("add");
+  const [deltaMinorAbs, setDeltaMinorAbs] = useState(0);
+  const amountField = useMoneyField("", currency);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<CorrectEpfoBalanceInput>({
+    resolver: zodResolver(correctEpfoBalanceSchema),
+    defaultValues: {
+      accountId,
+      deltaMinor: 0,
+      reason: "",
+      occurredAt: new Date().toISOString(),
+    },
+  });
+
+  const currentMinor = BigInt(currentTotalMinor);
+  const signedDelta = direction === "add" ? deltaMinorAbs : -deltaMinorAbs;
+  const newMinor = currentMinor + BigInt(signedDelta);
+  const currentMoney = DomainMoney.fromMinorUnits(currentMinor, currency);
+  const newMoney = DomainMoney.fromMinorUnits(newMinor, currency);
+
+  function handleAmountChange(raw: string) {
+    amountField.onChange(raw, (minor: number) => {
+      setDeltaMinorAbs(minor);
+      setValue("deltaMinor", direction === "add" ? minor : -minor);
+    });
+  }
+
+  function handleDirectionChange(dir: "add" | "reduce") {
+    setDirection(dir);
+    setValue("deltaMinor", dir === "add" ? deltaMinorAbs : -deltaMinorAbs);
+  }
+
+  async function onSubmit(data: CorrectEpfoBalanceInput) {
+    const result = await correctEpfoBalanceAction(data);
+    if (!result.ok) {
+      toastError(result.error.message);
+      return;
+    }
+    toastConfirmed("Balance corrected.");
+    onSaved();
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-3 p-4">
+      <input type="hidden" {...register("accountId")} />
+      <div className="rounded-lg bg-muted/50 p-3 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Current balance</span>
+          <Money value={currentMoney} masked={false} size="numeric" />
+        </div>
+        {deltaMinorAbs > 0 && (
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-muted-foreground">After adjustment</span>
+            <span className={newMinor >= 0n ? "" : "text-destructive"}>
+              <Money value={newMoney} masked={false} size="numeric" />
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <FormField id="corr-dir" label="Direction">
+          <Select value={direction} onValueChange={(v) => handleDirectionChange(v as "add" | "reduce")}>
+            <SelectTrigger id="corr-dir"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="add">Add to balance</SelectItem>
+              <SelectItem value="reduce">Reduce balance</SelectItem>
+            </SelectContent>
+          </Select>
+        </FormField>
+        <FormField id="corr-amount" label="Amount">
+          <Input
+            id="corr-amount"
+            inputMode="decimal"
+            placeholder="500"
+            value={amountField.display}
+            onChange={(e) => handleAmountChange(e.target.value)}
+          />
+        </FormField>
+      </div>
+      <FormField id="corr-reason" label="Reason" error={errors.reason?.message}>
+        <Textarea
+          id="corr-reason"
+          rows={2}
+          placeholder="e.g. Passbook sync correction, ₹500 credit missed in import"
+          {...register("reason")}
+          aria-invalid={!!errors.reason}
+          aria-describedby={errors.reason ? errorId("corr-reason") : undefined}
+        />
+      </FormField>
+      <FormField id="corr-date" label="Date" error={errors.occurredAt?.message}>
+        <Input
+          id="corr-date"
+          type="date"
+          defaultValue={new Date().toISOString().slice(0, 10)}
+          {...register("occurredAt", {
+            setValueAs: (v: string) => (v ? new Date(v + "T00:00:00").toISOString() : v),
+          })}
+        />
+      </FormField>
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={isSubmitting || deltaMinorAbs === 0}>
+          {isSubmitting ? "Saving…" : "Apply correction"}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+      </div>
+    </form>
+  );
+}
+
 function useMoneyField(initial = "", currency = "INR") {
   const [display, setDisplay] = useState(initial);
   function onChange(raw: string, set: (minor: number) => void) {

@@ -70,3 +70,24 @@ export const upsertEpfoContributionProfileSchema = z.discriminatedUnion("mode", 
   contributionBase.extend({ mode: z.literal("none") }),
 ]);
 export type UpsertEpfoContributionProfileInput = z.infer<typeof upsertEpfoContributionProfileSchema>;
+
+export const recordEpfoContributionSchema = z.object({
+  accountId: z.string().uuid(),
+  employmentId: z.string().uuid().nullable().optional(),
+  kind: z.enum(["employee_epf", "employer_epf", "eps"]),
+  // Positive integer minor units; the RPC enforces > 0 too.
+  amountMinor: z.number().int().positive("Amount must be positive."),
+  occurredAt: isoTimestampSchema,
+  description: z.string().trim().max(500, "Description is too long.").nullable().optional(),
+  externalReference: z.string().trim().max(200, "External reference is too long.").nullable().optional(),
+});
+export type RecordEpfoContributionInput = z.infer<typeof recordEpfoContributionSchema>;
+
+export const correctEpfoBalanceSchema = z.object({
+  accountId: z.string().uuid(),
+  // Signed delta; may be positive or negative, never zero.
+  deltaMinor: z.number().int().refine((v) => v !== 0, "Enter a non-zero adjustment amount."),
+  reason: z.string().trim().min(1, "Enter a reason.").max(500, "Reason is too long."),
+  occurredAt: isoTimestampSchema,
+});
+export type CorrectEpfoBalanceInput = z.infer<typeof correctEpfoBalanceSchema>;

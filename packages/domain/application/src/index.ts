@@ -37,6 +37,8 @@ export {
   addEpfoEmployment,
   endEpfoEmployment,
   upsertEpfoContributionProfile,
+  recordEpfoContribution,
+  correctEpfoBalance,
 } from "./commands/epfo.js";
 
 export {

@@ -87,6 +87,7 @@ const baseProps = {
     goalContributionMinor: 0,
     loanInstallmentMinor: 0,
     creditCardPaymentDueMinor: 0,
+    epfoContributionMinor: 0,
     currency: "INR",
   } as UpcomingProjection,
   budgetUsages: [] as BudgetWithUsage[],
@@ -254,6 +255,7 @@ describe("<CashFlowOverview> — in-page tab switcher (Recent Transactions / Upc
           goalContributionMinor: 0,
           loanInstallmentMinor: 0,
           creditCardPaymentDueMinor: 0,
+    epfoContributionMinor: 0,
           currency: "INR",
         }}
       />,
@@ -287,6 +289,7 @@ describe("<CashFlowOverview> — in-page tab switcher (Recent Transactions / Upc
           goalContributionMinor: 0,
           loanInstallmentMinor: 0,
           creditCardPaymentDueMinor: 0,
+    epfoContributionMinor: 0,
           currency: "INR",
         }}
       />,

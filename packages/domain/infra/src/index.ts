@@ -79,6 +79,8 @@ export {
   callAddEpfoEmployment,
   callEndEpfoEmployment,
   callUpsertEpfoContributionProfile,
+  callRecordEpfoContribution,
+  callCorrectEpfoBalance,
   listEpfoEmployments,
   listEpfoContributionProfiles,
   type EpfoEmploymentRow,
@@ -86,4 +88,6 @@ export {
   type CreateEpfoAccountInput,
   type AddEpfoEmploymentInput,
   type UpsertEpfoContributionProfileInput,
+  type RecordEpfoContributionInput,
+  type CorrectEpfoBalanceInput,
 } from "./epfoRepo.js";

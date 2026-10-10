@@ -38,10 +38,13 @@ import {
   predictNextOccurrence,
   resolveRecurringDay,
   computeReserveStatus,
+  generateExpectedContributions,
   type ReserveStatusResult,
   type PaymentFrequency,
   type GoalContributionFrequency,
   type RecurrenceInterval,
+  type EpfoContributionProfile,
+  type CurrencyCode,
 } from "@spencare/domain-core";
 
 /**
@@ -61,6 +64,12 @@ import { listGoalContributionPlans } from "./goalContributionPlans.js";
 import { listGoals } from "./goals.js";
 import { listAccounts } from "./accounts.js";
 import { getCreditCardBillingStatus } from "../services/creditCardPayment.js";
+import {
+  listEpfoLedgerEntries,
+  listEpfoEmployments,
+  listEpfoContributionProfiles,
+  type EpfoContributionProfileRow,
+} from "@spencare/domain-infra";
 import type { PlannedCommitmentRow, GoalRow, LoanRow, GoalContributionPlanRow } from "@spencare/domain-infra";
 import type { AuthContext } from "../types.js";
 
@@ -72,7 +81,8 @@ export type UpcomingEventKind =
   | "goal_contribution"
   | "loan"
   | "credit_card_statement"
-  | "credit_card_payment";
+  | "credit_card_payment"
+  | "epfo_contribution";
 
 export interface UpcomingEvent {
   /** Stable ID: deterministic for projected events, occurrence.id for persisted. */
@@ -136,6 +146,8 @@ export interface UpcomingProjection {
   loanInstallmentMinor: number;
   /** Sum of credit_used_minor for cards with payment due events in the window. */
   creditCardPaymentDueMinor: number;
+  /** Sum of expected EPFO contributions in the window (projections, not spending). */
+  epfoContributionMinor: number;
   currency: string;
 }
 
@@ -714,6 +726,57 @@ export async function getUpcomingProjection(
 
   const creditCardPaymentDueMinor = creditCardPaymentDueMinor_acc.reduce((s, v) => s + v, 0);
 
+  // ── EPFO expected contribution events ────────────────────────────────────
+  //
+  // For each active EPFO account, project expected contributions in the
+  // window. Only EXPECTED and RECONCILIATION_PENDING events appear in
+  // Upcoming; MATCHED/MISMATCH already have actual ledger entries and are
+  // visible in Account Details.
+
+  const epfoAccounts = accounts.filter((a) => a.type === "epfo" && !a.is_archived);
+
+  if (epfoAccounts.length > 0) {
+    await Promise.all(
+      epfoAccounts.map(async (account) => {
+        const [entries, employments, profileRows] = await Promise.all([
+          listEpfoLedgerEntries(ctx.supabase, ctx.userId, { accountId: account.id }),
+          listEpfoEmployments(ctx.supabase, ctx.userId, account.id),
+          listEpfoContributionProfiles(ctx.supabase, ctx.userId, account.id),
+        ]);
+
+        const domainProfiles: EpfoContributionProfile[] = profileRows
+          .map(epfoProfileRowToDomain)
+          .filter((p): p is EpfoContributionProfile => p !== null);
+
+        const expectedEvents = generateExpectedContributions({
+          accountId: account.id,
+          currency: (account.currency ?? CURRENCY) as CurrencyCode,
+          profiles: domainProfiles,
+          employments,
+          entries,
+          windowStart: startDate,
+          windowEnd: endDate,
+          today: todayLocal,
+        });
+
+        for (const e of expectedEvents) {
+          if (e.status !== "EXPECTED" && e.status !== "RECONCILIATION_PENDING") continue;
+          allEvents.push({
+            id: e.id,
+            kind: "epfo_contribution",
+            date: e.expectedDate,
+            title: account.name,
+            subtitle: labelForEpfoKind(e.kind),
+            amountMinor: Number(e.expectedAmountMinor),
+            currency: e.currency,
+            sourceId: e.accountId,
+            projected: true,
+          });
+        }
+      }),
+    );
+  }
+
   // ── Sort and aggregate ────────────────────────────────────────────────────
 
   allEvents.sort((a, b) => {
@@ -726,7 +789,8 @@ export async function getUpcomingProjection(
       loan: 2,
       credit_card_payment: 3,
       goal_contribution: 4,
-      credit_card_statement: 5,
+      epfo_contribution: 5,
+      credit_card_statement: 6,
     };
     return kindOrder[a.kind] - kindOrder[b.kind];
   });
@@ -743,6 +807,9 @@ export async function getUpcomingProjection(
   const loanInstallmentMinor = allEvents
     .filter((e) => e.kind === "loan")
     .reduce((s, e) => s + e.amountMinor, 0);
+  const epfoContributionMinor = allEvents
+    .filter((e) => e.kind === "epfo_contribution")
+    .reduce((s, e) => s + e.amountMinor, 0);
 
   return {
     events: allEvents,
@@ -751,6 +818,42 @@ export async function getUpcomingProjection(
     goalContributionMinor,
     loanInstallmentMinor,
     creditCardPaymentDueMinor,
+    epfoContributionMinor,
     currency: CURRENCY,
   };
+}
+
+// ── EPFO helpers ──────────────────────────────────────────────────────────────
+
+function epfoProfileRowToDomain(row: EpfoContributionProfileRow): EpfoContributionProfile | null {
+  const base = {
+    id: row.id,
+    accountId: row.account_id,
+    employmentId: row.employment_id,
+    kind: row.kind,
+    frequency: row.frequency,
+    effectiveFrom: row.effective_from,
+    effectiveTo: row.effective_to,
+    isActive: row.is_active,
+  };
+  switch (row.mode) {
+    case "fixed":
+      if (row.amount_minor == null) return null;
+      return { ...base, mode: "fixed", amountMinor: row.amount_minor, percentNum: null, percentDen: null, baseAmountMinor: null };
+    case "percent":
+      if (row.percent_num == null || row.percent_den == null || row.base_amount_minor == null) return null;
+      return { ...base, mode: "percent", amountMinor: null, percentNum: row.percent_num, percentDen: row.percent_den, baseAmountMinor: row.base_amount_minor };
+    case "imported":
+      return { ...base, mode: "imported", amountMinor: null, percentNum: null, percentDen: null, baseAmountMinor: null };
+    case "none":
+      return { ...base, mode: "none", amountMinor: null, percentNum: null, percentDen: null, baseAmountMinor: null };
+  }
+}
+
+function labelForEpfoKind(kind: "employee_epf" | "employer_epf" | "eps"): string {
+  switch (kind) {
+    case "employee_epf": return "Employee EPF";
+    case "employer_epf": return "Employer EPF";
+    case "eps": return "EPS";
+  }
 }

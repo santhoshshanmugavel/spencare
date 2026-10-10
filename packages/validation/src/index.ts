@@ -290,8 +290,12 @@ export {
   addEpfoEmploymentSchema,
   endEpfoEmploymentSchema,
   upsertEpfoContributionProfileSchema,
+  recordEpfoContributionSchema,
+  correctEpfoBalanceSchema,
   type CreateEpfoAccountInput,
   type AddEpfoEmploymentInput,
   type EndEpfoEmploymentInput,
   type UpsertEpfoContributionProfileInput,
+  type RecordEpfoContributionInput,
+  type CorrectEpfoBalanceInput,
 } from "./epfo.js";

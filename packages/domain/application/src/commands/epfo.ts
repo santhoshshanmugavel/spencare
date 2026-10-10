@@ -12,20 +12,27 @@ import {
   addEpfoEmploymentSchema,
   endEpfoEmploymentSchema,
   upsertEpfoContributionProfileSchema,
+  recordEpfoContributionSchema,
+  correctEpfoBalanceSchema,
   type CreateEpfoAccountInput,
   type AddEpfoEmploymentInput,
   type EndEpfoEmploymentInput,
   type UpsertEpfoContributionProfileInput,
+  type RecordEpfoContributionInput,
+  type CorrectEpfoBalanceInput,
 } from "@spencare/validation";
 import {
   callCreateEpfoAccount,
   callAddEpfoEmployment,
   callEndEpfoEmployment,
   callUpsertEpfoContributionProfile,
+  callRecordEpfoContribution,
+  callCorrectEpfoBalance,
   type AccountRow,
   type EpfoEmploymentRow,
   type EpfoContributionProfileRow,
 } from "@spencare/domain-infra";
+import type { EpfoLedgerEntry } from "@spencare/domain-core";
 import { err, ok, type AuthContext, type Command, type Result } from "../types.js";
 
 export const createEpfoAccount: Command<CreateEpfoAccountInput, AccountRow> = {
@@ -151,6 +158,74 @@ export const upsertEpfoContributionProfile: Command<UpsertEpfoContributionProfil
         return err({ code: "not_found", message: "That employment doesn't exist." });
       }
       return err({ code: "upsert_failed", message: "Couldn't save the contribution profile. Please try again." });
+    }
+  },
+};
+
+export const recordEpfoContribution: Command<RecordEpfoContributionInput, EpfoLedgerEntry> = {
+  name: "recordEpfoContribution",
+  consequential: false,
+  async execute(ctx, input): Promise<Result<EpfoLedgerEntry>> {
+    const parsed = recordEpfoContributionSchema.safeParse(input);
+    if (!parsed.success) {
+      return err({
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "Invalid contribution.",
+      });
+    }
+    try {
+      const row = await callRecordEpfoContribution(ctx.supabase, ctx.userId, {
+        accountId: parsed.data.accountId,
+        employmentId: parsed.data.employmentId ?? null,
+        kind: parsed.data.kind,
+        amountMinor: parsed.data.amountMinor,
+        occurredAt: parsed.data.occurredAt,
+        description: parsed.data.description ?? null,
+        externalReference: parsed.data.externalReference ?? null,
+      });
+      return ok(row);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("account_not_eligible")) {
+        return err({ code: "account_not_eligible", message: "That account is not an active EPFO account." });
+      }
+      if (msg.includes("employment_not_found")) {
+        return err({ code: "not_found", message: "That employment doesn't exist." });
+      }
+      if (msg.includes("invalid_amount")) {
+        return err({ code: "validation_error", message: "Amount must be positive." });
+      }
+      return err({ code: "record_failed", message: "Couldn't record the contribution. Please try again." });
+    }
+  },
+};
+
+export const correctEpfoBalance: Command<CorrectEpfoBalanceInput, EpfoLedgerEntry> = {
+  name: "correctEpfoBalance",
+  consequential: false,
+  async execute(ctx, input): Promise<Result<EpfoLedgerEntry>> {
+    const parsed = correctEpfoBalanceSchema.safeParse(input);
+    if (!parsed.success) {
+      return err({
+        code: "validation_error",
+        message: parsed.error.issues[0]?.message ?? "Invalid correction.",
+      });
+    }
+    try {
+      const row = await callCorrectEpfoBalance(ctx.supabase, ctx.userId, parsed.data);
+      return ok(row);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("account_not_eligible")) {
+        return err({ code: "account_not_eligible", message: "That account is not an active EPFO account." });
+      }
+      if (msg.includes("invalid_amount")) {
+        return err({ code: "validation_error", message: "Adjustment amount cannot be zero." });
+      }
+      if (msg.includes("reason_required")) {
+        return err({ code: "validation_error", message: "Enter a reason for the correction." });
+      }
+      return err({ code: "correct_failed", message: "Couldn't apply the correction. Please try again." });
     }
   },
 };

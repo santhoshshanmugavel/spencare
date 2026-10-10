@@ -24,3 +24,14 @@ export {
   materializeExpectedContribution,
   reconcileExpectedToActual,
 } from "./contributionProfile.js";
+
+export {
+  type ExpectedContributionStatus,
+  type ExpectedContributionEvent,
+  type GenerateExpectedContributionsInput,
+  type PeriodContributionSummary,
+  type EpfoEmploymentLite,
+  generateExpectedContributions,
+  summarisePeriodContributions,
+  expectedTotalAsMoney,
+} from "./expectedContributions.js";

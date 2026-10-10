@@ -209,3 +209,103 @@ export async function listEpfoContributionProfiles(
   if (error) throw error;
   return (data ?? []) as EpfoContributionProfileRow[];
 }
+
+// ============================================================
+// Phase 4 RPCs
+// ============================================================
+
+import type { EpfoLedgerEntry } from "@spencare/domain-core";
+
+export interface RecordEpfoContributionInput {
+  accountId: string;
+  employmentId: string | null;
+  kind: "employee_epf" | "employer_epf" | "eps";
+  amountMinor: number;
+  occurredAt: string;
+  description: string | null;
+  externalReference: string | null;
+}
+
+interface RawEpfoLedgerRpcReturn {
+  id: string;
+  account_id: string;
+  employment_id: string | null;
+  entry_type: EpfoLedgerEntry["entryType"];
+  amount_minor: number;
+  currency: string;
+  occurred_at: string;
+  source: string;
+  description: string | null;
+  import_batch_id: string | null;
+  external_reference: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  created_by: string;
+}
+
+function toLedgerEntry(row: RawEpfoLedgerRpcReturn): EpfoLedgerEntry {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    employmentId: row.employment_id,
+    entryType: row.entry_type,
+    amountMinor: row.amount_minor,
+    currency: row.currency,
+    occurredAt: row.occurred_at,
+    source: row.source,
+    description: row.description,
+    importBatchId: row.import_batch_id,
+    externalReference: row.external_reference,
+    metadata: (row.metadata ?? {}) as Record<string, unknown>,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
+}
+
+export async function callRecordEpfoContribution(
+  client: TypedSupabaseClient,
+  userId: string,
+  input: RecordEpfoContributionInput,
+  actor: "web" | "spensa" | "mcp" | "system" = "web",
+): Promise<EpfoLedgerEntry> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (client as any).rpc("record_epfo_contribution", {
+    p_user_id: userId,
+    p_account_id: input.accountId,
+    p_employment_id: input.employmentId,
+    p_kind: input.kind,
+    p_amount_minor: input.amountMinor,
+    p_occurred_at: input.occurredAt,
+    p_description: input.description ?? "",
+    p_external_reference: input.externalReference ?? "",
+    p_actor: actor,
+  });
+  if (error) throw error;
+  return toLedgerEntry(data as RawEpfoLedgerRpcReturn);
+}
+
+export interface CorrectEpfoBalanceInput {
+  accountId: string;
+  deltaMinor: number;
+  reason: string;
+  occurredAt: string;
+}
+
+export async function callCorrectEpfoBalance(
+  client: TypedSupabaseClient,
+  userId: string,
+  input: CorrectEpfoBalanceInput,
+  actor: "web" | "spensa" | "mcp" | "system" = "web",
+): Promise<EpfoLedgerEntry> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (client as any).rpc("correct_epfo_balance", {
+    p_user_id: userId,
+    p_account_id: input.accountId,
+    p_delta_minor: input.deltaMinor,
+    p_reason: input.reason,
+    p_occurred_at: input.occurredAt,
+    p_actor: actor,
+  });
+  if (error) throw error;
+  return toLedgerEntry(data as RawEpfoLedgerRpcReturn);
+}

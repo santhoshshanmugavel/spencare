@@ -13,6 +13,8 @@ import {
   addEpfoEmployment,
   endEpfoEmployment,
   upsertEpfoContributionProfile,
+  recordEpfoContribution,
+  correctEpfoBalance,
   getEpfoAccountOverview,
   type AuthContext,
 } from "@spencare/domain-application";
@@ -23,6 +25,8 @@ import type {
   AddEpfoEmploymentInput,
   EndEpfoEmploymentInput,
   UpsertEpfoContributionProfileInput,
+  RecordEpfoContributionInput,
+  CorrectEpfoBalanceInput,
 } from "@spencare/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
@@ -101,8 +105,8 @@ export async function createEpfoAccountAction(input: CreateEpfoAccountInput) {
 export async function getEpfoOverviewAction(accountId: string) {
   const ctx = await requireAuthContext();
   const overview = await getEpfoAccountOverview(ctx, accountId);
-  // Serialize bigint fields in the balance breakdown to strings so this
-  // server-action payload remains JSON-safe for the client.
+  // Serialize bigint fields to strings so this server-action payload
+  // remains JSON-safe for the client (bigints don't survive JSON).
   return {
     accountId: overview.accountId,
     lastVerifiedAt: overview.lastVerifiedAt,
@@ -121,6 +125,31 @@ export async function getEpfoOverviewAction(accountId: string) {
     entries: overview.entries,
     employments: overview.employments,
     contributionProfiles: overview.contributionProfiles,
+    currentPeriod: {
+      periodKey: overview.currentPeriod.periodKey,
+      summary: {
+        periodKey: overview.currentPeriod.summary.periodKey,
+        expectedTotalMinor: overview.currentPeriod.summary.expectedTotalMinor.toString(),
+        actualTotalMinor: overview.currentPeriod.summary.actualTotalMinor.toString(),
+        hasAnyActual: overview.currentPeriod.summary.hasAnyActual,
+        anyEvents: overview.currentPeriod.summary.anyEvents,
+        byKind: Object.fromEntries(
+          Object.entries(overview.currentPeriod.summary.byKind).map(([k, v]) => [k, v ? {
+            expectedMinor: v.expectedMinor.toString(),
+            actualMinor: v.actualMinor.toString(),
+            hasActual: v.hasActual,
+            status: v.status,
+            differenceMinor: v.differenceMinor.toString(),
+          } : v]),
+        ) as Record<string, { expectedMinor: string; actualMinor: string; hasActual: boolean; status: string; differenceMinor: string }>,
+      },
+      events: overview.currentPeriod.events.map((e) => ({
+        ...e,
+        expectedAmountMinor: e.expectedAmountMinor.toString(),
+        differenceMinor: e.differenceMinor.toString(),
+        actualAmountMinor: e.actualAmountMinor.toString(),
+      })),
+    },
   };
 }
 
@@ -141,6 +170,20 @@ export async function endEpfoEmploymentAction(input: EndEpfoEmploymentInput) {
 export async function upsertEpfoContributionProfileAction(input: UpsertEpfoContributionProfileInput) {
   const ctx = await requireAuthContext();
   const result = await upsertEpfoContributionProfile.execute(ctx, input);
+  if (result.ok) revalidatePath("/settings/accounts");
+  return result;
+}
+
+export async function recordEpfoContributionAction(input: RecordEpfoContributionInput) {
+  const ctx = await requireAuthContext();
+  const result = await recordEpfoContribution.execute(ctx, input);
+  if (result.ok) revalidatePath("/settings/accounts");
+  return result;
+}
+
+export async function correctEpfoBalanceAction(input: CorrectEpfoBalanceInput) {
+  const ctx = await requireAuthContext();
+  const result = await correctEpfoBalance.execute(ctx, input);
   if (result.ok) revalidatePath("/settings/accounts");
   return result;
 }
