@@ -6,15 +6,15 @@ import type { AccountRow, CategoryRow, PlanItemRow, TransactionRow } from "@spen
 import { AssociateTransactionDialog } from "./associate-transaction-dialog";
 
 vi.mock("../actions", () => ({
-  searchTransactionsForPlanAction: vi.fn(async () => ({ transactions: [], nextCursor: null })),
+  searchTransactionsForPlanAction: vi.fn(async () => ({ transactions: [], nextCursor: null, archivedPlanIds: [] })),
   setTransactionPlanAction: vi.fn(async () => ({ ok: true, value: {} })),
 }));
 
 const PLAN_ID = "plan-1";
 
 /** The server action now returns a paginated SearchTransactionsForPlanResult; this is the ergonomic test wrapper for a single-page response. */
-function page(txns: TransactionRow[]) {
-  return { transactions: txns, nextCursor: null as null };
+function page(txns: TransactionRow[], archivedPlanIds: string[] = []) {
+  return { transactions: txns, nextCursor: null as null, archivedPlanIds };
 }
 
 function txn(overrides: Partial<TransactionRow> = {}): TransactionRow {
@@ -87,7 +87,7 @@ beforeEach(async () => {
   const { searchTransactionsForPlanAction, setTransactionPlanAction } = await import("../actions");
   vi.mocked(searchTransactionsForPlanAction).mockReset();
   vi.mocked(setTransactionPlanAction).mockReset();
-  vi.mocked(searchTransactionsForPlanAction).mockResolvedValue(page([txn()]));
+  vi.mocked(searchTransactionsForPlanAction).mockResolvedValue(page([txn()], []));
   vi.mocked(setTransactionPlanAction).mockResolvedValue({ ok: true, value: {} as never });
 });
 
@@ -308,6 +308,7 @@ describe("<AssociateTransactionDialog> — server-side search across the full hi
     vi.mocked(searchTransactionsForPlanAction).mockResolvedValueOnce({
       transactions: [txn({ id: "txn-a", merchant: "Amazon A" })],
       nextCursor: { occurredAt: "2026-01-05", id: "txn-a" },
+      archivedPlanIds: [],
     });
     render(
       <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
@@ -317,6 +318,7 @@ describe("<AssociateTransactionDialog> — server-side search across the full hi
     vi.mocked(searchTransactionsForPlanAction).mockResolvedValueOnce({
       transactions: [txn({ id: "txn-b", merchant: "Amazon B" })],
       nextCursor: null,
+      archivedPlanIds: [],
     });
     await user.click(loadMore);
     await screen.findByText("Amazon B");
@@ -330,6 +332,7 @@ describe("<AssociateTransactionDialog> — server-side search across the full hi
     vi.mocked(searchTransactionsForPlanAction).mockResolvedValueOnce({
       transactions: [txn({ id: "txn-a", merchant: "Amazon A" })],
       nextCursor: { occurredAt: "2026-01-05", id: "txn-a" },
+      archivedPlanIds: [],
     });
     render(
       <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={() => {}} />,
@@ -338,6 +341,7 @@ describe("<AssociateTransactionDialog> — server-side search across the full hi
     vi.mocked(searchTransactionsForPlanAction).mockResolvedValueOnce({
       transactions: [txn({ id: "txn-b", merchant: "Amazon B" })],
       nextCursor: null,
+      archivedPlanIds: [],
     });
     await user.click(screen.getByRole("button", { name: /load more/i }));
     await user.click(await screen.findByRole("checkbox", { name: /select amazon b/i }));

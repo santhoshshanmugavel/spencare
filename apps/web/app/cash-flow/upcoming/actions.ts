@@ -17,6 +17,9 @@ import {
   addLoan,
   editLoan,
   removeLoan,
+  getCreditCardBillingStatus,
+  matchCreditCardPayment,
+  listAccounts,
   type AuthContext,
   type RecurrenceInterval,
 } from "@spencare/domain-application";
@@ -505,6 +508,14 @@ export async function payCreditCardAction(input: {
     occurredAt: input.paidDate,
   });
   if (!result.ok) return { ok: false as const, error: { message: result.error.message } };
+  const accounts = await listAccounts(ctx);
+  const cardAccount = accounts.find((a) => a.id === input.creditCardAccountId);
+  if (cardAccount) {
+    const billing = await getCreditCardBillingStatus(ctx, cardAccount, input.paidDate);
+    if (billing) {
+      await matchCreditCardPayment(ctx, billing.obligation.id);
+    }
+  }
   revalidateAll();
   revalidatePath("/cash-flow/transactions");
   return { ok: true as const };

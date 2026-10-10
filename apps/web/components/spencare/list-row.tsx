@@ -98,7 +98,7 @@ export function ListRow({
       )}
 
       {hoverActions ? (
-        <div className="hidden shrink-0 items-center gap-1 group-hover/row:flex group-focus-within/row:flex">
+        <div className="flex shrink-0 items-center gap-1 opacity-0 pointer-events-none group-hover/row:opacity-100 group-hover/row:pointer-events-auto group-focus-within/row:opacity-100 group-focus-within/row:pointer-events-auto">
           {hoverActions}
         </div>
       ) : null}

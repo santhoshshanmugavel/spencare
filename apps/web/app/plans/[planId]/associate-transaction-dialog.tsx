@@ -126,6 +126,12 @@ export function AssociateTransactionDialog({
   const [accountId, setAccountId] = useState<string>(ALL);
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 
+  // Accumulated across all pages in this dialog session. Archived-plan
+  // IDs are stable during the session (archiving a plan while this
+  // dialog is open is not a supported workflow), so union-ing pages is
+  // safe and correct. Reset with every open.
+  const [archivedPlanIds, setArchivedPlanIds] = useState<Set<string>>(new Set());
+
   // Request-sequencing guard: an older in-flight response from a stale
   // search string must never overwrite a newer one. Each new fetch
   // claims a monotonically increasing token and only commits its result
@@ -156,6 +162,13 @@ export function AssociateTransactionDialog({
         if (requestId !== latestRequestId.current) return; // stale response
         setResults((prev) => (opts.append ? [...prev, ...page.transactions] : page.transactions));
         setNextCursor(page.nextCursor);
+        if (page.archivedPlanIds.length > 0) {
+          setArchivedPlanIds((prev) => {
+            const next = new Set(prev);
+            for (const id of page.archivedPlanIds) next.add(id);
+            return next;
+          });
+        }
       } catch (e) {
         if (requestId !== latestRequestId.current) return;
         toastError(e instanceof Error ? e.message : "Couldn't search transactions. Try again.");
@@ -192,6 +205,7 @@ export function AssociateTransactionDialog({
     setAccountId(ALL);
     setDateFilter("all");
     setInitialLoadDone(false);
+    setArchivedPlanIds(new Set());
   }
 
   function toggleSelected(t: TransactionRow) {
@@ -216,7 +230,7 @@ export function AssociateTransactionDialog({
       toastError(failed.error.message);
       return;
     }
-    const movedCount = transactions.filter((t) => t.plan_id !== null).length;
+    const movedCount = transactions.filter((t) => t.plan_id !== null && !archivedPlanIds.has(t.plan_id)).length;
     const attachedCount = transactions.length - movedCount;
     const parts: string[] = [];
     if (attachedCount > 0) parts.push(`${attachedCount} transaction${attachedCount === 1 ? "" : "s"} attached`);
@@ -234,7 +248,7 @@ export function AssociateTransactionDialog({
   }
 
   const grouped = groupByDate(results, (t) => toLocalDate(t.occurred_at));
-  const elsewhereCount = [...selected.values()].filter((t) => t.plan_id !== null).length;
+  const elsewhereCount = [...selected.values()].filter((t) => t.plan_id !== null && !archivedPlanIds.has(t.plan_id)).length;
   const attachLabel =
     selected.size === 0
       ? "Attach transaction"
@@ -344,7 +358,7 @@ export function AssociateTransactionDialog({
                     const account = accountById.get(t.account_id);
                     const category = t.category_id ? categoryById.get(t.category_id) : undefined;
                     const mismatched = t.currency !== currency;
-                    const attachedElsewhere = t.plan_id !== null;
+                    const attachedElsewhere = t.plan_id !== null && !archivedPlanIds.has(t.plan_id);
                     const isSelected = selected.has(t.id);
                     const { displayTitle, effectiveItemName, displayMerchant } = getTransactionDisplay(t);
                     const subtitle = effectiveItemName && displayMerchant ? displayMerchant : transactionHint(t, category);

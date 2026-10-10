@@ -111,10 +111,15 @@ export async function listPlansWithSummariesAction(asOfIso: string) {
  */
 export async function searchTransactionsForPlanAction(
   input: Omit<SearchTransactionsForPlanOptions, "excludePlanId"> & { planId: string },
-): Promise<SearchTransactionsForPlanResult> {
+): Promise<SearchTransactionsForPlanResult & { archivedPlanIds: string[] }> {
   const ctx = await requireAuthContext();
   const { planId, ...rest } = input;
-  return searchTransactionsForPlanAttachment(ctx, { ...rest, excludePlanId: planId });
+  const [page, allPlans] = await Promise.all([
+    searchTransactionsForPlanAttachment(ctx, { ...rest, excludePlanId: planId }),
+    listPlans(ctx, { includeArchived: true }),
+  ]);
+  const archivedPlanIds = allPlans.filter((p) => p.status === "archived").map((p) => p.id);
+  return { ...page, archivedPlanIds };
 }
 
 export async function getPlanAction(planId: string) {
