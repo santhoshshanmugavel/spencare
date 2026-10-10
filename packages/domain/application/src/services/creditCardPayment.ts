@@ -421,7 +421,7 @@ export async function getCreditCardBillingStatus(
     periodEndInclusive,
   );
 
-  const obligation = await upsertCreditCardObligation(ctx, {
+  let obligation = await upsertCreditCardObligation(ctx, {
     accountId: account.id,
     // The obligation's statement_date is the bill's due date; its period
     // bounds record which exact calendar window the frozen balance was
@@ -432,6 +432,23 @@ export async function getCreditCardBillingStatus(
     statementBalanceMinor,
     dueDate: snapshot.mostRecentClosedCycle.dueDate,
   });
+
+  // Auto-match: if the obligation is still unpaid or partial, attempt to
+  // link an unambiguous transfer payment that falls inside the cycle window.
+  // Idempotent -- matchCreditCardPayment skips already-linked transactions
+  // and short-circuits when the obligation is already paid. When exactly one
+  // unapplied transfer exists in the window, it is linked and paid_minor is
+  // updated; when zero or multiple exist, the obligation row is left as-is.
+  // Re-fetching after a successful match gives callers the live paid_minor,
+  // remainingMinor, and status without a second round-trip on the common
+  // already-paid path.
+  if (obligation.status !== "paid") {
+    const matchResult = await matchCreditCardPayment(ctx, obligation.id);
+    if (matchResult.outcome === "matched") {
+      const updated = await getCreditCardObligation(ctx, obligation.id);
+      if (updated) obligation = updated;
+    }
+  }
 
   const paymentStatus = deriveCreditCardPaymentStatus({
     todayIso,

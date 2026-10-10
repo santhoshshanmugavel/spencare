@@ -12,7 +12,7 @@ import {
 } from "./eventRules";
 import { resolveRecurringDay } from "@spencare/domain-core";
 import { savingDatesForOccurrence } from "@spencare/domain-core";
-import { getCreditCardStatementSummary, upsertCreditCardObligation, listPlansWithSummaries, getPlanContextForUpcomingSources, type UpcomingPlanContextMaps } from "@spencare/domain-application";
+import { getCreditCardBillingStatus, listPlansWithSummaries, getPlanContextForUpcomingSources, type UpcomingPlanContextMaps } from "@spencare/domain-application";
 import type { NotificationRunStats } from "./engine";
 
 interface CheckOutcome {
@@ -489,28 +489,23 @@ async function runChecksForUser(
     const payDay: number | null = (account as { payment_due_day?: number | null }).payment_due_day ?? null;
     if (payDay == null) continue;
 
-    // Compute the open cycle's running summary and upsert the obligation
-    // for the most-recently-closed cycle (that's the bill actually owed).
+    // Compute the most-recently-closed cycle's billing status, upsert its
+    // obligation, and auto-match any unambiguous transfer payment in the
+    // cycle window. Uses the canonical getCreditCardBillingStatus so the
+    // obligation state here is always consistent with every other surface
+    // (Upcoming, Settings > Accounts, MCP) -- no independent derivation.
     let obligationRemainingMinor: number | null = null;
     let obligationStatus: string | null = null;
     let currentBillDueDate: string | null = null;
     try {
-      const summary = await getCreditCardStatementSummary(svcCtx, account.id);
-      if (summary) {
-        currentBillDueDate = summary.statementDate; // = next bill due date in the new model
-        const obligation = await upsertCreditCardObligation(svcCtx, {
-          accountId: account.id,
-          statementDate: summary.statementDate,
-          periodStart: summary.periodStart,
-          periodEnd: summary.periodEnd,
-          statementBalanceMinor: summary.statementBalanceMinor,
-          dueDate: summary.paymentDueDate,
-        });
-        obligationRemainingMinor = obligation.remainingMinor;
-        obligationStatus = obligation.status;
+      const billing = await getCreditCardBillingStatus(svcCtx, account, todayIso);
+      if (billing) {
+        currentBillDueDate = billing.obligation.dueDate ?? billing.obligation.statementDate;
+        obligationRemainingMinor = billing.obligation.remainingMinor;
+        obligationStatus = billing.obligation.status;
       }
     } catch {
-      // Obligation upsert failure must not block reminders.
+      // Billing status failure must not block reminders.
     }
 
     const outstanding = obligationRemainingMinor ?? (account.credit_used_minor ?? 0);
