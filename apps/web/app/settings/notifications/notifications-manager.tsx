@@ -505,6 +505,12 @@ const ALERT_CATEGORIES = [
     eventTypePrefix: "DAILY_SUMMARY",
   },
   {
+    key: "vehicle",
+    label: "Vehicle reminders",
+    description: "Maintenance due dates, service intervals, and document expiry alerts",
+    eventTypePrefix: "VEHICLE",
+  },
+  {
     key: "security",
     label: "Security alerts",
     description: "Password changes, new logins, and 2FA changes",
