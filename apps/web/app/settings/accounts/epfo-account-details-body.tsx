@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -13,7 +13,7 @@ import {
   type RecordEpfoContributionInput,
   type CorrectEpfoBalanceInput,
 } from "@spencare/validation";
-import { Money as DomainMoney } from "@spencare/domain-core";
+import { Money as DomainMoney, type ParsedPassbookResult } from "@spencare/domain-core";
 import { Money } from "@/components/spencare/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,8 @@ import {
   upsertEpfoContributionProfileAction,
   recordEpfoContributionAction,
   correctEpfoBalanceAction,
+  importEpfoPassbookAction,
+  confirmEpfoPassbookImportAction,
 } from "./actions";
 
 /**
@@ -44,8 +46,7 @@ import {
  *   - Employment section with masked member IDs and an inline add form.
  *   - Expected contribution profiles with a per-kind inline editor.
  *
- * No withdrawal action, no import action -- Phase 7 and Phase 6
- * respectively. The spec forbids rendering dead buttons.
+ * No withdrawal action -- Phase 7. The spec forbids rendering dead buttons.
  *
  * Mutations go through server actions -> application commands ->
  * SECURITY DEFINER RPCs that audit atomically.
@@ -70,6 +71,11 @@ export function EpfoAccountDetailsBody({
 
   const [showRecordContribution, setShowRecordContribution] = useState(false);
   const [showCorrectBalance, setShowCorrectBalance] = useState(false);
+
+  const [importPhase, setImportPhase] = useState<"idle" | "processing" | "review" | "confirming">("idle");
+  const [importBatchId, setImportBatchId] = useState<string | null>(null);
+  const [importParsedResult, setImportParsedResult] = useState<ParsedPassbookResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isPending, startTransition] = useTransition();
 
@@ -243,6 +249,161 @@ export function EpfoAccountDetailsBody({
               onClose={() => setShowRecordContribution(false)}
               onSaved={() => { setShowRecordContribution(false); void refresh(); }}
             />
+          )}
+        </div>
+      </section>
+
+      {/* --- Import passbook ------------------------------------ */}
+      <section aria-label="Import passbook">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            const activeEmploymentId = overview.employments.find((emp) => emp.is_active)?.id ?? null;
+            setImportPhase("processing");
+            void (async () => {
+              const fd = new FormData();
+              fd.append("file", file);
+              const result = await importEpfoPassbookAction(accountId, activeEmploymentId, fd);
+              if (!result.ok) {
+                setImportPhase("idle");
+                toastError(result.error.message);
+                return;
+              }
+              setImportBatchId(result.value.batchId);
+              setImportParsedResult(result.value.parsed);
+              setImportPhase("review");
+            })();
+          }}
+        />
+        <div className="mb-2 flex items-end justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Import passbook</h3>
+          {importPhase === "idle" && (
+            <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+              Import PDF
+            </Button>
+          )}
+        </div>
+        <div className="rounded-xl border bg-card">
+          {importPhase === "idle" && (
+            <p className="p-4 text-sm text-muted-foreground">
+              Upload a UAN portal passbook PDF to bulk-import contributions and interest.
+              Duplicate entries are automatically skipped.
+            </p>
+          )}
+          {importPhase === "processing" && (
+            <LoaderBlock message="Reading passbook…" tone="muted" className="py-6" />
+          )}
+          {(importPhase === "review" || importPhase === "confirming") && importParsedResult && (
+            <div className="space-y-3 p-4">
+              <p className="text-sm font-medium text-foreground">
+                Found {importParsedResult.entries.length}{" "}
+                {importParsedResult.entries.length === 1 ? "period" : "periods"}.
+                Review and confirm to add them to your ledger.
+              </p>
+              {importParsedResult.memberName && (
+                <p className="text-xs text-muted-foreground">
+                  Member: {importParsedResult.memberName}
+                </p>
+              )}
+              <div className="-mx-1 overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="py-2 pr-3 text-left font-medium">Period</th>
+                      <th className="py-2 pr-3 text-right font-medium">Emp EPF</th>
+                      <th className="py-2 pr-3 text-right font-medium">Empr EPF</th>
+                      <th className="py-2 pr-3 text-right font-medium">EPS</th>
+                      <th className="py-2 text-right font-medium">Interest</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importParsedResult.entries.map((entry) => (
+                      <tr key={entry.periodKey} className="border-b last:border-0">
+                        <td className="py-2 pr-3 tabular-nums">{entry.periodKey}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {entry.employeeEpfMinor ? (
+                            <Money value={DomainMoney.fromMinorUnits(BigInt(entry.employeeEpfMinor), currency)} masked={masked} size="numeric" />
+                          ) : "—"}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {entry.employerEpfMinor ? (
+                            <Money value={DomainMoney.fromMinorUnits(BigInt(entry.employerEpfMinor), currency)} masked={masked} size="numeric" />
+                          ) : "—"}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {entry.epsMinor ? (
+                            <Money value={DomainMoney.fromMinorUnits(BigInt(entry.epsMinor), currency)} masked={masked} size="numeric" />
+                          ) : "—"}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          {entry.interestMinor ? (
+                            <Money value={DomainMoney.fromMinorUnits(BigInt(entry.interestMinor), currency)} masked={masked} size="numeric" />
+                          ) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {importParsedResult.warnings.length > 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  {importParsedResult.warnings[0]}
+                </p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  disabled={importPhase === "confirming"}
+                  onClick={() => {
+                    if (!importBatchId) return;
+                    const activeEmploymentId = overview.employments.find((emp) => emp.is_active)?.id ?? null;
+                    setImportPhase("confirming");
+                    void (async () => {
+                      const result = await confirmEpfoPassbookImportAction({
+                        importBatchId,
+                        accountId,
+                        employmentId: activeEmploymentId,
+                      });
+                      if (!result.ok) {
+                        setImportPhase("review");
+                        toastError(result.error.message);
+                        return;
+                      }
+                      const { inserted, skipped } = result.value;
+                      toastConfirmed(
+                        skipped > 0
+                          ? `Added ${inserted} ${inserted === 1 ? "entry" : "entries"}, skipped ${skipped} duplicate${skipped === 1 ? "" : "s"}.`
+                          : `Added ${inserted} ${inserted === 1 ? "entry" : "entries"}.`,
+                      );
+                      setImportPhase("idle");
+                      setImportBatchId(null);
+                      setImportParsedResult(null);
+                      void refresh();
+                    })();
+                  }}
+                >
+                  {importPhase === "confirming" ? "Confirming…" : "Confirm import"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={importPhase === "confirming"}
+                  onClick={() => {
+                    setImportPhase("idle");
+                    setImportBatchId(null);
+                    setImportParsedResult(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       </section>

@@ -309,3 +309,30 @@ export async function callCorrectEpfoBalance(
   if (error) throw error;
   return toLedgerEntry(data as RawEpfoLedgerRpcReturn);
 }
+
+// ============================================================
+// Phase 6 RPCs
+// ============================================================
+
+export interface ConfirmEpfoPassbookBatchResult {
+  inserted: number;
+  skipped: number;
+}
+
+export async function callConfirmEpfoPassbookBatch(
+  client: TypedSupabaseClient,
+  userId: string,
+  importBatchId: string,
+  employmentId: string | null,
+  actor: "web" | "spensa" | "mcp" | "system" = "web",
+): Promise<ConfirmEpfoPassbookBatchResult> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (client as any).rpc("confirm_epfo_passbook_batch", {
+    p_user_id: userId,
+    p_import_batch_id: importBatchId,
+    p_employment_id: employmentId,
+    p_actor: actor,
+  });
+  if (error) throw error;
+  return data as ConfirmEpfoPassbookBatchResult;
+}

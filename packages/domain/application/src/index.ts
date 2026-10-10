@@ -39,6 +39,10 @@ export {
   upsertEpfoContributionProfile,
   recordEpfoContribution,
   correctEpfoBalance,
+  importEpfoPassbook,
+  confirmEpfoPassbookImport,
+  type ImportEpfoPassbookCommandInput,
+  type ImportEpfoPassbookResult,
 } from "./commands/epfo.js";
 
 export {
@@ -549,3 +553,51 @@ export {
   type PaymentMatchResult,
   type CreditCardBillingStatus,
 } from "./services/creditCardPayment.js";
+
+export {
+  createVehicle,
+  updateVehicle,
+  deleteVehicle,
+  createFuelEntry,
+  updateFuelEntry,
+  deleteFuelEntry,
+  createVehicleExpense,
+  deleteVehicleExpense,
+  createMaintenanceRecord,
+  deleteMaintenanceRecord,
+  createVehicleDocument,
+  deleteVehicleDocument,
+  dismissVehicleReminder,
+  type CreateVehicleInput,
+  type UpdateVehicleInput,
+  type DeleteVehicleInput,
+  type CreateFuelEntryInput,
+  type UpdateFuelEntryInput,
+  type DeleteFuelEntryInput,
+  type CreateVehicleExpenseInput,
+  type DeleteVehicleExpenseInput,
+  type CreateMaintenanceInput,
+  type DeleteMaintenanceInput,
+  type CreateVehicleDocumentInput,
+  type DeleteVehicleDocumentInput,
+  type DismissReminderInput,
+} from "./commands/vehicles.js";
+
+export {
+  listVehicles,
+  getVehicle,
+  listFuelEntries,
+  getFuelEntry,
+  listVehicleExpenses,
+  listMaintenanceRecords,
+  listVehicleDocuments,
+  listVehicleReminders,
+  getVehicleDashboard,
+  type VehicleRow,
+  type VehicleFuelEntryRow,
+  type VehicleExpenseRow,
+  type VehicleMaintenanceRow,
+  type VehicleDocumentRow,
+  type VehicleReminderRow,
+  type VehicleDashboardData,
+} from "./queries/vehicles.js";

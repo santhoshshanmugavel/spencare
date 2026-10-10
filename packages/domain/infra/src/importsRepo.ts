@@ -9,7 +9,7 @@ import type { TypedSupabaseClient } from "./supabaseClients.js";
  * service-role needed for this table.
  */
 
-export type ImportSourceType = "csv" | "pdf_statement" | "manual" | "copy_paste";
+export type ImportSourceType = "csv" | "pdf_statement" | "manual" | "copy_paste" | "epfo_passbook";
 export type ImportStatus = "uploaded" | "processing" | "awaiting_review" | "confirmed" | "failed" | "cancelled";
 
 export interface ImportBatchRow {

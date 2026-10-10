@@ -28,6 +28,7 @@ export * from "./rateLimitRepo.js";
 export * from "./notificationsRepo.js";
 export * from "./channelConnectionsRepo.js";
 export * from "./notificationPreferencesRepo.js";
+export * from "./vehiclesRepo.js";
 export * from "./creditCardPaymentSourcesRepo.js";
 export * from "./financialPlansRepo.js";
 export {
@@ -90,4 +91,6 @@ export {
   type UpsertEpfoContributionProfileInput,
   type RecordEpfoContributionInput,
   type CorrectEpfoBalanceInput,
+  type ConfirmEpfoPassbookBatchResult,
+  callConfirmEpfoPassbookBatch,
 } from "./epfoRepo.js";

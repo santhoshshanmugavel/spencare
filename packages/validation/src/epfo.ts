@@ -91,3 +91,18 @@ export const correctEpfoBalanceSchema = z.object({
   occurredAt: isoTimestampSchema,
 });
 export type CorrectEpfoBalanceInput = z.infer<typeof correctEpfoBalanceSchema>;
+
+export const importEpfoPassbookSchema = z.object({
+  accountId: z.string().uuid(),
+  employmentId: z.string().uuid().nullable().optional(),
+  fileName: z.string().trim().min(1, "File name is required.").max(255),
+  fileSizeBytes: z.number().int().positive("File must not be empty.").max(20 * 1024 * 1024, "File must be under 20 MB."),
+});
+export type ImportEpfoPassbookInput = z.infer<typeof importEpfoPassbookSchema>;
+
+export const confirmEpfoPassbookImportSchema = z.object({
+  importBatchId: z.string().uuid(),
+  accountId: z.string().uuid(),
+  employmentId: z.string().uuid().nullable().optional(),
+});
+export type ConfirmEpfoPassbookImportInput = z.infer<typeof confirmEpfoPassbookImportSchema>;

@@ -35,3 +35,9 @@ export {
   summarisePeriodContributions,
   expectedTotalAsMoney,
 } from "./expectedContributions.js";
+
+export {
+  type PassbookEntry,
+  type ParsedPassbookResult,
+  parseEpfoPassbook,
+} from "./passbookParser.js";

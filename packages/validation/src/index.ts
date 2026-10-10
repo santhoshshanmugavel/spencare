@@ -298,4 +298,8 @@ export {
   type UpsertEpfoContributionProfileInput,
   type RecordEpfoContributionInput,
   type CorrectEpfoBalanceInput,
+  importEpfoPassbookSchema,
+  confirmEpfoPassbookImportSchema,
+  type ImportEpfoPassbookInput,
+  type ConfirmEpfoPassbookImportInput,
 } from "./epfo.js";

@@ -15,6 +15,8 @@ import {
   upsertEpfoContributionProfile,
   recordEpfoContribution,
   correctEpfoBalance,
+  importEpfoPassbook,
+  confirmEpfoPassbookImport,
   getEpfoAccountOverview,
   type AuthContext,
 } from "@spencare/domain-application";
@@ -27,6 +29,7 @@ import type {
   UpsertEpfoContributionProfileInput,
   RecordEpfoContributionInput,
   CorrectEpfoBalanceInput,
+  ConfirmEpfoPassbookImportInput,
 } from "@spencare/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
@@ -184,6 +187,34 @@ export async function recordEpfoContributionAction(input: RecordEpfoContribution
 export async function correctEpfoBalanceAction(input: CorrectEpfoBalanceInput) {
   const ctx = await requireAuthContext();
   const result = await correctEpfoBalance.execute(ctx, input);
+  if (result.ok) revalidatePath("/settings/accounts");
+  return result;
+}
+
+export async function importEpfoPassbookAction(
+  accountId: string,
+  employmentId: string | null,
+  formData: FormData,
+) {
+  const ctx = await requireAuthContext();
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) {
+    return { ok: false as const, error: { code: "validation_error", message: "Select a passbook PDF file." } };
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const result = await importEpfoPassbook.execute(ctx, {
+    accountId,
+    employmentId: employmentId ?? undefined,
+    fileName: file.name,
+    fileSizeBytes: file.size,
+    fileBytes: bytes,
+  });
+  return result;
+}
+
+export async function confirmEpfoPassbookImportAction(input: ConfirmEpfoPassbookImportInput) {
+  const ctx = await requireAuthContext();
+  const result = await confirmEpfoPassbookImport.execute(ctx, input);
   if (result.ok) revalidatePath("/settings/accounts");
   return result;
 }
