@@ -1461,7 +1461,7 @@ export function VehicleDetail({
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Total costs</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <PeriodCell label="This year" value={fmtAmount(thisYearFuelCostMinor, currency, masked)} highlight />
+                      <PeriodCell label="This year" value={fmtAmount(thisYearTotalMinor, currency, masked)} highlight />
                       <PeriodCell label="This month" value={fmtAmount(thisMonthCosts?.totalCostMinor ?? 0, currency, masked)} />
                       <PeriodCell label="Prev year" value={fmtAmount(prevYearCostMinor, currency, masked)} />
                       <PeriodCell label="Prev month" value={fmtAmount(prevMonthCostMinor, currency, masked)} />
