@@ -4,7 +4,7 @@ import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Fuel, Wrench, FileText, Bell, DollarSign, BarChart3,
-  Plus, Trash2, Gauge, Activity, TrendingUp, Car, Bike,
+  Plus, Trash2, Gauge,
 } from "lucide-react";
 import type {
   VehicleMaintenanceRow,
@@ -13,6 +13,7 @@ import type {
 } from "@spencare/domain-application";
 import type { VehicleDashboardData } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,9 +49,9 @@ function fmtLitres(ml: number): string {
   return (ml / 1000).toFixed(2) + " L";
 }
 
-function fmtDateShort(dateStr: string): string {
+function fmtDateFull(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
 function formatMonthLabel(yearMonth: string): string {
@@ -77,6 +78,16 @@ function groupByMonth<T extends { occurred_at: string }>(
     label: formatMonthLabel(month),
     entries: items,
   }));
+}
+
+function currentYearMonth(): string {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function prevYearMonth(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 7);
 }
 
 // ── Tab config ─────────────────────────────────────────────────────────────
@@ -126,6 +137,37 @@ export function VehicleDetail({
   const efficiency = dashboard.efficiency;
   const costPerKm = dashboard.costPerKm;
 
+  // ── Derived metrics ──────────────────────────────────────────────────────
+
+  const totalLitres = useMemo(
+    () => fuelEntries.reduce((acc, e) => acc + Number(e.fuel_quantity_ml), 0) / 1000,
+    [fuelEntries]
+  );
+
+  const lastFuelPricePerL = useMemo(() => {
+    const entry = fuelEntries.find(
+      (e) => e.total_cost_minor != null && Number(e.fuel_quantity_ml) > 0
+    );
+    if (!entry) return null;
+    return (Number(entry.total_cost_minor!) / 100) / (Number(entry.fuel_quantity_ml) / 1000);
+  }, [fuelEntries]);
+
+  const lastFuelEntry = fuelEntries[0] ?? null;
+
+  // Distance delta: entry id -> km driven since previous fill-up
+  const distanceDeltaMap = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (let i = 0; i < fuelEntries.length; i++) {
+      const curr = Number(fuelEntries[i].odometer) / 10;
+      const prev = i < fuelEntries.length - 1 ? Number(fuelEntries[i + 1].odometer) / 10 : null;
+      map.set(fuelEntries[i].id, prev !== null ? curr - prev : null);
+    }
+    return map;
+  }, [fuelEntries]);
+
+  const thisMonthCosts = dashboard.monthlyCosts.find((m) => m.month === currentYearMonth());
+  const prevMonthCosts = dashboard.monthlyCosts.find((m) => m.month === prevYearMonth());
+
   const fuelByMonth = useMemo(() => groupByMonth(fuelEntries), [fuelEntries]);
   const expensesByMonth = useMemo(() => groupByMonth(expenses), [expenses]);
 
@@ -157,21 +199,12 @@ export function VehicleDetail({
     setFuelError(null);
     startTransition(async () => {
       const result = await createFuelEntryAction({
-        vehicleId,
-        occurredAt: fuelDate,
-        odometer: odoTenths,
-        fuelQuantityMl: fuelMl,
-        totalCostMinor: costMinor,
-        currency,
-        fuelType: dashboard.vehicle.fuel_type,
-        isFullTank: fuelIsFull,
+        vehicleId, occurredAt: fuelDate, odometer: odoTenths,
+        fuelQuantityMl: fuelMl, totalCostMinor: costMinor,
+        currency, fuelType: dashboard.vehicle.fuel_type, isFullTank: fuelIsFull,
       });
-      if (result.ok) {
-        setFuelEntries((prev) => [result.value, ...prev]);
-        setShowFuelDialog(false);
-      } else {
-        setFuelError(result.error.message);
-      }
+      if (result.ok) { setFuelEntries((prev) => [result.value, ...prev]); setShowFuelDialog(false); }
+      else { setFuelError(result.error.message); }
     });
   }
 
@@ -190,19 +223,11 @@ export function VehicleDetail({
     setExpenseError(null);
     startTransition(async () => {
       const result = await createVehicleExpenseAction({
-        vehicleId,
-        occurredAt: expenseDate,
-        amountMinor,
-        currency,
-        expenseCategory,
-        description: expenseDesc.trim() || null,
+        vehicleId, occurredAt: expenseDate, amountMinor,
+        currency, expenseCategory, description: expenseDesc.trim() || null,
       });
-      if (result.ok) {
-        setExpenses((prev) => [result.value, ...prev]);
-        setShowExpenseDialog(false);
-      } else {
-        setExpenseError(result.error.message);
-      }
+      if (result.ok) { setExpenses((prev) => [result.value, ...prev]); setShowExpenseDialog(false); }
+      else { setExpenseError(result.error.message); }
     });
   }
 
@@ -222,20 +247,12 @@ export function VehicleDetail({
     setMaintError(null);
     startTransition(async () => {
       const result = await createMaintenanceRecordAction({
-        vehicleId,
-        title: maintTitle.trim(),
-        maintenanceCategory: maintCategory,
-        servicedAt: maintDate || null,
-        costMinor: costMinor ?? null,
-        currency: costMinor !== null ? currency : null,
-        nextDueDate: maintNextDate || null,
+        vehicleId, title: maintTitle.trim(), maintenanceCategory: maintCategory,
+        servicedAt: maintDate || null, costMinor: costMinor ?? null,
+        currency: costMinor !== null ? currency : null, nextDueDate: maintNextDate || null,
       });
-      if (result.ok) {
-        setMaintenance((prev) => [result.value, ...prev]);
-        setShowMaintenanceDialog(false);
-      } else {
-        setMaintError(result.error.message);
-      }
+      if (result.ok) { setMaintenance((prev) => [result.value, ...prev]); setShowMaintenanceDialog(false); }
+      else { setMaintError(result.error.message); }
     });
   }
 
@@ -252,18 +269,11 @@ export function VehicleDetail({
     setDocError(null);
     startTransition(async () => {
       const result = await createVehicleDocumentAction({
-        vehicleId,
-        documentType: docType,
-        title: docTitle.trim(),
-        expiryDate: docExpiry || null,
-        reminderDaysBefore: [30, 7, 1],
+        vehicleId, documentType: docType, title: docTitle.trim(),
+        expiryDate: docExpiry || null, reminderDaysBefore: [30, 7, 1],
       });
-      if (result.ok) {
-        setDocuments((prev) => [result.value, ...prev]);
-        setShowDocDialog(false);
-      } else {
-        setDocError(result.error.message);
-      }
+      if (result.ok) { setDocuments((prev) => [result.value, ...prev]); setShowDocDialog(false); }
+      else { setDocError(result.error.message); }
     });
   }
 
@@ -272,82 +282,120 @@ export function VehicleDetail({
   return (
     <div className="space-y-5">
 
-      {/* Hero header card */}
-      <div className="rounded-2xl bg-teal-950 border border-teal-900 p-5">
-        <div className="flex items-start gap-3 mb-3">
-          <button
-            onClick={() => router.push("/vehicles")}
-            className="mt-0.5 size-8 rounded-full bg-teal-900 hover:bg-teal-800 flex items-center justify-center text-teal-300 transition-colors shrink-0"
-          >
-            <ArrowLeft className="size-4" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-white font-bold text-xl leading-tight">{dashboard.vehicle.name}</h1>
-            <div className="flex flex-wrap gap-1.5 mt-1.5">
-              <span className="text-xs bg-teal-900 text-teal-300 px-2 py-0.5 rounded-full capitalize">
-                {dashboard.vehicle.vehicle_type}
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <button
+          onClick={() => router.push("/vehicles")}
+          className="mt-1 size-8 rounded-full border bg-background hover:bg-muted flex items-center justify-center text-muted-foreground transition-colors shrink-0"
+        >
+          <ArrowLeft className="size-4" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <h1 className="font-bold text-xl leading-tight">{dashboard.vehicle.name}</h1>
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full capitalize">
+              {dashboard.vehicle.vehicle_type}
+            </span>
+            <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full capitalize">
+              {dashboard.vehicle.fuel_type}
+            </span>
+            {dashboard.vehicle.registration_number && (
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-mono tracking-widest">
+                {dashboard.vehicle.registration_number}
               </span>
-              <span className="text-xs bg-teal-900 text-teal-300 px-2 py-0.5 rounded-full capitalize">
-                {dashboard.vehicle.fuel_type}
-              </span>
-              {dashboard.vehicle.registration_number && (
-                <span className="text-xs bg-teal-900/50 text-teal-400 px-2 py-0.5 rounded-full font-mono tracking-widest">
-                  {dashboard.vehicle.registration_number}
-                </span>
+            )}
+          </div>
+          {dashboard.vehicle.current_odometer != null && dashboard.vehicle.current_odometer > 0 && (
+            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
+              <Gauge className="size-3.5" />
+              <span className="tabular-nums">{fmtOdometer(dashboard.vehicle.current_odometer)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Hero metric: km/l ── */}
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">
+                {dashboard.vehicle.fuel_type.toUpperCase()} EFFICIENCY
+              </p>
+              {efficiency.type === "computed" ? (
+                <div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-4xl font-bold tabular-nums text-foreground">
+                      {(efficiency.kmPerLitreCx100 / 100).toFixed(2)}
+                    </span>
+                    <span className="text-lg text-muted-foreground font-medium">km/l</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">Average fuel consumption</p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-3xl font-bold text-muted-foreground">—</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Need 2+ full-tank fill-ups to compute</p>
+                </div>
               )}
             </div>
+            <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <Fuel className="size-5 text-primary" />
+            </div>
           </div>
-        </div>
-        {dashboard.vehicle.current_odometer != null && dashboard.vehicle.current_odometer > 0 && (
-          <div className="flex items-center gap-2 pt-2 border-t border-teal-900">
-            <Gauge className="size-4 text-teal-500" />
-            <span className="text-teal-300 text-sm font-medium tabular-nums">
-              {fmtOdometer(dashboard.vehicle.current_odometer)}
-            </span>
-            <span className="text-teal-700 text-xs">last odometer</span>
-          </div>
-        )}
+
+          {lastFuelPricePerL != null && lastFuelEntry && (
+            <div className="mt-4 pt-4 border-t border-primary/10 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold tabular-nums">
+                  {masked ? "***" : `${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`}
+                </p>
+                <p className="text-xs text-muted-foreground">Last fuel price</p>
+              </div>
+              <p className="text-xs text-muted-foreground">{lastFuelEntry.occurred_at}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Secondary stats row ── */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="Total cost" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} Icon={DollarSign} />
+        <StatCard label="Total litres" value={`${totalLitres.toFixed(1)} L`} Icon={Fuel} />
+        <StatCard label="Fill-ups" value={String(fuelEntries.length)} Icon={BarChart3} />
       </div>
 
-      {/* Key stats — 2×2 grid */}
-      <div className="grid grid-cols-2 gap-3">
-        <TealStatCard
-          label="Total fuel cost"
-          value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)}
-          Icon={Fuel}
-        />
-        <TealStatCard
-          label="Fuel efficiency"
-          value={
-            efficiency.type === "computed"
-              ? `${(efficiency.kmPerLitreCx100 / 100).toFixed(1)} km/L`
-              : "—"
-          }
-          Icon={Activity}
-          highlight
-        />
-        <TealStatCard
-          label="Cost per km"
-          value={
-            costPerKm.type === "computed" && !masked
-              ? `${fmtAmount(costPerKm.costPerKmCx100 / 100, currency, false)}/km`
-              : costPerKm.type === "computed"
-              ? "***"
-              : "—"
-          }
-          Icon={TrendingUp}
-        />
-        <TealStatCard
-          label="Total fill-ups"
-          value={String(fuelEntries.length)}
-          Icon={BarChart3}
-          highlight
-        />
-      </div>
+      {/* ── This month vs Previous month ── */}
+      {(thisMonthCosts || prevMonthCosts) && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+              Monthly costs
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <MonthCostCol
+                label="This month"
+                fuelCost={thisMonthCosts?.fuelCostMinor ?? 0}
+                otherCost={thisMonthCosts?.otherCostMinor ?? 0}
+                currency={currency}
+                masked={masked}
+                highlight
+              />
+              <MonthCostCol
+                label="Previous month"
+                fuelCost={prevMonthCosts?.fuelCostMinor ?? 0}
+                otherCost={prevMonthCosts?.otherCostMinor ?? 0}
+                currency={currency}
+                masked={masked}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Horizontal tab bar */}
+      {/* ── Tab bar ── */}
       <div className="overflow-x-auto -mx-1 px-1 pb-px">
-        <div className="flex gap-0 min-w-max border-b border-teal-900/60">
+        <div className="flex min-w-max border-b">
           {TABS.map(({ id, label, Icon }) => {
             const active = activeTab === id;
             return (
@@ -356,18 +404,18 @@ export function VehicleDetail({
                 onClick={() => setActiveTab(id)}
                 className={[
                   "relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors",
-                  active ? "text-teal-400" : "text-muted-foreground hover:text-foreground",
+                  active ? "text-primary" : "text-muted-foreground hover:text-foreground",
                 ].join(" ")}
               >
                 <Icon className="size-3.5" />
                 {label}
                 {id === "reminders" && reminders.length > 0 && (
-                  <span className="size-[18px] rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold leading-none">
+                  <span className="size-[18px] rounded-full bg-destructive text-destructive-foreground text-[9px] flex items-center justify-center font-bold">
                     {reminders.length}
                   </span>
                 )}
                 {active && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-400 rounded-full" />
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
                 )}
               </button>
             );
@@ -375,10 +423,10 @@ export function VehicleDetail({
         </div>
       </div>
 
-      {/* Tab contents */}
+      {/* ── Tab contents ── */}
       <div className="min-h-52">
 
-        {/* ── Fuel Log ── */}
+        {/* Fuel Log */}
         {activeTab === "fuel" && (
           <div className="space-y-5">
             <div className="flex items-center justify-between">
@@ -389,87 +437,100 @@ export function VehicleDetail({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-teal-800 text-teal-400 hover:bg-teal-950 hover:text-teal-300 text-xs"
+                  className="text-xs"
                   onClick={() => router.push(`/vehicles/${vehicleId}/import`)}
                 >
                   Import CSV
                 </Button>
-                <Button
-                  size="sm"
-                  className="bg-teal-500 hover:bg-teal-400 text-teal-950 font-semibold text-xs"
-                  onClick={() => setShowFuelDialog(true)}
-                >
+                <Button size="sm" className="text-xs" onClick={() => setShowFuelDialog(true)}>
                   <Plus className="size-3.5 mr-1" /> Log fuel
                 </Button>
               </div>
             </div>
 
             {fuelEntries.length === 0 ? (
-              <TealEmptyState Icon={Fuel} message="No fuel entries yet. Log your first fill-up or import a CSV." />
+              <EmptyState Icon={Fuel} message="No fuel entries yet. Log your first fill-up or import a CSV." />
             ) : (
               fuelByMonth.map(({ month, label, entries }) => (
                 <div key={month}>
                   <MonthDivider label={label} />
-                  <div className="space-y-2 mt-3">
-                    {entries.map((e) => (
-                      <div
-                        key={e.id}
-                        className="bg-teal-950 rounded-xl border border-teal-900/50 p-4 flex gap-3 group hover:border-teal-800/80 transition-colors"
-                      >
-                        {/* Icon */}
-                        <div className="size-9 rounded-full bg-teal-900 flex items-center justify-center shrink-0 mt-0.5">
-                          <Fuel className="size-4 text-teal-400" />
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <span className="text-white text-sm font-medium">Refueling</span>
+                  <div className="mt-3">
+                    {entries.map((e, idx) => {
+                      const delta = distanceDeltaMap.get(e.id);
+                      const pricePerL = e.total_cost_minor != null && Number(e.fuel_quantity_ml) > 0
+                        ? (Number(e.total_cost_minor) / 100) / (Number(e.fuel_quantity_ml) / 1000)
+                        : null;
+                      const isLast = idx === entries.length - 1;
+                      return (
+                        <div key={e.id} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className="size-8 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center shrink-0 z-10">
+                              <Fuel className="size-3.5 text-primary" />
+                            </div>
+                            {!isLast && <div className="w-px flex-1 bg-border mt-1 mb-1" />}
+                          </div>
+                          <div className={["flex-1", isLast ? "pb-1" : "pb-4"].join(" ")}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold leading-none">Refueling</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">{fmtDateFull(e.occurred_at)}</p>
+                              </div>
+                              {e.total_cost_minor != null && (
+                                <p className="text-sm font-bold tabular-nums shrink-0">
+                                  {fmtAmount(Number(e.total_cost_minor), e.currency, masked)}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Gauge className="size-3" />
+                                {fmtOdometer(Number(e.odometer))}
+                                {delta != null && delta > 0 && (
+                                  <span className="text-primary font-medium ml-0.5">+{delta.toFixed(1)} km</span>
+                                )}
+                              </span>
+                              <span>{fmtLitres(Number(e.fuel_quantity_ml))}</span>
+                              {pricePerL != null && !masked && (
+                                <span className="font-medium">
+                                  {currency === "INR" ? "₹" : currency}{pricePerL.toFixed(2)}/L
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
                               {e.is_full_tank && (
-                                <span className="ml-2 text-teal-500 text-xs">Full tank</span>
+                                <span className="text-[10px] bg-primary/8 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                                  Full tank
+                                </span>
                               )}
                               {e.is_missed && (
-                                <span className="ml-2 text-amber-400 text-xs">Missed</span>
+                                <span className="text-[10px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full font-medium">
+                                  Missed
+                                </span>
                               )}
-                              <p className="text-teal-600 text-xs mt-0.5">{fmtDateShort(e.occurred_at)}</p>
+                              {e.notes && (
+                                <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full italic">
+                                  {e.notes}
+                                </span>
+                              )}
                             </div>
-                            {e.total_cost_minor != null && (
-                              <p className="text-white font-bold text-base tabular-nums shrink-0 leading-none mt-0.5">
-                                {fmtAmount(Number(e.total_cost_minor), e.currency, masked)}
-                              </p>
-                            )}
                           </div>
-                          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-teal-500">
-                            <span className="flex items-center gap-1">
-                              <Gauge className="size-3 text-teal-700" />
-                              {fmtOdometer(Number(e.odometer))}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <span className="size-1.5 rounded-full bg-teal-700 inline-block" />
-                              {fmtLitres(Number(e.fuel_quantity_ml))}
-                            </span>
-                            {e.notes && <span className="text-teal-700 italic">{e.notes}</span>}
-                          </div>
+                          <button
+                            disabled={isPending}
+                            className="mt-0.5 size-6 rounded text-transparent hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
+                            onClick={() => {
+                              if (confirm("Delete this fuel entry?")) {
+                                startTransition(async () => {
+                                  const r = await deleteFuelEntryAction(vehicleId, e.id);
+                                  if (r.ok) setFuelEntries((prev) => prev.filter((x) => x.id !== e.id));
+                                });
+                              }
+                            }}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
                         </div>
-
-                        {/* Delete */}
-                        <button
-                          disabled={isPending}
-                          className="size-6 rounded text-transparent group-hover:text-teal-700 hover:!text-red-400 hover:bg-teal-900 flex items-center justify-center transition-all shrink-0 mt-0.5"
-                          onClick={() => {
-                            if (confirm("Delete this fuel entry?")) {
-                              startTransition(async () => {
-                                const r = await deleteFuelEntryAction(vehicleId, e.id);
-                                if (r.ok) setFuelEntries((prev) => prev.filter((x) => x.id !== e.id));
-                              });
-                            }
-                          }}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))
@@ -477,54 +538,44 @@ export function VehicleDetail({
           </div>
         )}
 
-        {/* ── Expenses ── */}
+        {/* Expenses */}
         {activeTab === "expenses" && (
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
                 {expenses.length} expense{expenses.length !== 1 ? "s" : ""}
               </span>
-              <Button
-                size="sm"
-                className="bg-teal-500 hover:bg-teal-400 text-teal-950 font-semibold text-xs"
-                onClick={() => setShowExpenseDialog(true)}
-              >
+              <Button size="sm" className="text-xs" onClick={() => setShowExpenseDialog(true)}>
                 <Plus className="size-3.5 mr-1" /> Add expense
               </Button>
             </div>
-
             {expenses.length === 0 ? (
-              <TealEmptyState Icon={DollarSign} message="No expenses recorded yet." />
+              <EmptyState Icon={DollarSign} message="No expenses recorded yet." />
             ) : (
               expensesByMonth.map(({ month, label, entries }) => (
                 <div key={month}>
                   <MonthDivider label={label} />
-                  <div className="space-y-2 mt-3">
+                  <div className="mt-3 space-y-1">
                     {entries.map((e) => (
-                      <div
-                        key={e.id}
-                        className="bg-teal-950 rounded-xl border border-teal-900/50 p-4 flex gap-3 group hover:border-teal-800/80 transition-colors"
-                      >
-                        <div className="size-9 rounded-full bg-teal-900 flex items-center justify-center shrink-0 mt-0.5">
-                          <DollarSign className="size-4 text-teal-400" />
+                      <div key={e.id} className="flex items-start gap-3 py-2 group">
+                        <div className="size-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                          <DollarSign className="size-3.5 text-muted-foreground" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-white text-sm font-medium capitalize">{e.expense_category}</p>
-                              <p className="text-teal-600 text-xs mt-0.5">{fmtDateShort(e.occurred_at)}</p>
-                            </div>
-                            <p className="text-white font-bold text-base tabular-nums shrink-0 leading-none mt-0.5">
+                          <div className="flex justify-between gap-2">
+                            <p className="text-sm font-medium capitalize">{e.expense_category.replace("_", " ")}</p>
+                            <p className="text-sm font-bold tabular-nums shrink-0">
                               {fmtAmount(Number(e.amount_minor), e.currency, masked)}
                             </p>
                           </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{fmtDateFull(e.occurred_at)}</p>
                           {e.description && (
-                            <p className="text-teal-600 text-xs mt-1.5 italic">{e.description}</p>
+                            <p className="text-xs text-muted-foreground italic mt-0.5">{e.description}</p>
                           )}
                         </div>
                         <button
                           disabled={isPending}
-                          className="size-6 rounded text-transparent group-hover:text-teal-700 hover:!text-red-400 hover:bg-teal-900 flex items-center justify-center transition-all shrink-0 mt-0.5"
+                          className="mt-0.5 size-6 rounded text-transparent group-hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
                           onClick={() => {
                             if (confirm("Delete this expense?")) {
                               startTransition(async () => {
@@ -545,155 +596,122 @@ export function VehicleDetail({
           </div>
         )}
 
-        {/* ── Maintenance ── */}
+        {/* Maintenance */}
         {activeTab === "maintenance" && (
           <div className="space-y-4">
             <div className="flex justify-end">
-              <Button
-                size="sm"
-                className="bg-teal-500 hover:bg-teal-400 text-teal-950 font-semibold text-xs"
-                onClick={() => setShowMaintenanceDialog(true)}
-              >
+              <Button size="sm" className="text-xs" onClick={() => setShowMaintenanceDialog(true)}>
                 <Plus className="size-3.5 mr-1" /> Add record
               </Button>
             </div>
-
             {maintenance.length === 0 ? (
-              <TealEmptyState Icon={Wrench} message="No service records yet." />
+              <EmptyState Icon={Wrench} message="No service records yet." />
             ) : (
               <div className="space-y-2">
                 {maintenance.map((m) => (
-                  <div
-                    key={m.id}
-                    className="bg-teal-950 rounded-xl border border-teal-900/50 p-4 flex gap-3 group hover:border-teal-800/80 transition-colors"
-                  >
-                    <div className="size-9 rounded-full bg-teal-900 flex items-center justify-center shrink-0 mt-0.5">
-                      <Wrench className="size-4 text-teal-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-white text-sm font-medium">{m.title}</p>
-                          <div className="flex flex-wrap gap-2 mt-1 text-xs text-teal-500">
-                            <span className="capitalize">{m.maintenance_category.replace("_", " ")}</span>
-                            {m.serviced_at && <span>· {m.serviced_at}</span>}
-                            {m.next_due_date && (
-                              <span className="text-teal-400">· Next: {m.next_due_date}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
+                  <Card key={m.id}>
+                    <CardContent className="p-4 flex gap-3">
+                      <div className="size-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                        <Wrench className="size-3.5 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between gap-2">
+                          <p className="text-sm font-medium">{m.title}</p>
                           {m.cost_minor != null && m.currency && (
-                            <p className="text-white font-bold text-sm tabular-nums">
+                            <p className="text-sm font-bold tabular-nums shrink-0">
                               {fmtAmount(Number(m.cost_minor), m.currency, masked)}
                             </p>
                           )}
-                          {m.status === "overdue" && (
-                            <span className="text-xs text-red-400 font-medium">Overdue</span>
-                          )}
                         </div>
-                      </div>
-                    </div>
-                    <button
-                      disabled={isPending}
-                      className="size-6 rounded text-transparent group-hover:text-teal-700 hover:!text-red-400 hover:bg-teal-900 flex items-center justify-center transition-all shrink-0 mt-0.5"
-                      onClick={() => {
-                        if (confirm("Delete this maintenance record?")) {
-                          startTransition(async () => {
-                            const r = await deleteMaintenanceRecordAction(vehicleId, m.id);
-                            if (r.ok) setMaintenance((prev) => prev.filter((x) => x.id !== m.id));
-                          });
-                        }
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Documents ── */}
-        {activeTab === "documents" && (
-          <div className="space-y-4">
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                className="bg-teal-500 hover:bg-teal-400 text-teal-950 font-semibold text-xs"
-                onClick={() => setShowDocDialog(true)}
-              >
-                <Plus className="size-3.5 mr-1" /> Add document
-              </Button>
-            </div>
-
-            {documents.length === 0 ? (
-              <TealEmptyState Icon={FileText} message="No documents added yet." />
-            ) : (
-              <div className="space-y-2">
-                {documents.map((d) => {
-                  const daysLeft = d.expiry_date ? daysUntil(d.expiry_date) : null;
-                  const urgency =
-                    daysLeft === null ? "none"
-                    : daysLeft < 0 ? "expired"
-                    : daysLeft <= 7 ? "urgent"
-                    : daysLeft <= 30 ? "warning" : "ok";
-                  return (
-                    <div
-                      key={d.id}
-                      className="bg-teal-950 rounded-xl border border-teal-900/50 p-4 flex gap-3 group hover:border-teal-800/80 transition-colors"
-                    >
-                      <div className={[
-                        "size-9 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                        urgency === "expired" || urgency === "urgent" ? "bg-red-950" : "bg-teal-900",
-                      ].join(" ")}>
-                        <FileText className={[
-                          "size-4",
-                          urgency === "expired" || urgency === "urgent" ? "text-red-400" : "text-teal-400",
-                        ].join(" ")} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-white text-sm font-medium">{d.title}</p>
-                            <p className="text-teal-600 text-xs mt-0.5 uppercase tracking-wide">
-                              {d.document_type.replace("_", " ")}
-                            </p>
-                          </div>
-                          {d.expiry_date && (
-                            <div className="text-right shrink-0">
-                              <p className={[
-                                "text-xs font-semibold",
-                                urgency === "expired" ? "text-red-400"
-                                : urgency === "urgent" ? "text-red-300"
-                                : urgency === "warning" ? "text-amber-400"
-                                : "text-teal-400",
-                              ].join(" ")}>
-                                {urgency === "expired" ? "Expired"
-                                : urgency === "urgent" || urgency === "warning" ? `${daysLeft}d left`
-                                : "Valid"}
-                              </p>
-                              <p className="text-teal-700 text-xs mt-0.5">{d.expiry_date}</p>
-                            </div>
-                          )}
+                        <div className="flex flex-wrap gap-x-2 mt-1 text-xs text-muted-foreground">
+                          <span className="capitalize">{m.maintenance_category.replace("_", " ")}</span>
+                          {m.serviced_at && <span>· {m.serviced_at}</span>}
+                          {m.next_due_date && <span>· Next: {m.next_due_date}</span>}
+                          {m.status === "overdue" && <span className="text-destructive font-medium">· Overdue</span>}
                         </div>
                       </div>
                       <button
                         disabled={isPending}
-                        className="size-6 rounded text-transparent group-hover:text-teal-700 hover:!text-red-400 hover:bg-teal-900 flex items-center justify-center transition-all shrink-0 mt-0.5"
+                        className="size-6 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
                         onClick={() => {
-                          if (confirm("Delete this document record?")) {
+                          if (confirm("Delete this maintenance record?")) {
                             startTransition(async () => {
-                              const r = await deleteVehicleDocumentAction(vehicleId, d.id);
-                              if (r.ok) setDocuments((prev) => prev.filter((x) => x.id !== d.id));
+                              const r = await deleteMaintenanceRecordAction(vehicleId, m.id);
+                              if (r.ok) setMaintenance((prev) => prev.filter((x) => x.id !== m.id));
                             });
                           }
                         }}
                       >
                         <Trash2 className="size-3.5" />
                       </button>
-                    </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Documents */}
+        {activeTab === "documents" && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button size="sm" className="text-xs" onClick={() => setShowDocDialog(true)}>
+                <Plus className="size-3.5 mr-1" /> Add document
+              </Button>
+            </div>
+            {documents.length === 0 ? (
+              <EmptyState Icon={FileText} message="No documents added yet." />
+            ) : (
+              <div className="space-y-2">
+                {documents.map((d) => {
+                  const daysLeft = d.expiry_date ? daysUntil(d.expiry_date) : null;
+                  const urgency = daysLeft === null ? "none" : daysLeft < 0 ? "expired" : daysLeft <= 7 ? "urgent" : daysLeft <= 30 ? "warning" : "ok";
+                  return (
+                    <Card key={d.id}>
+                      <CardContent className="p-4 flex gap-3">
+                        <div className={[
+                          "size-8 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                          urgency === "expired" || urgency === "urgent" ? "bg-destructive/10" : "bg-muted",
+                        ].join(" ")}>
+                          <FileText className={[
+                            "size-3.5",
+                            urgency === "expired" || urgency === "urgent" ? "text-destructive" : "text-muted-foreground",
+                          ].join(" ")} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between gap-2">
+                            <p className="text-sm font-medium">{d.title}</p>
+                            {d.expiry_date && (
+                              <span className={[
+                                "text-xs font-semibold shrink-0",
+                                urgency === "expired" || urgency === "urgent" ? "text-destructive" : urgency === "warning" ? "text-amber-600" : "text-muted-foreground",
+                              ].join(" ")}>
+                                {urgency === "expired" ? "Expired" : urgency === "urgent" ? `${daysLeft}d left` : urgency === "warning" ? `${daysLeft}d left` : "Valid"}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
+                            <span className="uppercase tracking-wide">{d.document_type.replace("_", " ")}</span>
+                            {d.expiry_date && <span>· {d.expiry_date}</span>}
+                          </div>
+                        </div>
+                        <button
+                          disabled={isPending}
+                          className="size-6 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
+                          onClick={() => {
+                            if (confirm("Delete this document?")) {
+                              startTransition(async () => {
+                                const r = await deleteVehicleDocumentAction(vehicleId, d.id);
+                                if (r.ok) setDocuments((prev) => prev.filter((x) => x.id !== d.id));
+                              });
+                            }
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </CardContent>
+                    </Card>
                   );
                 })}
               </div>
@@ -701,164 +719,178 @@ export function VehicleDetail({
           </div>
         )}
 
-        {/* ── Reminders ── */}
+        {/* Reminders */}
         {activeTab === "reminders" && (
           <div className="space-y-2">
             {reminders.length === 0 ? (
-              <TealEmptyState Icon={Bell} message="No active reminders." />
+              <EmptyState Icon={Bell} message="No active reminders." />
             ) : (
               reminders.map((r) => {
                 const daysLeft = r.due_date ? daysUntil(r.due_date) : null;
                 const isUrgent = daysLeft !== null && daysLeft <= 7;
                 return (
-                  <div
-                    key={r.id}
-                    className="bg-teal-950 rounded-xl border border-teal-900/50 p-4 flex items-start gap-3 hover:border-teal-800/80 transition-colors"
-                  >
-                    <div className={[
-                      "size-9 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                      isUrgent ? "bg-red-950" : "bg-teal-900",
-                    ].join(" ")}>
-                      <Bell className={["size-4", isUrgent ? "text-red-400" : "text-teal-400"].join(" ")} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-medium">{r.title}</p>
-                      <p className="text-teal-600 text-xs mt-0.5 capitalize">
-                        {r.reminder_type.replace("_", " ")}
-                      </p>
-                      {r.due_date && (
-                        <p className={[
-                          "text-xs mt-1 font-medium",
-                          daysLeft !== null && daysLeft < 0 ? "text-red-400" : "text-teal-400",
-                        ].join(" ")}>
-                          Due {r.due_date}
-                          {daysLeft !== null && (
-                            daysLeft < 0 ? " · Overdue"
-                            : daysLeft === 0 ? " · Today"
-                            : ` · ${daysLeft}d`
-                          )}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0 h-7 text-xs border-teal-800 text-teal-400 hover:bg-teal-900 hover:text-teal-300"
-                      disabled={isPending}
-                      onClick={() => {
-                        startTransition(async () => {
-                          const res = await dismissVehicleReminderAction(r.id);
-                          if (res.ok) setReminders((prev) => prev.filter((x) => x.id !== r.id));
-                        });
-                      }}
-                    >
-                      Dismiss
-                    </Button>
-                  </div>
+                  <Card key={r.id}>
+                    <CardContent className="p-4 flex items-start gap-3">
+                      <div className={[
+                        "size-8 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                        isUrgent ? "bg-destructive/10" : "bg-muted",
+                      ].join(" ")}>
+                        <Bell className={["size-3.5", isUrgent ? "text-destructive" : "text-muted-foreground"].join(" ")} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{r.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 capitalize">{r.reminder_type.replace("_", " ")}</p>
+                        {r.due_date && (
+                          <p className={["text-xs mt-1 font-medium", daysLeft !== null && daysLeft < 0 ? "text-destructive" : "text-muted-foreground"].join(" ")}>
+                            Due {r.due_date}
+                            {daysLeft !== null && (daysLeft < 0 ? " · Overdue" : daysLeft === 0 ? " · Today" : ` · ${daysLeft}d`)}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 h-7 text-xs"
+                        disabled={isPending}
+                        onClick={() => {
+                          startTransition(async () => {
+                            const res = await dismissVehicleReminderAction(r.id);
+                            if (res.ok) setReminders((prev) => prev.filter((x) => x.id !== r.id));
+                          });
+                        }}
+                      >
+                        Dismiss
+                      </Button>
+                    </CardContent>
+                  </Card>
                 );
               })
             )}
           </div>
         )}
 
-        {/* ── Analytics ── */}
+        {/* Analytics */}
         {activeTab === "analytics" && (
           <div className="space-y-4">
 
-            {/* Monthly cost bar chart */}
-            <div className="bg-teal-950 rounded-2xl border border-teal-900 p-5">
-              <p className="text-teal-500 text-xs font-semibold uppercase tracking-widest mb-5">
-                Monthly Costs
-              </p>
-              {chartData.length === 0 ? (
-                <p className="text-teal-600 text-sm">No monthly data yet.</p>
-              ) : (
-                <>
-                  <div className="flex items-end gap-1.5 h-32">
-                    {chartData.map((m) => (
-                      <div key={m.month} className="flex-1 flex flex-col items-center gap-1 h-full">
-                        <div className="flex-1 w-full flex flex-col justify-end">
-                          <div
-                            className="w-full bg-teal-400 rounded-t-md min-h-[3px] transition-all"
-                            style={{ height: `${(m.totalCostMinor / maxBar) * 100}%` }}
-                          />
-                        </div>
-                        <span className="text-teal-700 text-[10px] tabular-nums">
-                          {m.month.slice(5)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 space-y-2 border-t border-teal-900 pt-4">
-                    {[...chartData].reverse().map((m) => (
-                      <div key={m.month} className="flex items-center justify-between text-xs">
-                        <span className="text-teal-500">{formatMonthLabel(m.month)}</span>
-                        <span className="text-white font-semibold tabular-nums">
-                          {fmtAmount(m.totalCostMinor, currency, masked)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Efficiency */}
-            <div className="bg-teal-950 rounded-2xl border border-teal-900 p-5">
-              <p className="text-teal-500 text-xs font-semibold uppercase tracking-widest mb-4">
-                Fuel Efficiency
-              </p>
-              {efficiency.type === "computed" ? (
-                <div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-white font-bold text-3xl tabular-nums">
-                      {(efficiency.kmPerLitreCx100 / 100).toFixed(2)}
-                    </span>
-                    <span className="text-teal-400 text-base">km/L</span>
-                  </div>
-                  <p className="text-teal-600 text-xs mt-1.5">
-                    Calculated from {efficiency.intervalCount} full-tank interval
-                    {efficiency.intervalCount !== 1 ? "s" : ""}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-teal-600 text-sm leading-relaxed">
-                  Requires at least two consecutive full-tank fill-ups.
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
+                  Monthly costs
                 </p>
-              )}
-            </div>
-
-            {/* Cost summary */}
-            <div className="bg-teal-950 rounded-2xl border border-teal-900 p-5">
-              <p className="text-teal-500 text-xs font-semibold uppercase tracking-widest mb-4">
-                Cost Breakdown
-              </p>
-              <div className="space-y-3">
-                <SummaryRow label="Fuel" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} />
-                <div className="h-px bg-teal-900" />
-                <SummaryRow label="Other expenses" value={fmtAmount(dashboard.totalOtherCostMinor, currency, masked)} />
-                <div className="h-px bg-teal-900" />
-                <SummaryRow
-                  label="Total"
-                  value={fmtAmount(dashboard.totalCostMinor, currency, masked)}
-                  bold
-                />
-                {costPerKm.type === "computed" && (
+                {chartData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No monthly data yet.</p>
+                ) : (
                   <>
-                    <div className="h-px bg-teal-900" />
-                    <SummaryRow
-                      label="Cost per km"
-                      value={masked ? "***" : `${fmtAmount(costPerKm.costPerKmCx100 / 100, currency, false)}/km`}
-                    />
+                    <div className="flex items-end gap-1.5 h-28">
+                      {chartData.map((m) => (
+                        <div key={m.month} className="flex-1 flex flex-col items-center gap-1 h-full">
+                          <div className="flex-1 w-full flex flex-col justify-end">
+                            <div
+                              className="w-full bg-primary rounded-t-sm min-h-[3px] transition-all"
+                              style={{ height: `${(m.totalCostMinor / maxBar) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-muted-foreground text-[10px] tabular-nums">
+                            {m.month.slice(5)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 space-y-2 border-t pt-4">
+                      {[...chartData].reverse().map((m) => (
+                        <div key={m.month} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{formatMonthLabel(m.month)}</span>
+                          <span className="font-semibold tabular-nums">
+                            {fmtAmount(m.totalCostMinor, currency, masked)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
+                  Fuel statistics
+                </p>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-sm text-muted-foreground">Avg consumption</span>
+                    <span className="text-sm font-bold tabular-nums">
+                      {efficiency.type === "computed"
+                        ? `${(efficiency.kmPerLitreCx100 / 100).toFixed(2)} km/l`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="h-px bg-border" />
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-sm text-muted-foreground">Total litres</span>
+                    <span className="text-sm font-bold tabular-nums">{totalLitres.toFixed(2)} L</span>
+                  </div>
+                  <div className="h-px bg-border" />
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-sm text-muted-foreground">Fill-ups</span>
+                    <span className="text-sm font-bold tabular-nums">{fuelEntries.length}</span>
+                  </div>
+                  {lastFuelPricePerL != null && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-sm text-muted-foreground">Last fuel price</span>
+                        <span className="text-sm font-bold tabular-nums">
+                          {masked ? "***" : `${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {costPerKm.type === "computed" && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-sm text-muted-foreground">Cost per km</span>
+                        <span className="text-sm font-bold tabular-nums">
+                          {masked ? "***" : `${fmtAmount(costPerKm.costPerKmCx100 / 100, currency, false)}/km`}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
+                  Cost breakdown
+                </p>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-sm text-muted-foreground">Fuel</span>
+                    <span className="text-sm font-medium tabular-nums">{fmtAmount(dashboard.totalFuelCostMinor, currency, masked)}</span>
+                  </div>
+                  <div className="h-px bg-border" />
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-sm text-muted-foreground">Other expenses</span>
+                    <span className="text-sm font-medium tabular-nums">{fmtAmount(dashboard.totalOtherCostMinor, currency, masked)}</span>
+                  </div>
+                  <div className="h-px bg-border" />
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-sm font-semibold">Total</span>
+                    <span className="text-sm font-bold tabular-nums">{fmtAmount(dashboard.totalCostMinor, currency, masked)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
 
-      {/* ── Fuel dialog ── */}
+      {/* ── Dialogs ── */}
+
       <Dialog open={showFuelDialog} onOpenChange={setShowFuelDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Log fuel entry</DialogTitle></DialogHeader>
@@ -891,12 +923,11 @@ export function VehicleDetail({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFuelDialog(false)}>Cancel</Button>
-            <Button onClick={handleAddFuel} disabled={isPending}>{isPending ? "Saving…" : "Log entry"}</Button>
+            <Button onClick={handleAddFuel} disabled={isPending}>{isPending ? "Saving..." : "Log entry"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Expense dialog ── */}
       <Dialog open={showExpenseDialog} onOpenChange={setShowExpenseDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Add vehicle expense</DialogTitle></DialogHeader>
@@ -934,12 +965,11 @@ export function VehicleDetail({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowExpenseDialog(false)}>Cancel</Button>
-            <Button onClick={handleAddExpense} disabled={isPending}>{isPending ? "Saving…" : "Add expense"}</Button>
+            <Button onClick={handleAddExpense} disabled={isPending}>{isPending ? "Saving..." : "Add expense"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Maintenance dialog ── */}
       <Dialog open={showMaintenanceDialog} onOpenChange={setShowMaintenanceDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Add maintenance record</DialogTitle></DialogHeader>
@@ -985,12 +1015,11 @@ export function VehicleDetail({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowMaintenanceDialog(false)}>Cancel</Button>
-            <Button onClick={handleAddMaintenance} disabled={isPending}>{isPending ? "Saving…" : "Add record"}</Button>
+            <Button onClick={handleAddMaintenance} disabled={isPending}>{isPending ? "Saving..." : "Add record"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Document dialog ── */}
       <Dialog open={showDocDialog} onOpenChange={setShowDocDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Add document</DialogTitle></DialogHeader>
@@ -1024,7 +1053,7 @@ export function VehicleDetail({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDocDialog(false)}>Cancel</Button>
-            <Button onClick={handleAddDocument} disabled={isPending}>{isPending ? "Saving…" : "Add document"}</Button>
+            <Button onClick={handleAddDocument} disabled={isPending}>{isPending ? "Saving..." : "Add document"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1034,29 +1063,40 @@ export function VehicleDetail({
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function TealStatCard({
-  label,
-  value,
-  Icon,
-  highlight = false,
+function StatCard({ label, value, Icon }: { label: string; value: string; Icon: React.ElementType }) {
+  return (
+    <Card>
+      <CardContent className="p-3.5">
+        <Icon className="size-4 text-primary mb-2" />
+        <p className="text-base font-bold tabular-nums leading-none">{value}</p>
+        <p className="text-xs text-muted-foreground mt-1">{label}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MonthCostCol({
+  label, fuelCost, otherCost, currency, masked, highlight = false,
 }: {
-  label: string;
-  value: string;
-  Icon: React.ElementType;
-  highlight?: boolean;
+  label: string; fuelCost: number; otherCost: number; currency: string; masked: boolean; highlight?: boolean;
 }) {
   return (
-    <div
-      className={[
-        "rounded-2xl border p-4 space-y-1",
-        highlight
-          ? "bg-teal-900 border-teal-800"
-          : "bg-teal-950 border-teal-900",
-      ].join(" ")}
-    >
-      <Icon className="size-4 text-teal-400 mb-2" />
-      <p className="text-white font-bold text-lg tabular-nums leading-none">{value}</p>
-      <p className="text-teal-600 text-xs">{label}</p>
+    <div className={["rounded-lg p-3", highlight ? "bg-primary/5" : "bg-muted/40"].join(" ")}>
+      <p className={["text-[10px] font-semibold uppercase tracking-widest mb-2", highlight ? "text-primary" : "text-muted-foreground"].join(" ")}>
+        {label}
+      </p>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <Fuel className="size-3 text-muted-foreground shrink-0" />
+          <span className="text-sm font-semibold tabular-nums">{fmtAmount(fuelCost, currency, masked)}</span>
+          <span className="text-xs text-muted-foreground">Fuel</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <DollarSign className="size-3 text-muted-foreground shrink-0" />
+          <span className="text-sm font-medium tabular-nums text-muted-foreground">{fmtAmount(otherCost, currency, masked)}</span>
+          <span className="text-xs text-muted-foreground">Other</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1064,52 +1104,19 @@ function TealStatCard({
 function MonthDivider({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-teal-400 text-xs font-semibold uppercase tracking-widest whitespace-nowrap">
-        {label}
-      </span>
-      <div className="flex-1 h-px bg-teal-900" />
+      <span className="text-xs font-semibold text-primary uppercase tracking-widest whitespace-nowrap">{label}</span>
+      <div className="flex-1 h-px bg-border" />
     </div>
   );
 }
 
-function TealEmptyState({
-  Icon,
-  message,
-}: {
-  Icon: React.ElementType;
-  message: string;
-}) {
+function EmptyState({ Icon, message }: { Icon: React.ElementType; message: string }) {
   return (
-    <div className="bg-teal-950 rounded-2xl border border-teal-900 flex flex-col items-center gap-3 py-14 px-6 text-center">
-      <div className="size-14 rounded-full bg-teal-900 flex items-center justify-center">
-        <Icon className="size-6 text-teal-700" />
+    <div className="border border-dashed rounded-xl flex flex-col items-center gap-3 py-12 px-6 text-center">
+      <div className="size-12 rounded-full bg-muted flex items-center justify-center">
+        <Icon className="size-5 text-muted-foreground" />
       </div>
-      <p className="text-teal-600 text-sm max-w-xs">{message}</p>
+      <p className="text-sm text-muted-foreground max-w-xs">{message}</p>
     </div>
   );
 }
-
-function SummaryRow({
-  label,
-  value,
-  bold = false,
-}: {
-  label: string;
-  value: string;
-  bold?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className={["text-sm", bold ? "text-teal-300 font-semibold" : "text-teal-500"].join(" ")}>
-        {label}
-      </span>
-      <span className={["tabular-nums text-sm", bold ? "text-teal-300 font-bold" : "text-white font-medium"].join(" ")}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-// Suppress unused import warning — Bike kept for future vehicle type icons
-void Bike;
-void Car;

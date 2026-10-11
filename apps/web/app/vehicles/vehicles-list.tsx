@@ -15,18 +15,18 @@ import { createVehicleAction, deleteVehicleAction } from "./actions";
 
 type VehicleType = "motorcycle" | "scooter" | "car" | "ev" | "truck" | "van" | "other";
 
-const VEHICLE_CONFIG: Record<VehicleType, { gradient: string; Icon: React.ElementType }> = {
-  motorcycle: { gradient: "from-teal-800 via-teal-900 to-slate-950", Icon: Bike },
-  scooter: { gradient: "from-teal-700 via-teal-900 to-slate-950", Icon: Bike },
-  car: { gradient: "from-cyan-800 via-teal-900 to-slate-950", Icon: Car },
-  ev: { gradient: "from-emerald-700 via-teal-900 to-slate-950", Icon: Zap },
-  truck: { gradient: "from-stone-700 via-stone-900 to-slate-950", Icon: Truck },
-  van: { gradient: "from-blue-800 via-teal-900 to-slate-950", Icon: Car },
-  other: { gradient: "from-teal-900 via-slate-900 to-slate-950", Icon: Car },
+const VEHICLE_ICON: Record<VehicleType, React.ElementType> = {
+  motorcycle: Bike,
+  scooter: Bike,
+  car: Car,
+  ev: Zap,
+  truck: Truck,
+  van: Car,
+  other: Car,
 };
 
-function getConfig(vehicleType: string) {
-  return VEHICLE_CONFIG[vehicleType as VehicleType] ?? VEHICLE_CONFIG.other;
+function getIcon(vehicleType: string): React.ElementType {
+  return VEHICLE_ICON[vehicleType as VehicleType] ?? Car;
 }
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -107,17 +107,17 @@ export function VehiclesList({ initialVehicles }: VehiclesListProps) {
 
       {/* Empty state */}
       {vehicles.length === 0 ? (
-        <div className="bg-teal-950 rounded-2xl border border-teal-900 flex flex-col items-center gap-4 py-16 px-6 text-center">
-          <div className="size-16 rounded-full bg-teal-900 flex items-center justify-center">
-            <Car className="size-8 text-teal-700" />
+        <div className="border border-dashed rounded-2xl flex flex-col items-center gap-4 py-16 px-6 text-center">
+          <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <Car className="size-8 text-primary" />
           </div>
           <div>
-            <p className="text-white font-semibold mb-1">No vehicles yet</p>
-            <p className="text-teal-600 text-sm">Add a vehicle to start tracking fuel and expenses.</p>
+            <p className="font-semibold mb-1">No vehicles yet</p>
+            <p className="text-muted-foreground text-sm">Add a vehicle to start tracking fuel and expenses.</p>
           </div>
           <Button
-            className="bg-teal-500 hover:bg-teal-400 text-teal-950 font-semibold mt-2"
             onClick={() => { setShowCreate(true); resetForm(); }}
+            className="mt-2"
           >
             <Plus className="size-4 mr-1" /> Add your first vehicle
           </Button>
@@ -138,7 +138,7 @@ export function VehiclesList({ initialVehicles }: VehiclesListProps) {
 
       {/* Floating "+" FAB */}
       <button
-        className="fixed bottom-6 right-6 z-50 size-14 rounded-full bg-teal-500 hover:bg-teal-400 active:bg-teal-300 text-teal-950 shadow-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+        className="fixed bottom-6 right-6 z-50 size-14 rounded-full bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground shadow-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95"
         onClick={() => { setShowCreate(true); resetForm(); }}
         aria-label="Add vehicle"
       >
@@ -229,7 +229,7 @@ export function VehiclesList({ initialVehicles }: VehiclesListProps) {
               Cancel
             </Button>
             <Button onClick={handleCreate} disabled={isPending}>
-              {isPending ? "Saving…" : "Add vehicle"}
+              {isPending ? "Saving..." : "Add vehicle"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -251,36 +251,36 @@ function VehicleHeroCard({
   onNavigate: () => void;
   onDelete: () => void;
 }) {
-  const { gradient, Icon } = getConfig(v.vehicle_type);
+  const Icon = getIcon(v.vehicle_type);
 
   return (
     <div
-      className="rounded-2xl overflow-hidden bg-teal-950 border border-teal-900/60 cursor-pointer hover:border-teal-700/60 transition-all hover:shadow-lg hover:shadow-teal-950/50 group"
+      className="rounded-2xl overflow-hidden bg-card border cursor-pointer hover:border-primary/30 hover:shadow-md transition-all group"
       onClick={onNavigate}
     >
-      {/* Gradient hero section */}
-      <div className={`relative h-36 bg-gradient-to-br ${gradient} flex items-center justify-center`}>
-        <Icon className="size-16 text-white/15" strokeWidth={1} />
-        {/* Delete button top-right */}
+      {/* Hero section with primary tint */}
+      <div className="relative h-32 bg-primary/8 flex items-center justify-center overflow-hidden">
+        <Icon className="size-20 text-primary/12" strokeWidth={1} />
+        {/* Delete button */}
         <button
-          className="absolute top-3 right-3 size-7 rounded-full bg-black/25 hover:bg-red-950/80 flex items-center justify-center text-white/40 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100"
+          className="absolute top-3 right-3 size-7 rounded-full bg-background/70 hover:bg-destructive/10 flex items-center justify-center text-muted-foreground/40 hover:text-destructive transition-all opacity-0 group-hover:opacity-100"
           disabled={isPending}
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           aria-label="Delete vehicle"
         >
           <Trash2 className="size-3.5" />
         </button>
-        {/* Fuel type badge bottom-left */}
+        {/* Fuel type badge */}
         <div className="absolute bottom-3 left-3">
-          <span className="flex items-center gap-1 text-[10px] bg-black/30 text-white/70 px-2 py-0.5 rounded-full capitalize">
+          <span className="flex items-center gap-1 text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full capitalize font-medium">
             <Fuel className="size-2.5" />
             {v.fuel_type}
           </span>
         </div>
-        {/* Status badge */}
+        {/* Archived badge */}
         {v.status === "archived" && (
           <div className="absolute top-3 left-3">
-            <span className="text-[10px] bg-red-900/60 text-red-300 px-2 py-0.5 rounded-full">Archived</span>
+            <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Archived</span>
           </div>
         )}
       </div>
@@ -288,13 +288,13 @@ function VehicleHeroCard({
       {/* Info section */}
       <div className="p-4 space-y-2">
         <div>
-          <h3 className="text-white font-bold text-base leading-snug line-clamp-1">{v.name}</h3>
+          <h3 className="font-bold text-base leading-snug line-clamp-1">{v.name}</h3>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <span className="text-teal-500 text-xs capitalize">{v.vehicle_type}</span>
+            <span className="text-primary text-xs capitalize">{v.vehicle_type}</span>
             {(v.make || v.model) && (
               <>
-                <span className="text-teal-800 text-xs">·</span>
-                <span className="text-teal-600 text-xs line-clamp-1">
+                <span className="text-muted-foreground/40 text-xs">·</span>
+                <span className="text-muted-foreground text-xs line-clamp-1">
                   {[v.make, v.model].filter(Boolean).join(" ")}
                 </span>
               </>
@@ -304,14 +304,14 @@ function VehicleHeroCard({
 
         <div className="flex items-center justify-between pt-1">
           {v.registration_number ? (
-            <span className="text-teal-500 text-xs font-mono tracking-widest">
+            <span className="text-primary text-xs font-mono tracking-widest">
               {v.registration_number}
             </span>
           ) : (
             <span />
           )}
           {v.current_odometer != null && v.current_odometer > 0 && (
-            <span className="flex items-center gap-1 text-teal-600 text-xs tabular-nums">
+            <span className="flex items-center gap-1 text-muted-foreground text-xs tabular-nums">
               <Gauge className="size-3" />
               {(v.current_odometer / 10).toFixed(1)} km
             </span>
