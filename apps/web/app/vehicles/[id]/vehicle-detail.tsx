@@ -593,6 +593,11 @@ export function VehicleDetail({
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="font-bold text-xl leading-tight">{dashboard.vehicle.name}</h1>
+          {(dashboard.vehicle.make || dashboard.vehicle.model) && (
+            <p className="text-sm text-muted-foreground leading-tight mt-0.5">
+              {[dashboard.vehicle.make, dashboard.vehicle.model, dashboard.vehicle.manufacturing_year].filter(Boolean).join(" ")}
+            </p>
+          )}
           <div className="flex flex-wrap gap-1.5 mt-1">
             <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full capitalize">
               {dashboard.vehicle.vehicle_type}
@@ -655,12 +660,22 @@ export function VehicleDetail({
             </div>
           </div>
 
-          {totalDistanceKm != null && (
-            <div className="mt-4 pt-4 border-t border-primary/10">
-              <p className="text-sm font-semibold tabular-nums">{totalDistanceKm.toFixed(0)} km</p>
-              <p className="text-xs text-muted-foreground">Distance tracked</p>
+          <div className="mt-4 pt-4 border-t border-primary/10 grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-sm font-bold tabular-nums">
+                {totalDistanceKm != null ? `${totalDistanceKm.toFixed(0)} km` : "—"}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Tracked</p>
             </div>
-          )}
+            <div>
+              <p className="text-sm font-bold tabular-nums">{fuelEntries.length}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Fill-ups</p>
+            </div>
+            <div>
+              <p className="text-sm font-bold tabular-nums">{fmtAmount(dashboard.totalCostMinor, currency, masked)}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Total spent</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -679,9 +694,22 @@ export function VehicleDetail({
             ? `${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`
             : "—"}
           Icon={Fuel}
+          sub={!masked && fuelPricesPerL.length > 1
+            ? `prev ${currency === "INR" ? "₹" : currency}${fuelPricesPerL[1].toFixed(2)}/L`
+            : undefined}
         />
-        <StatCard label="Fill-ups" value={String(fuelEntries.length)} Icon={BarChart3} />
-        <StatCard label="Total spend" value={fmtAmount(dashboard.totalCostMinor, currency, masked)} Icon={DollarSign} />
+        <StatCard
+          label="Fill-ups"
+          value={String(fuelEntries.length)}
+          Icon={BarChart3}
+          sub={thisMonthFillupsList.length > 0 ? `${thisMonthFillupsList.length} this month` : undefined}
+        />
+        <StatCard
+          label="Total spend"
+          value={fmtAmount(dashboard.totalCostMinor, currency, masked)}
+          Icon={DollarSign}
+          sub={thisMonthCosts && !masked ? `${fmtAmount(thisMonthCosts.totalCostMinor, currency, false)} this mo` : undefined}
+        />
       </div>
 
       {/* ── This month vs Previous month ── */}
@@ -792,6 +820,16 @@ export function VehicleDetail({
               >
                 <Icon className="size-3.5" />
                 {label}
+                {id === "fuel" && fuelEntries.length > 0 && (
+                  <span className="text-[10px] bg-muted text-muted-foreground rounded-full px-1.5 py-px tabular-nums font-medium leading-none">
+                    {fuelEntries.length}
+                  </span>
+                )}
+                {id === "expenses" && expenses.length > 0 && (
+                  <span className="text-[10px] bg-muted text-muted-foreground rounded-full px-1.5 py-px tabular-nums font-medium leading-none">
+                    {expenses.length}
+                  </span>
+                )}
                 {id === "service" && reminders.length > 0 && (
                   <span className="size-[18px] rounded-full bg-destructive text-destructive-foreground text-[9px] flex items-center justify-center font-bold">
                     {reminders.length}
@@ -884,6 +922,11 @@ export function VehicleDetail({
                               )}
                             </div>
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              {e.fuel_type && (
+                                <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold capitalize tracking-wide">
+                                  {e.fuel_type}
+                                </span>
+                              )}
                               {e.is_full_tank && (
                                 <span className="text-[10px] bg-primary/8 text-primary px-1.5 py-0.5 rounded-full font-medium">
                                   Full tank
@@ -892,6 +935,11 @@ export function VehicleDetail({
                               {e.is_missed && (
                                 <span className="text-[10px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full font-medium">
                                   Missed
+                                </span>
+                              )}
+                              {e.station_name && (
+                                <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+                                  {e.station_name}
                                 </span>
                               )}
                               {e.notes && (
@@ -1718,12 +1766,13 @@ export function VehicleDetail({
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function StatCard({ label, value, Icon }: { label: string; value: string; Icon: React.ElementType }) {
+function StatCard({ label, value, Icon, sub }: { label: string; value: string; Icon: React.ElementType; sub?: string }) {
   return (
     <Card>
       <CardContent className="p-3.5">
         <Icon className="size-4 text-primary mb-2" />
         <p className="text-base font-bold tabular-nums leading-none">{value}</p>
+        {sub && <p className="text-[11px] text-primary/70 tabular-nums mt-0.5 font-medium">{sub}</p>}
         <p className="text-xs text-muted-foreground mt-1">{label}</p>
       </CardContent>
     </Card>
