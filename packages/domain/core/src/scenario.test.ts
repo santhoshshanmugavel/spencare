@@ -127,6 +127,18 @@ describe("evaluateScenario", () => {
     expect(result.limitations.length).toBeGreaterThan(0);
   });
 
+  it("LIMITATION: budget-constrained STS is not modelled — limitation is surfaced", () => {
+    // When STS is budget-constrained, adding an expense may not change it at all.
+    // evaluateScenario applies adjustments directly to the baseline figure without
+    // checking whether a budget ceiling is the binding constraint. The limitation
+    // string must be present so consumers can surface this caveat to the user.
+    const result = evaluateScenario(makeBaseline(), [makeInput({ type: "additional_expense", amountMinor: 1000 })]);
+    const hasBudgetLimitation = result.limitations.some((l) =>
+      l.toLowerCase().includes("budget"),
+    );
+    expect(hasBudgetLimitation).toBe(true);
+  });
+
   it("calculatedAt is a valid ISO timestamp", () => {
     const result = evaluateScenario(makeBaseline(), []);
     expect(() => new Date(result.calculatedAt)).not.toThrow();

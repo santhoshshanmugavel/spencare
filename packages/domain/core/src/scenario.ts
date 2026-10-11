@@ -83,6 +83,7 @@ export function evaluateScenario(
   const limitations: string[] = [
     "Projection assumes all inputs apply to the first available cash account.",
     "Goal changes do not currently flow through to Safe-to-Spend in Phase 1.",
+    "Projected Safe-to-Spend may differ when a budget is the binding constraint; this model applies adjustments to the baseline figure directly and does not account for budget ceilings.",
   ];
 
   for (const input of inputs) {

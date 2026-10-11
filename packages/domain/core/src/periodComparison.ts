@@ -34,14 +34,30 @@ export interface MetricComparison {
   currentValue: number;
   comparisonValue: number;
   absoluteDiff: number;
-  /** null when comparisonValue is 0 — undefined, never NaN/Infinity */
+  /**
+   * Percentage change from comparison to current.
+   *
+   * Null when the comparison value is zero (undefined) or negative (misleading).
+   * For financial metrics like net_cash_movement, a negative comparison baseline
+   * makes the percentage direction ambiguous — use absoluteDiff for directional
+   * changes in those cases.
+   *
+   * Convention:
+   *   comparison > 0 → (current − comparison) / comparison × 100  (signed)
+   *   comparison = 0 → null (undefined)
+   *   comparison < 0 → null (misleading; absoluteDiff conveys the direction)
+   */
   percentageDiff: number | null;
   currentPeriod: DateRange;
   comparisonPeriod: DateRange;
   currency: string;
   isPartialPeriod: boolean;
-  partialPeriodBasis?: string;
-  supportingTransactionIds: string[];
+  /** Elapsed portion of the current period when it is still in progress. */
+  partialPeriodBasis?: DateRange;
+  /** Transaction IDs from the current period that contributed to this metric. */
+  currentPeriodTransactionIds: string[];
+  /** Transaction IDs from the comparison period that contributed to this metric. */
+  comparisonPeriodTransactionIds: string[];
   limitations: string[];
 }
 
@@ -58,15 +74,23 @@ export interface PeriodComparisonResult {
 
 /**
  * Returns the absolute and percentage difference between two period values.
- * percentageDiff is null when comparison is 0 — never NaN, never Infinity.
+ *
+ * percentageDiff convention:
+ *   comparison > 0 → signed percentage: (current − comparison) / comparison × 100
+ *   comparison = 0 → null — division undefined
+ *   comparison < 0 → null — percentage is misleading when the baseline is negative;
+ *                            use absoluteDiff to convey the directional change
+ *   Both zero       → null (covered by comparison = 0)
+ *
+ * absoluteDiff is always meaningful regardless of signs.
  */
 export function calculatePeriodDiff(
   current: number,
   comparison: number,
 ): { absoluteDiff: number; percentageDiff: number | null } {
   const absoluteDiff = current - comparison;
-  if (comparison === 0) return { absoluteDiff, percentageDiff: null };
-  return { absoluteDiff, percentageDiff: (absoluteDiff / Math.abs(comparison)) * 100 };
+  if (comparison <= 0) return { absoluteDiff, percentageDiff: null };
+  return { absoluteDiff, percentageDiff: (absoluteDiff / comparison) * 100 };
 }
 
 /**
@@ -119,8 +143,9 @@ export function buildMetricComparison(params: {
     comparisonPeriod: params.comparisonPeriod,
     currency: params.currency,
     isPartialPeriod,
-    partialPeriodBasis: elapsed ? `${elapsed.start} to ${elapsed.end}` : undefined,
-    supportingTransactionIds: [...params.currentTransactionIds, ...params.comparisonTransactionIds],
+    partialPeriodBasis: elapsed,
+    currentPeriodTransactionIds: [...params.currentTransactionIds],
+    comparisonPeriodTransactionIds: [...params.comparisonTransactionIds],
     limitations: params.limitations ?? [],
   };
 }

@@ -29,7 +29,7 @@ describe("calculatePeriodDiff", () => {
     expect(calculatePeriodDiff(-100, 0).percentageDiff).toBeNull();
   });
 
-  it("zero diff with non-zero comparison returns 0%", () => {
+  it("zero diff with non-zero positive comparison returns 0%", () => {
     const result = calculatePeriodDiff(10000, 10000);
     expect(result.absoluteDiff).toBe(0);
     expect(result.percentageDiff).toBe(0);
@@ -39,6 +39,41 @@ describe("calculatePeriodDiff", () => {
     const result = calculatePeriodDiff(-2000, 5000);
     expect(result.absoluteDiff).toBe(-7000);
     expect(result.percentageDiff).toBeCloseTo(-140, 5);
+  });
+
+  // Negative comparison baseline: percentage is undefined/misleading — must be null.
+  // absoluteDiff still correctly conveys the directional change.
+
+  it("INVARIANT: percentageDiff is null when comparison is negative (positive current)", () => {
+    const result = calculatePeriodDiff(5000, -5000);
+    expect(result.percentageDiff).toBeNull();
+    expect(result.absoluteDiff).toBe(10000);
+  });
+
+  it("INVARIANT: percentageDiff is null when both values are negative", () => {
+    // net cash movement: was -5000, now -3000 (improved, absoluteDiff positive)
+    const improved = calculatePeriodDiff(-3000, -5000);
+    expect(improved.percentageDiff).toBeNull();
+    expect(improved.absoluteDiff).toBe(2000);
+
+    // net cash movement: was -3000, now -5000 (worsened, absoluteDiff negative)
+    const worsened = calculatePeriodDiff(-5000, -3000);
+    expect(worsened.percentageDiff).toBeNull();
+    expect(worsened.absoluteDiff).toBe(-2000);
+  });
+
+  it("INVARIANT: percentageDiff is null when current is positive and comparison is negative", () => {
+    // swing from net-negative to net-positive: percentage is ambiguous
+    const result = calculatePeriodDiff(3000, -2000);
+    expect(result.percentageDiff).toBeNull();
+    expect(result.absoluteDiff).toBe(5000);
+  });
+
+  it("absoluteDiff is always the correct signed difference regardless of signs", () => {
+    expect(calculatePeriodDiff(0, 0).absoluteDiff).toBe(0);
+    expect(calculatePeriodDiff(100, 200).absoluteDiff).toBe(-100);
+    expect(calculatePeriodDiff(-100, -200).absoluteDiff).toBe(100);
+    expect(calculatePeriodDiff(100, -100).absoluteDiff).toBe(200);
   });
 });
 
@@ -98,8 +133,21 @@ describe("buildMetricComparison", () => {
     expect(result.metricId).toBe("test_metric");
     expect(result.absoluteDiff).toBe(5000);
     expect(result.percentageDiff).toBeCloseTo(50, 5);
-    expect(result.supportingTransactionIds).toHaveLength(3);
+    expect(result.currentPeriodTransactionIds).toEqual(["t1", "t2"]);
+    expect(result.comparisonPeriodTransactionIds).toEqual(["t3"]);
     expect(result.isPartialPeriod).toBe(false);
+  });
+
+  it("preserves current and comparison period transaction IDs separately", () => {
+    const result = buildMetricComparison({
+      ...baseParams,
+      currentValue: 5000,
+      comparisonValue: 3000,
+      currentTransactionIds: ["c1", "c2", "c3"],
+      comparisonTransactionIds: ["p1"],
+    });
+    expect(result.currentPeriodTransactionIds).toEqual(["c1", "c2", "c3"]);
+    expect(result.comparisonPeriodTransactionIds).toEqual(["p1"]);
   });
 
   it("marks period as partial when today is within current period", () => {
@@ -111,7 +159,7 @@ describe("buildMetricComparison", () => {
       comparisonValue: 10000,
     });
     expect(result.isPartialPeriod).toBe(true);
-    expect(result.partialPeriodBasis).toBe("2026-01-01 to 2026-01-20");
+    expect(result.partialPeriodBasis).toEqual({ start: "2026-01-01", end: "2026-01-20" });
   });
 
   it("null percentageDiff on zero comparison", () => {
@@ -123,7 +171,17 @@ describe("buildMetricComparison", () => {
     expect(result.percentageDiff).toBeNull();
   });
 
-  it("empty transaction arrays produce zero ids", () => {
+  it("null percentageDiff on negative comparison (net cash movement scenario)", () => {
+    const result = buildMetricComparison({
+      ...baseParams,
+      currentValue: 3000,
+      comparisonValue: -2000,
+    });
+    expect(result.percentageDiff).toBeNull();
+    expect(result.absoluteDiff).toBe(5000);
+  });
+
+  it("empty transaction arrays produce separate empty arrays", () => {
     const result = buildMetricComparison({
       ...baseParams,
       currentValue: 0,
@@ -131,6 +189,7 @@ describe("buildMetricComparison", () => {
       currentTransactionIds: [],
       comparisonTransactionIds: [],
     });
-    expect(result.supportingTransactionIds).toHaveLength(0);
+    expect(result.currentPeriodTransactionIds).toHaveLength(0);
+    expect(result.comparisonPeriodTransactionIds).toHaveLength(0);
   });
 });

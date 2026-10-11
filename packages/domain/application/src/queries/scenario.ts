@@ -36,7 +36,7 @@ export async function captureScenarioBaseline(ctx: AuthContext): Promise<Scenari
       getCommitmentReservedTotal(ctx.supabase, ctx.userId),
     ]);
 
-  const activeAccounts = accounts.filter((a) => !a.archived_at);
+  const activeAccounts = accounts.filter((a) => !a.is_archived);
   const currency = activeAccounts[0]?.currency ?? "INR";
 
   return {

@@ -36,12 +36,18 @@ export async function buildForecastInput(
     listUpcoming(ctx, { dueBefore: horizonDate }),
   ]);
 
-  const activeAccounts = accounts.filter((a) => !a.archived_at);
+  const activeAccounts = accounts.filter((a) => !a.is_archived);
   const currency = activeAccounts[0]?.currency ?? "INR";
 
   const limitations: string[] = [];
   if (activeAccounts.length === 0) {
     limitations.push("No active accounts found; projection uses zero starting balance.");
+  }
+  const uniqueCurrencies = new Set(activeAccounts.map((a) => a.currency).filter(Boolean));
+  if (uniqueCurrencies.size > 1) {
+    limitations.push(
+      "Multiple account currencies detected; projection uses the first active account's currency. Multi-currency forecasting is not supported in Phase 1.",
+    );
   }
 
   const currentBalances = activeAccounts.map((a) => ({

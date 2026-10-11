@@ -14,7 +14,8 @@ function makeMetricComparison(overrides: Partial<MetricComparison> = {}): Metric
     comparisonPeriod: { start: "2025-12-01", end: "2025-12-31" },
     currency: "INR",
     isPartialPeriod: false,
-    supportingTransactionIds: ["tx-1", "tx-2", "tx-3"],
+    currentPeriodTransactionIds: ["tx-1", "tx-2", "tx-3"],
+    comparisonPeriodTransactionIds: [],
     limitations: [],
     ...overrides,
   };
@@ -86,8 +87,8 @@ describe("createEvidence", () => {
 });
 
 describe("evidenceFromComparison", () => {
-  it("creates comparison_result evidence with sources from transaction IDs", () => {
-    const mc = makeMetricComparison({ supportingTransactionIds: ["tx-1", "tx-2"] });
+  it("creates comparison_result evidence with sources from current-period transaction IDs", () => {
+    const mc = makeMetricComparison({ currentPeriodTransactionIds: ["tx-1", "tx-2"], comparisonPeriodTransactionIds: ["tx-9"] });
     const e = evidenceFromComparison(mc, "total_expenses");
     expect(e.type).toBe("comparison_result");
     expect(e.sources).toHaveLength(2);
@@ -108,8 +109,8 @@ describe("evidenceFromComparison", () => {
     expect(e.confidence).toBe("high");
   });
 
-  it("handles empty supportingTransactionIds gracefully", () => {
-    const mc = makeMetricComparison({ supportingTransactionIds: [] });
+  it("handles empty currentPeriodTransactionIds gracefully", () => {
+    const mc = makeMetricComparison({ currentPeriodTransactionIds: [], comparisonPeriodTransactionIds: [] });
     const e = evidenceFromComparison(mc, "total_expenses");
     expect(e.sources).toHaveLength(0);
   });

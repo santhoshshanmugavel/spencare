@@ -172,18 +172,25 @@ export async function comparePeriods(
     );
   }
 
-  // Merchant breakdown (top 10)
-  const curMerchants = sumByMerchant(currentTxns, "expense", 10);
-  const cmpMerchants = sumByMerchant(comparisonTxns, "expense", 10);
+  // Merchant breakdown (top 10 display, but comparison values from full untruncated data).
+  // We compute the full merchant totals for both periods first, then apply display limits.
+  // This prevents a merchant that ranks #11 in one period from incorrectly showing as
+  // zero spending when it appears in the display set via the other period's top-10.
+  const curMerchantsAll = sumByMerchant(currentTxns, "expense");
+  const cmpMerchantsAll = sumByMerchant(comparisonTxns, "expense");
+  const curMerchantMap = new Map(curMerchantsAll.map((m) => [m.merchant, m.totalMinor]));
+  const cmpMerchantMap = new Map(cmpMerchantsAll.map((m) => [m.merchant, m.totalMinor]));
+
+  // Display set = union of top-10 from each period for relevance.
   const allMerchants = new Set([
-    ...curMerchants.map((m) => m.merchant),
-    ...cmpMerchants.map((m) => m.merchant),
+    ...curMerchantsAll.slice(0, 10).map((m) => m.merchant),
+    ...cmpMerchantsAll.slice(0, 10).map((m) => m.merchant),
   ]);
   const merchantBreakdown: MetricComparison[] = [];
 
   for (const merchant of allMerchants) {
-    const curVal = curMerchants.find((m) => m.merchant === merchant)?.totalMinor ?? 0;
-    const cmpVal = cmpMerchants.find((m) => m.merchant === merchant)?.totalMinor ?? 0;
+    const curVal = curMerchantMap.get(merchant) ?? 0;
+    const cmpVal = cmpMerchantMap.get(merchant) ?? 0;
     merchantBreakdown.push(
       buildMetricComparison({
         ...baseParams,
