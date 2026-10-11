@@ -514,22 +514,10 @@ export function VehicleDetail({
             </div>
           </div>
 
-          {(totalDistanceKm != null || lastFuelPricePerL != null) && (
-            <div className="mt-4 pt-4 border-t border-primary/10 flex items-center justify-between">
-              {totalDistanceKm != null ? (
-                <div>
-                  <p className="text-sm font-semibold tabular-nums">{totalDistanceKm.toFixed(0)} km</p>
-                  <p className="text-xs text-muted-foreground">Distance tracked</p>
-                </div>
-              ) : <div />}
-              {lastFuelPricePerL != null && !masked && (
-                <div className="text-right">
-                  <p className="text-sm font-semibold tabular-nums">
-                    {`${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Last fuel price</p>
-                </div>
-              )}
+          {totalDistanceKm != null && (
+            <div className="mt-4 pt-4 border-t border-primary/10">
+              <p className="text-sm font-semibold tabular-nums">{totalDistanceKm.toFixed(0)} km</p>
+              <p className="text-xs text-muted-foreground">Distance tracked</p>
             </div>
           )}
         </CardContent>
@@ -545,12 +533,14 @@ export function VehicleDetail({
           Icon={Gauge}
         />
         <StatCard
-          label="Distance tracked"
-          value={totalDistanceKm != null ? `${totalDistanceKm.toFixed(0)} km` : "—"}
-          Icon={BarChart3}
+          label="Last fuel price"
+          value={lastFuelPricePerL != null && !masked
+            ? `${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`
+            : "—"}
+          Icon={Fuel}
         />
-        <StatCard label="Fill-ups" value={String(fuelEntries.length)} Icon={Fuel} />
-        <StatCard label="Fuel cost" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} Icon={DollarSign} />
+        <StatCard label="Fill-ups" value={String(fuelEntries.length)} Icon={BarChart3} />
+        <StatCard label="Total spend" value={fmtAmount(dashboard.totalCostMinor, currency, masked)} Icon={DollarSign} />
       </div>
 
       {/* ── This month vs Previous month ── */}
@@ -977,11 +967,11 @@ export function VehicleDetail({
         {activeTab === "analytics" && (
           <div className="space-y-4">
 
-            {/* Monthly costs bar chart */}
+            {/* 1. Monthly spending */}
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-                  Monthly costs (fuel)
+                  Monthly spending
                 </p>
                 {chartData.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No monthly data yet.</p>
@@ -1005,19 +995,19 @@ export function VehicleDetail({
                     {monthlyTrendStats && !masked && (
                       <div className="mt-4 grid grid-cols-3 gap-2 border-t pt-4">
                         <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Last</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Last month</p>
                           <p className="text-sm font-bold tabular-nums mt-0.5">
                             {fmtAmount(monthlyTrendStats.last, currency, false)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Monthly avg</p>
                           <p className="text-sm font-bold tabular-nums mt-0.5">
                             {fmtAmount(monthlyTrendStats.avg, currency, false)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Change</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">vs prev</p>
                           <p className={["text-sm font-bold tabular-nums mt-0.5", monthlyTrendStats.changePct < 0 ? "text-emerald-600" : "text-destructive"].join(" ")}>
                             {monthlyTrendStats.changePct >= 0 ? "+" : ""}{monthlyTrendStats.changePct.toFixed(1)}%
                           </p>
@@ -1029,76 +1019,34 @@ export function VehicleDetail({
               </CardContent>
             </Card>
 
-            {/* Efficiency trend per fill-up */}
-            {efficiencyTrend.length >= 2 && (
-              <Card>
-                <CardContent className="p-5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-                    Efficiency trend (km/L per fill-up)
-                  </p>
-                  <div className="flex items-end gap-1.5 h-24">
-                    {efficiencyTrend.map((pt, i) => {
-                      const maxKmL = Math.max(...efficiencyTrend.map((p) => p.kmPerL));
-                      return (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full">
-                          <div className="flex-1 w-full flex flex-col justify-end">
-                            <div
-                              className="w-full bg-primary/70 rounded-t-sm min-h-[3px] transition-all"
-                              style={{ height: `${(pt.kmPerL / maxKmL) * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-muted-foreground text-[9px] tabular-nums">{pt.label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground border-t pt-3">
-                    <span>Min: {Math.min(...efficiencyTrend.map((p) => p.kmPerL)).toFixed(1)} km/L</span>
-                    <span>Max: {Math.max(...efficiencyTrend.map((p) => p.kmPerL)).toFixed(1)} km/L</span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Price per litre trend */}
-            {priceTrend.length >= 2 && !masked && (
-              <Card>
-                <CardContent className="p-5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-                    Fuel price trend ({currency === "INR" ? "₹" : currency}/L)
-                  </p>
-                  <div className="flex items-end gap-1.5 h-24">
-                    {priceTrend.map((pt, i) => {
-                      const maxP = Math.max(...priceTrend.map((p) => p.pricePerL));
-                      const minP = Math.min(...priceTrend.map((p) => p.pricePerL));
-                      const range = maxP - minP || 1;
-                      return (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full">
-                          <div className="flex-1 w-full flex flex-col justify-end">
-                            <div
-                              className="w-full bg-primary/50 rounded-t-sm min-h-[3px] transition-all"
-                              style={{ height: `${20 + ((pt.pricePerL - minP) / range) * 80}%` }}
-                            />
-                          </div>
-                          <span className="text-muted-foreground text-[9px] tabular-nums">{pt.label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground border-t pt-3">
-                    <span>Min: {currency === "INR" ? "₹" : currency}{Math.min(...priceTrend.map((p) => p.pricePerL)).toFixed(2)}/L</span>
-                    <span>Max: {currency === "INR" ? "₹" : currency}{Math.max(...priceTrend.map((p) => p.pricePerL)).toFixed(2)}/L</span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Fuel efficiency & distance */}
+            {/* 2. Fuel efficiency */}
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-                  Efficiency & distance
+                  Fuel efficiency
                 </p>
+                {efficiencyTrend.length >= 2 && (
+                  <>
+                    <div className="flex items-end gap-1.5 h-24 mb-1">
+                      {efficiencyTrend.map((pt, i) => {
+                        const maxKmL = Math.max(...efficiencyTrend.map((p) => p.kmPerL));
+                        return (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full">
+                            <div className="flex-1 w-full flex flex-col justify-end">
+                              <div
+                                className="w-full bg-primary/70 rounded-t-sm min-h-[3px] transition-all"
+                                style={{ height: `${(pt.kmPerL / maxKmL) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-muted-foreground text-[9px] tabular-nums">{pt.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mb-4">km/L per fill-up</p>
+                    <div className="h-px bg-border mb-3" />
+                  </>
+                )}
                 <div className="space-y-3">
                   <StatRow
                     label="Avg efficiency"
@@ -1106,94 +1054,134 @@ export function VehicleDetail({
                       ? `${(efficiency.kmPerLitreCx100 / 100).toFixed(2)} km/L`
                       : simpleKmPerL != null ? `${simpleKmPerL.toFixed(2)} km/L` : "—"}
                   />
-                  {totalDistanceKm != null && (
+                  {efficiencyTrend.length >= 2 && (
                     <>
                       <div className="h-px bg-border" />
-                      <StatRow label="Total distance" value={`${totalDistanceKm.toFixed(0)} km`} />
+                      <StatRow label="Best fill-up" value={`${Math.max(...efficiencyTrend.map((p) => p.kmPerL)).toFixed(1)} km/L`} />
+                      <div className="h-px bg-border" />
+                      <StatRow label="Worst fill-up" value={`${Math.min(...efficiencyTrend.map((p) => p.kmPerL)).toFixed(1)} km/L`} />
                     </>
                   )}
                   {avgKmPerFillup != null && (
                     <>
                       <div className="h-px bg-border" />
-                      <StatRow label="Avg distance per fill-up" value={`${avgKmPerFillup.toFixed(0)} km`} />
-                    </>
-                  )}
-                  {costPerKm.type === "computed" && (
-                    <>
-                      <div className="h-px bg-border" />
-                      <StatRow
-                        label="Cost per km"
-                        value={masked ? "***" : `${currency === "INR" ? "₹" : currency}${(costPerKm.costPerKmCx100 / 100).toFixed(2)}/km`}
-                      />
+                      <StatRow label="Avg km per fill-up" value={`${avgKmPerFillup.toFixed(0)} km`} />
                     </>
                   )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Fill-up stats */}
+            {/* 3. All-time costs */}
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-                  Fill-up statistics
+                  All-time costs
                 </p>
-                <div className="space-y-3">
-                  <StatRow label="Total fill-ups" value={String(fuelEntries.length)} />
-                  <div className="h-px bg-border" />
-                  <StatRow label="Total litres" value={`${totalLitres.toFixed(2)} L`} />
-                  {minFillupL != null && maxFillupL != null && (
-                    <>
-                      <div className="h-px bg-border" />
-                      <StatRow label="Smallest fill-up" value={`${minFillupL.toFixed(2)} L`} />
-                      <StatRow label="Largest fill-up" value={`${maxFillupL.toFixed(2)} L`} />
-                    </>
-                  )}
-                  {!masked && bestFuelPricePerL != null && (
-                    <>
-                      <div className="h-px bg-border" />
-                      <StatRow label="Best fuel price" value={`${currency === "INR" ? "₹" : currency}${bestFuelPricePerL.toFixed(2)}/L`} />
-                      {worstFuelPricePerL != null && (
-                        <StatRow label="Worst fuel price" value={`${currency === "INR" ? "₹" : currency}${worstFuelPricePerL.toFixed(2)}/L`} />
-                      )}
-                      {lastFuelPricePerL != null && (
-                        <StatRow label="Last fuel price" value={`${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`} />
-                      )}
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Cost breakdown */}
-            <Card>
-              <CardContent className="p-5">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-                  Cost breakdown
-                </p>
+                {priceTrend.length >= 2 && !masked && (
+                  <>
+                    <div className="flex items-end gap-1.5 h-20 mb-1">
+                      {priceTrend.map((pt, i) => {
+                        const maxP = Math.max(...priceTrend.map((p) => p.pricePerL));
+                        const minP = Math.min(...priceTrend.map((p) => p.pricePerL));
+                        const range = maxP - minP || 1;
+                        return (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full">
+                            <div className="flex-1 w-full flex flex-col justify-end">
+                              <div
+                                className="w-full bg-primary/50 rounded-t-sm min-h-[3px] transition-all"
+                                style={{ height: `${20 + ((pt.pricePerL - minP) / range) * 80}%` }}
+                              />
+                            </div>
+                            <span className="text-muted-foreground text-[9px] tabular-nums">{pt.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mb-4">Fuel price per litre ({currency === "INR" ? "₹" : currency}/L)</p>
+                    <div className="h-px bg-border mb-3" />
+                  </>
+                )}
                 <div className="space-y-3">
                   {thisYearFuelCostMinor > 0 && (
                     <>
-                      <StatRow label={`This year (${thisYear})`} value={fmtAmount(thisYearFuelCostMinor, currency, masked)} />
+                      <StatRow label={`Fuel in ${thisYear}`} value={fmtAmount(thisYearFuelCostMinor, currency, masked)} />
                       <div className="h-px bg-border" />
                     </>
                   )}
                   <StatRow label="All-time fuel" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} />
-                  <div className="h-px bg-border" />
-                  <StatRow label="Other expenses" value={fmtAmount(dashboard.totalOtherCostMinor, currency, masked)} />
+                  {dashboard.totalOtherCostMinor > 0 && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <StatRow label="Other expenses" value={fmtAmount(dashboard.totalOtherCostMinor, currency, masked)} />
+                    </>
+                  )}
                   <div className="h-px bg-border" />
                   <div className="flex justify-between items-baseline text-sm">
-                    <span className="font-semibold">Total</span>
+                    <span className="font-semibold">Total spent</span>
                     <span className="font-bold tabular-nums">{fmtAmount(dashboard.totalCostMinor, currency, masked)}</span>
                   </div>
                   {avgCostPerMonth != null && !masked && (
                     <>
                       <div className="h-px bg-border" />
-                      <StatRow label="Avg cost per month" value={fmtAmount(avgCostPerMonth, currency, false)} />
+                      <StatRow label="Avg per month" value={fmtAmount(avgCostPerMonth, currency, false)} />
+                    </>
+                  )}
+                  {costPerKm.type === "computed" && !masked && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <StatRow label="Cost per km" value={`${currency === "INR" ? "₹" : currency}${(costPerKm.costPerKmCx100 / 100).toFixed(2)}/km`} />
+                    </>
+                  )}
+                  {!masked && bestFuelPricePerL != null && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <StatRow label="Cheapest fuel" value={`${currency === "INR" ? "₹" : currency}${bestFuelPricePerL.toFixed(2)}/L`} />
+                      {worstFuelPricePerL != null && (
+                        <>
+                          <div className="h-px bg-border" />
+                          <StatRow label="Most expensive" value={`${currency === "INR" ? "₹" : currency}${worstFuelPricePerL.toFixed(2)}/L`} />
+                        </>
+                      )}
                     </>
                   )}
                 </div>
               </CardContent>
             </Card>
+
+            {/* 4. Fill-up activity */}
+            {fuelEntries.length > 0 && (
+              <Card>
+                <CardContent className="p-5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
+                    Fill-up activity
+                  </p>
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <p className="text-xl font-bold tabular-nums">{fuelEntries.length}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Fill-ups</p>
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold tabular-nums">{totalLitres.toFixed(0)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Litres total</p>
+                    </div>
+                    {totalDistanceKm != null && (
+                      <div>
+                        <p className="text-xl font-bold tabular-nums">{totalDistanceKm.toFixed(0)}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">km tracked</p>
+                      </div>
+                    )}
+                  </div>
+                  {minFillupL != null && maxFillupL != null && (
+                    <div className="space-y-3 border-t pt-3">
+                      <StatRow label="Smallest fill-up" value={`${minFillupL.toFixed(2)} L`} />
+                      <div className="h-px bg-border" />
+                      <StatRow label="Largest fill-up" value={`${maxFillupL.toFixed(2)} L`} />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
       </div>
