@@ -99,11 +99,11 @@ export function VehiclesList({ initialVehicles, vehiclePhotoUrls = {} }: Vehicle
   return (
     <div className="pb-24">
       {/* Page title */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Vehicles</h1>
-        <span className="text-sm text-muted-foreground tabular-nums">
-          {vehicles.length > 0 ? `${vehicles.length} vehicle${vehicles.length !== 1 ? "s" : ""}` : ""}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="text-2xl font-semibold text-foreground">Vehicles</h1>
+        <Button onClick={() => { setShowCreate(true); resetForm(); }}>
+          <Plus className="size-4 mr-1" /> Add vehicle
+        </Button>
       </div>
 
       {/* Empty state */}
@@ -137,15 +137,6 @@ export function VehiclesList({ initialVehicles, vehiclePhotoUrls = {} }: Vehicle
           ))}
         </div>
       )}
-
-      {/* Floating "+" FAB */}
-      <button
-        className="fixed bottom-6 right-6 z-50 size-14 rounded-full bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground shadow-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-        onClick={() => { setShowCreate(true); resetForm(); }}
-        aria-label="Add vehicle"
-      >
-        <Plus className="size-6" strokeWidth={2.5} />
-      </button>
 
       {/* Add vehicle dialog */}
       <Dialog
@@ -263,7 +254,7 @@ function VehicleHeroCard({
       onClick={onNavigate}
     >
       {/* Hero section */}
-      <div className="relative h-32 bg-primary/8 flex items-center justify-center overflow-hidden">
+      <div className="relative h-48 bg-primary/8 flex items-center justify-center overflow-hidden">
         {photoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={photoUrl} alt={v.name} className="size-full object-cover" />

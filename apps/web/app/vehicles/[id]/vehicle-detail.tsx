@@ -770,14 +770,6 @@ export function VehicleDetail({
         </div>
       </div>
 
-      {/* ── Vehicle photo — full-width, any aspect uploaded, shown 3:2 ── */}
-      <VehiclePhotoUploader
-        vehicleId={dashboard.vehicle.id}
-        vehicleName={dashboard.vehicle.name}
-        vehicleSubtitle={[dashboard.vehicle.make, dashboard.vehicle.model].filter(Boolean).join(" ") || null}
-        initialUrl={vehiclePhotoUrl}
-      />
-
       {/* ── Hero metric: km/l ── */}
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="p-5">
