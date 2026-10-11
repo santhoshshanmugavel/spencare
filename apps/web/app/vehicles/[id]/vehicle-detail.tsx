@@ -185,6 +185,53 @@ export function VehicleDetail({
     [chartData]
   );
 
+  const minFillupL = useMemo(
+    () => fuelEntries.length > 0 ? Math.min(...fuelEntries.map((e) => Number(e.fuel_quantity_ml) / 1000)) : null,
+    [fuelEntries]
+  );
+  const maxFillupL = useMemo(
+    () => fuelEntries.length > 0 ? Math.max(...fuelEntries.map((e) => Number(e.fuel_quantity_ml) / 1000)) : null,
+    [fuelEntries]
+  );
+
+  // Per fill-up efficiency trend (full-tank entries only, ascending order for chart)
+  const efficiencyTrend = useMemo(() => {
+    const ascending = [...fuelEntries].reverse();
+    const points: { label: string; kmPerL: number }[] = [];
+    for (let i = 1; i < ascending.length; i++) {
+      const curr = ascending[i];
+      const prev = ascending[i - 1];
+      const distKm = (Number(curr.odometer) - Number(prev.odometer)) / 10;
+      const litres = Number(curr.fuel_quantity_ml) / 1000;
+      if (distKm > 0 && litres > 0 && curr.is_full_tank) {
+        points.push({ label: curr.occurred_at.slice(5, 10), kmPerL: distKm / litres });
+      }
+    }
+    return points.slice(-8);
+  }, [fuelEntries]);
+
+  // Price per litre trend (ascending date order for chart)
+  const priceTrend = useMemo(() => {
+    return [...fuelEntries]
+      .filter((e) => e.total_cost_minor != null && Number(e.fuel_quantity_ml) > 0)
+      .reverse()
+      .slice(-8)
+      .map((e) => ({
+        label: e.occurred_at.slice(5, 10),
+        pricePerL: (Number(e.total_cost_minor!) / 100) / (Number(e.fuel_quantity_ml) / 1000),
+      }));
+  }, [fuelEntries]);
+
+  // Monthly trend: last vs prev change %
+  const monthlyTrendStats = useMemo(() => {
+    if (chartData.length < 2) return null;
+    const last = chartData[chartData.length - 1].totalCostMinor;
+    const prev = chartData[chartData.length - 2].totalCostMinor;
+    const avg = chartData.reduce((a, m) => a + m.totalCostMinor, 0) / chartData.length;
+    const changePct = prev > 0 ? ((last - prev) / prev * 100) : 0;
+    return { last, avg, changePct };
+  }, [chartData]);
+
   // ── Fuel dialog ──────────────────────────────────────────────────────────
 
   const [showFuelDialog, setShowFuelDialog] = useState(false);
@@ -426,11 +473,18 @@ export function VehicleDetail({
         </CardContent>
       </Card>
 
-      {/* ── Secondary stats row ── */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Total cost" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} Icon={DollarSign} />
-        <StatCard label="Total litres" value={`${totalLitres.toFixed(1)} L`} Icon={Fuel} />
+      {/* ── Secondary stats 2×2 ── */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          label="Cost per km"
+          value={costPerKm.type === "computed"
+            ? `${currency === "INR" ? "₹" : currency}${(costPerKm.costPerKmCx100 / 100).toFixed(2)}/km`
+            : "—"}
+          Icon={Gauge}
+        />
         <StatCard label="Fill-ups" value={String(fuelEntries.length)} Icon={BarChart3} />
+        <StatCard label="Total litres" value={`${totalLitres.toFixed(1)} L`} Icon={Fuel} />
+        <StatCard label="Fuel cost" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} Icon={DollarSign} />
       </div>
 
       {/* ── This month vs Previous month ── */}
@@ -852,10 +906,11 @@ export function VehicleDetail({
         {activeTab === "analytics" && (
           <div className="space-y-4">
 
+            {/* Monthly costs bar chart */}
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-                  Monthly costs
+                  Monthly costs (fuel)
                 </p>
                 {chartData.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No monthly data yet.</p>
@@ -876,90 +931,158 @@ export function VehicleDetail({
                         </div>
                       ))}
                     </div>
-                    <div className="mt-4 space-y-2 border-t pt-4">
-                      {[...chartData].reverse().map((m) => (
-                        <div key={m.month} className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{formatMonthLabel(m.month)}</span>
-                          <span className="font-semibold tabular-nums">
-                            {fmtAmount(m.totalCostMinor, currency, masked)}
-                          </span>
+                    {monthlyTrendStats && !masked && (
+                      <div className="mt-4 grid grid-cols-3 gap-2 border-t pt-4">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Last</p>
+                          <p className="text-sm font-bold tabular-nums mt-0.5">
+                            {fmtAmount(monthlyTrendStats.last, currency, false)}
+                          </p>
                         </div>
-                      ))}
-                    </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg</p>
+                          <p className="text-sm font-bold tabular-nums mt-0.5">
+                            {fmtAmount(monthlyTrendStats.avg, currency, false)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Change</p>
+                          <p className={["text-sm font-bold tabular-nums mt-0.5", monthlyTrendStats.changePct < 0 ? "text-emerald-600" : "text-destructive"].join(" ")}>
+                            {monthlyTrendStats.changePct >= 0 ? "+" : ""}{monthlyTrendStats.changePct.toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </CardContent>
             </Card>
 
+            {/* Efficiency trend per fill-up */}
+            {efficiencyTrend.length >= 2 && (
+              <Card>
+                <CardContent className="p-5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
+                    Efficiency trend (km/L per fill-up)
+                  </p>
+                  <div className="flex items-end gap-1.5 h-24">
+                    {efficiencyTrend.map((pt, i) => {
+                      const maxKmL = Math.max(...efficiencyTrend.map((p) => p.kmPerL));
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full">
+                          <div className="flex-1 w-full flex flex-col justify-end">
+                            <div
+                              className="w-full bg-primary/70 rounded-t-sm min-h-[3px] transition-all"
+                              style={{ height: `${(pt.kmPerL / maxKmL) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-muted-foreground text-[9px] tabular-nums">{pt.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground border-t pt-3">
+                    <span>Min: {Math.min(...efficiencyTrend.map((p) => p.kmPerL)).toFixed(1)} km/L</span>
+                    <span>Max: {Math.max(...efficiencyTrend.map((p) => p.kmPerL)).toFixed(1)} km/L</span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Price per litre trend */}
+            {priceTrend.length >= 2 && !masked && (
+              <Card>
+                <CardContent className="p-5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
+                    Fuel price trend ({currency === "INR" ? "₹" : currency}/L)
+                  </p>
+                  <div className="flex items-end gap-1.5 h-24">
+                    {priceTrend.map((pt, i) => {
+                      const maxP = Math.max(...priceTrend.map((p) => p.pricePerL));
+                      const minP = Math.min(...priceTrend.map((p) => p.pricePerL));
+                      const range = maxP - minP || 1;
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full">
+                          <div className="flex-1 w-full flex flex-col justify-end">
+                            <div
+                              className="w-full bg-primary/50 rounded-t-sm min-h-[3px] transition-all"
+                              style={{ height: `${20 + ((pt.pricePerL - minP) / range) * 80}%` }}
+                            />
+                          </div>
+                          <span className="text-muted-foreground text-[9px] tabular-nums">{pt.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground border-t pt-3">
+                    <span>Min: {currency === "INR" ? "₹" : currency}{Math.min(...priceTrend.map((p) => p.pricePerL)).toFixed(2)}/L</span>
+                    <span>Max: {currency === "INR" ? "₹" : currency}{Math.max(...priceTrend.map((p) => p.pricePerL)).toFixed(2)}/L</span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Fuel statistics */}
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
                   Fuel statistics
                 </p>
                 <div className="space-y-3">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm text-muted-foreground">Avg consumption</span>
-                    <span className="text-sm font-bold tabular-nums">
-                      {efficiency.type === "computed"
-                        ? `${(efficiency.kmPerLitreCx100 / 100).toFixed(2)} km/l`
-                        : "—"}
-                    </span>
-                  </div>
+                  <StatRow label="Avg consumption" value={efficiency.type === "computed" ? `${(efficiency.kmPerLitreCx100 / 100).toFixed(2)} km/L` : "—"} />
                   <div className="h-px bg-border" />
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm text-muted-foreground">Total litres</span>
-                    <span className="text-sm font-bold tabular-nums">{totalLitres.toFixed(2)} L</span>
-                  </div>
+                  <StatRow label="Total litres fuelled" value={`${totalLitres.toFixed(2)} L`} />
                   <div className="h-px bg-border" />
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm text-muted-foreground">Fill-ups</span>
-                    <span className="text-sm font-bold tabular-nums">{fuelEntries.length}</span>
-                  </div>
+                  <StatRow label="Fill-ups" value={String(fuelEntries.length)} />
+                  {minFillupL != null && maxFillupL != null && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <div className="flex justify-between items-baseline text-sm">
+                        <span className="text-muted-foreground">Min fill-up</span>
+                        <span className="font-bold tabular-nums">{minFillupL.toFixed(2)} L</span>
+                      </div>
+                      <div className="flex justify-between items-baseline text-sm">
+                        <span className="text-muted-foreground">Max fill-up</span>
+                        <span className="font-bold tabular-nums">{maxFillupL.toFixed(2)} L</span>
+                      </div>
+                    </>
+                  )}
                   {lastFuelPricePerL != null && (
                     <>
                       <div className="h-px bg-border" />
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-sm text-muted-foreground">Last fuel price</span>
-                        <span className="text-sm font-bold tabular-nums">
-                          {masked ? "***" : `${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`}
-                        </span>
-                      </div>
+                      <StatRow
+                        label="Last fuel price"
+                        value={masked ? "***" : `${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`}
+                      />
                     </>
                   )}
                   {costPerKm.type === "computed" && (
                     <>
                       <div className="h-px bg-border" />
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-sm text-muted-foreground">Cost per km</span>
-                        <span className="text-sm font-bold tabular-nums">
-                          {masked ? "***" : `${fmtAmount(costPerKm.costPerKmCx100 / 100, currency, false)}/km`}
-                        </span>
-                      </div>
+                      <StatRow
+                        label="Cost per km"
+                        value={masked ? "***" : `${currency === "INR" ? "₹" : currency}${(costPerKm.costPerKmCx100 / 100).toFixed(2)}/km`}
+                      />
                     </>
                   )}
                 </div>
               </CardContent>
             </Card>
 
+            {/* Cost breakdown */}
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
                   Cost breakdown
                 </p>
                 <div className="space-y-3">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm text-muted-foreground">Fuel</span>
-                    <span className="text-sm font-medium tabular-nums">{fmtAmount(dashboard.totalFuelCostMinor, currency, masked)}</span>
-                  </div>
+                  <StatRow label="Fuel" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} />
                   <div className="h-px bg-border" />
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm text-muted-foreground">Other expenses</span>
-                    <span className="text-sm font-medium tabular-nums">{fmtAmount(dashboard.totalOtherCostMinor, currency, masked)}</span>
-                  </div>
+                  <StatRow label="Other expenses" value={fmtAmount(dashboard.totalOtherCostMinor, currency, masked)} />
                   <div className="h-px bg-border" />
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm font-semibold">Total</span>
-                    <span className="text-sm font-bold tabular-nums">{fmtAmount(dashboard.totalCostMinor, currency, masked)}</span>
+                  <div className="flex justify-between items-baseline text-sm">
+                    <span className="font-semibold">Total</span>
+                    <span className="font-bold tabular-nums">{fmtAmount(dashboard.totalCostMinor, currency, masked)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -1223,6 +1346,15 @@ function MonthDivider({ label }: { label: string }) {
     <div className="flex items-center gap-3">
       <span className="text-xs font-semibold text-primary uppercase tracking-widest whitespace-nowrap">{label}</span>
       <div className="flex-1 h-px bg-border" />
+    </div>
+  );
+}
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-baseline text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-bold tabular-nums">{value}</span>
     </div>
   );
 }

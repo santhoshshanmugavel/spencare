@@ -366,7 +366,7 @@ export async function listFuelEntries(
     .select(FUEL_ENTRY_COLS)
     .eq("user_id", userId)
     .eq("vehicle_id", options.vehicleId)
-    .order("occurred_at", { ascending: true });
+    .order("occurred_at", { ascending: false });
 
   if (options.occurredFrom) query = query.gte("occurred_at", options.occurredFrom);
   if (options.occurredTo)   query = query.lte("occurred_at", options.occurredTo);
