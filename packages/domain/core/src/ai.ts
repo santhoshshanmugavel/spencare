@@ -184,6 +184,12 @@ export interface AiFinancialSnapshotInput {
     creditAvailableMinor?: number;
     /** Reserved from bank/cash accounts for credit-card outstanding balances (card payment sources). Zero when none configured. */
     cardPaymentReservedMinor?: number;
+    /** Amount reserved from Safe-to-Spend for active goal contribution plans. Zero when no goals are reserved. */
+    goalReservedMinor?: number;
+    /** Remaining budget for the current period. Null when no budget is configured. */
+    budgetRemainingMinor?: number | null;
+    /** Total of upcoming bills due within the next 30 days. Zero when none. */
+    upcomingBillsMinor?: number;
     /** Sum of reserved_minor across upcoming planned_commitment_occurrences. Zero when no planned commitments exist. */
     commitmentReservedMinor?: number;
     /** Sum of installment_amount_minor for active loans with a reserve_account_id. Zero when no loans are reserved. */
