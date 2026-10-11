@@ -149,6 +149,40 @@ export function VehicleDetail({
     [fuelEntries]
   );
 
+  // Total distance = max odometer - min odometer across all entries
+  const totalDistanceKm = useMemo(() => {
+    if (fuelEntries.length < 2) return null;
+    const odos = fuelEntries.map((e) => Number(e.odometer) / 10);
+    const dist = Math.max(...odos) - Math.min(...odos);
+    return dist > 0 ? dist : null;
+  }, [fuelEntries]);
+
+  // Simple overall km/L = total distance / total fuel — always computable, no full-tank requirement
+  const simpleKmPerL = useMemo(() => {
+    if (efficiency.type === "computed") return null; // server-side is preferred
+    if (!totalDistanceKm || totalLitres <= 0) return null;
+    return totalDistanceKm / totalLitres;
+  }, [efficiency, totalDistanceKm, totalLitres]);
+
+  // Per-fill-up km/L: for each entry (descending), compute vs previous fill-up
+  const kmPerLPerEntry = useMemo(() => {
+    const map = new Map<string, number | null>();
+    const ascending = [...fuelEntries].reverse();
+    for (let i = 1; i < ascending.length; i++) {
+      const curr = ascending[i];
+      const prev = ascending[i - 1];
+      const distKm = (Number(curr.odometer) - Number(prev.odometer)) / 10;
+      const litres = Number(curr.fuel_quantity_ml) / 1000;
+      map.set(curr.id, distKm > 0 && litres > 0 ? distKm / litres : null);
+    }
+    return map;
+  }, [fuelEntries]);
+
+  const avgKmPerFillup = useMemo(() => {
+    if (!totalDistanceKm || fuelEntries.length < 2) return null;
+    return totalDistanceKm / (fuelEntries.length - 1);
+  }, [totalDistanceKm, fuelEntries]);
+
   const lastFuelPricePerL = useMemo(() => {
     const entry = fuelEntries.find(
       (e) => e.total_cost_minor != null && Number(e.fuel_quantity_ml) > 0
@@ -194,7 +228,7 @@ export function VehicleDetail({
     [fuelEntries]
   );
 
-  // Per fill-up efficiency trend (full-tank entries only, ascending order for chart)
+  // Per fill-up efficiency trend (any consecutive fill-up, ascending order for chart)
   const efficiencyTrend = useMemo(() => {
     const ascending = [...fuelEntries].reverse();
     const points: { label: string; kmPerL: number }[] = [];
@@ -203,7 +237,7 @@ export function VehicleDetail({
       const prev = ascending[i - 1];
       const distKm = (Number(curr.odometer) - Number(prev.odometer)) / 10;
       const litres = Number(curr.fuel_quantity_ml) / 1000;
-      if (distKm > 0 && litres > 0 && curr.is_full_tank) {
+      if (distKm > 0 && litres > 0) {
         points.push({ label: curr.occurred_at.slice(5, 10), kmPerL: distKm / litres });
       }
     }
@@ -447,10 +481,20 @@ export function VehicleDetail({
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">Average fuel consumption</p>
                 </div>
+              ) : simpleKmPerL != null ? (
+                <div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-4xl font-bold tabular-nums text-foreground">
+                      {simpleKmPerL.toFixed(2)}
+                    </span>
+                    <span className="text-lg text-muted-foreground font-medium">km/l</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">Overall avg efficiency</p>
+                </div>
               ) : (
                 <div>
                   <p className="text-3xl font-bold text-muted-foreground">—</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Need 2+ full-tank fill-ups to compute</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Add fuel entries to see efficiency</p>
                 </div>
               )}
             </div>
@@ -459,15 +503,22 @@ export function VehicleDetail({
             </div>
           </div>
 
-          {lastFuelPricePerL != null && lastFuelEntry && (
+          {(totalDistanceKm != null || lastFuelPricePerL != null) && (
             <div className="mt-4 pt-4 border-t border-primary/10 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold tabular-nums">
-                  {masked ? "***" : `${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`}
-                </p>
-                <p className="text-xs text-muted-foreground">Last fuel price</p>
-              </div>
-              <p className="text-xs text-muted-foreground">{fmtDateFull(lastFuelEntry.occurred_at)}</p>
+              {totalDistanceKm != null ? (
+                <div>
+                  <p className="text-sm font-semibold tabular-nums">{totalDistanceKm.toFixed(0)} km</p>
+                  <p className="text-xs text-muted-foreground">Distance tracked</p>
+                </div>
+              ) : <div />}
+              {lastFuelPricePerL != null && !masked && (
+                <div className="text-right">
+                  <p className="text-sm font-semibold tabular-nums">
+                    {`${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Last fuel price</p>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -582,6 +633,7 @@ export function VehicleDetail({
                       const pricePerL = e.total_cost_minor != null && Number(e.fuel_quantity_ml) > 0
                         ? (Number(e.total_cost_minor) / 100) / (Number(e.fuel_quantity_ml) / 1000)
                         : null;
+                      const kmPerL = kmPerLPerEntry.get(e.id) ?? null;
                       const isLast = idx === entries.length - 1;
                       return (
                         <div key={e.id} className="flex gap-3">
@@ -616,6 +668,9 @@ export function VehicleDetail({
                                 <span className="font-medium">
                                   {currency === "INR" ? "₹" : currency}{pricePerL.toFixed(2)}/L
                                 </span>
+                              )}
+                              {kmPerL != null && (
+                                <span className="font-semibold text-primary">{kmPerL.toFixed(1)} km/L</span>
                               )}
                             </div>
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -708,7 +763,7 @@ export function VehicleDetail({
                         </div>
                         <button
                           disabled={isPending}
-                          className="mt-0.5 size-6 rounded text-transparent group-hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
+                          className="mt-0.5 size-6 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
                           onClick={() => {
                             if (confirm("Delete this expense?")) {
                               startTransition(async () => {
@@ -1029,11 +1084,30 @@ export function VehicleDetail({
                   Fuel statistics
                 </p>
                 <div className="space-y-3">
-                  <StatRow label="Avg consumption" value={efficiency.type === "computed" ? `${(efficiency.kmPerLitreCx100 / 100).toFixed(2)} km/L` : "—"} />
+                  <StatRow
+                    label="Avg efficiency"
+                    value={efficiency.type === "computed"
+                      ? `${(efficiency.kmPerLitreCx100 / 100).toFixed(2)} km/L`
+                      : simpleKmPerL != null
+                        ? `${simpleKmPerL.toFixed(2)} km/L`
+                        : "—"}
+                  />
                   <div className="h-px bg-border" />
+                  {totalDistanceKm != null && (
+                    <>
+                      <StatRow label="Total distance" value={`${totalDistanceKm.toFixed(0)} km`} />
+                      <div className="h-px bg-border" />
+                    </>
+                  )}
                   <StatRow label="Total litres fuelled" value={`${totalLitres.toFixed(2)} L`} />
                   <div className="h-px bg-border" />
                   <StatRow label="Fill-ups" value={String(fuelEntries.length)} />
+                  {avgKmPerFillup != null && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <StatRow label="Avg distance per fill-up" value={`${avgKmPerFillup.toFixed(0)} km`} />
+                    </>
+                  )}
                   {minFillupL != null && maxFillupL != null && (
                     <>
                       <div className="h-px bg-border" />

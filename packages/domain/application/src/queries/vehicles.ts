@@ -124,7 +124,17 @@ export async function getVehicleDashboard(
 
   if (!vehicle) return null;
 
-  const efficiencyEntries = fuelEntries.map((e) => ({
+  // Infer primary currency from fuel entries, falling back to first expense.
+  const currency =
+    fuelEntries[0]?.currency ??
+    expenses[0]?.currency ??
+    "INR";
+
+  // calculateFuelEfficiency and calculateCostPerKm both expect ascending odometer order.
+  // The repo returns descending (latest first) for display, so sort ascending here.
+  const fuelEntriesAsc = [...fuelEntries].sort((a, b) => Number(a.odometer) - Number(b.odometer));
+
+  const efficiencyEntries = fuelEntriesAsc.map((e) => ({
     odometer: BigInt(Math.round(e.odometer)),
     fuelQuantityMl: BigInt(Math.round(e.fuel_quantity_ml)),
     isFullTank: e.is_full_tank,
@@ -134,13 +144,7 @@ export async function getVehicleDashboard(
 
   const efficiency = calculateFuelEfficiency(efficiencyEntries);
 
-  // Infer primary currency from fuel entries, falling back to first expense.
-  const currency =
-    fuelEntries[0]?.currency ??
-    expenses[0]?.currency ??
-    "INR";
-
-  const costPerKmEntries = fuelEntries
+  const costPerKmEntries = fuelEntriesAsc
     .filter((e) => e.currency === currency)
     .map((e) => ({
       odometer: BigInt(Math.round(e.odometer)),
