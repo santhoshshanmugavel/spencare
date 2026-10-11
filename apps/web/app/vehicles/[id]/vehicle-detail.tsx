@@ -4,7 +4,7 @@ import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Fuel, Wrench, FileText, Bell, DollarSign, BarChart3,
-  Plus, Trash2, Gauge,
+  Plus, Trash2, Gauge, Pencil,
 } from "lucide-react";
 import type {
   VehicleMaintenanceRow,
@@ -22,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatMinorUnits } from "@/lib/currency-format";
 import {
   createFuelEntryAction,
+  updateFuelEntryAction,
   deleteFuelEntryAction,
   createVehicleExpenseAction,
   deleteVehicleExpenseAction,
@@ -50,7 +51,9 @@ function fmtLitres(ml: number): string {
 }
 
 function fmtDateFull(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
+  // occurred_at is timestamptz — Supabase returns full ISO string; just parse it directly
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -183,12 +186,34 @@ export function VehicleDetail({
   // ── Fuel dialog ──────────────────────────────────────────────────────────
 
   const [showFuelDialog, setShowFuelDialog] = useState(false);
+  const [editingFuelId, setEditingFuelId] = useState<string | null>(null);
   const [fuelDate, setFuelDate] = useState(new Date().toISOString().slice(0, 10));
   const [fuelOdometer, setFuelOdometer] = useState("");
   const [fuelLitres, setFuelLitresState] = useState("");
   const [fuelCost, setFuelCost] = useState("");
   const [fuelIsFull, setFuelIsFull] = useState(true);
   const [fuelError, setFuelError] = useState<string | null>(null);
+
+  function openEditFuel(e: (typeof fuelEntries)[number]) {
+    setEditingFuelId(e.id);
+    setFuelDate(new Date(e.occurred_at).toISOString().slice(0, 10));
+    setFuelOdometer((Number(e.odometer) / 10).toFixed(1));
+    setFuelLitresState((Number(e.fuel_quantity_ml) / 1000).toFixed(2));
+    setFuelCost(e.total_cost_minor != null ? (Number(e.total_cost_minor) / 100).toFixed(2) : "");
+    setFuelIsFull(e.is_full_tank);
+    setFuelError(null);
+    setShowFuelDialog(true);
+  }
+
+  function resetFuelForm() {
+    setEditingFuelId(null);
+    setFuelDate(new Date().toISOString().slice(0, 10));
+    setFuelOdometer("");
+    setFuelLitresState("");
+    setFuelCost("");
+    setFuelIsFull(true);
+    setFuelError(null);
+  }
 
   function handleAddFuel() {
     const odoTenths = Math.round(parseFloat(fuelOdometer) * 10);
@@ -197,15 +222,31 @@ export function VehicleDetail({
     if (isNaN(odoTenths) || odoTenths < 0) { setFuelError("Enter a valid odometer reading."); return; }
     if (isNaN(fuelMl) || fuelMl <= 0) { setFuelError("Enter a valid fuel quantity."); return; }
     setFuelError(null);
-    startTransition(async () => {
-      const result = await createFuelEntryAction({
-        vehicleId, occurredAt: fuelDate, odometer: odoTenths,
-        fuelQuantityMl: fuelMl, totalCostMinor: costMinor,
-        currency, fuelType: dashboard.vehicle.fuel_type, isFullTank: fuelIsFull,
+
+    if (editingFuelId) {
+      startTransition(async () => {
+        const result = await updateFuelEntryAction({
+          entryId: editingFuelId, vehicleId, occurredAt: fuelDate, odometer: odoTenths,
+          fuelQuantityMl: fuelMl, totalCostMinor: costMinor,
+          currency, fuelType: dashboard.vehicle.fuel_type, isFullTank: fuelIsFull,
+        });
+        if (result.ok) {
+          setFuelEntries((prev) => prev.map((x) => x.id === editingFuelId ? result.value : x));
+          setShowFuelDialog(false);
+          resetFuelForm();
+        } else { setFuelError(result.error.message); }
       });
-      if (result.ok) { setFuelEntries((prev) => [result.value, ...prev]); setShowFuelDialog(false); }
-      else { setFuelError(result.error.message); }
-    });
+    } else {
+      startTransition(async () => {
+        const result = await createFuelEntryAction({
+          vehicleId, occurredAt: fuelDate, odometer: odoTenths,
+          fuelQuantityMl: fuelMl, totalCostMinor: costMinor,
+          currency, fuelType: dashboard.vehicle.fuel_type, isFullTank: fuelIsFull,
+        });
+        if (result.ok) { setFuelEntries((prev) => [result.value, ...prev]); setShowFuelDialog(false); resetFuelForm(); }
+        else { setFuelError(result.error.message); }
+      });
+    }
   }
 
   // ── Expense dialog ───────────────────────────────────────────────────────
@@ -352,7 +393,7 @@ export function VehicleDetail({
                 </p>
                 <p className="text-xs text-muted-foreground">Last fuel price</p>
               </div>
-              <p className="text-xs text-muted-foreground">{lastFuelEntry.occurred_at}</p>
+              <p className="text-xs text-muted-foreground">{fmtDateFull(lastFuelEntry.occurred_at)}</p>
             </div>
           )}
         </CardContent>
@@ -442,7 +483,7 @@ export function VehicleDetail({
                 >
                   Import CSV
                 </Button>
-                <Button size="sm" className="text-xs" onClick={() => setShowFuelDialog(true)}>
+                <Button size="sm" className="text-xs" onClick={() => { resetFuelForm(); setShowFuelDialog(true); }}>
                   <Plus className="size-3.5 mr-1" /> Log fuel
                 </Button>
               </div>
@@ -514,20 +555,31 @@ export function VehicleDetail({
                               )}
                             </div>
                           </div>
-                          <button
-                            disabled={isPending}
-                            className="mt-0.5 size-6 rounded text-transparent hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
-                            onClick={() => {
-                              if (confirm("Delete this fuel entry?")) {
-                                startTransition(async () => {
-                                  const r = await deleteFuelEntryAction(vehicleId, e.id);
-                                  if (r.ok) setFuelEntries((prev) => prev.filter((x) => x.id !== e.id));
-                                });
-                              }
-                            }}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
+                          <div className="flex flex-col gap-1 mt-0.5 shrink-0">
+                            <button
+                              disabled={isPending}
+                              className="size-6 rounded text-muted-foreground/50 hover:text-primary hover:bg-primary/10 flex items-center justify-center transition-all"
+                              onClick={() => openEditFuel(e)}
+                              title="Edit"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                            <button
+                              disabled={isPending}
+                              className="size-6 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all"
+                              onClick={() => {
+                                if (confirm("Delete this fuel entry?")) {
+                                  startTransition(async () => {
+                                    const r = await deleteFuelEntryAction(vehicleId, e.id);
+                                    if (r.ok) setFuelEntries((prev) => prev.filter((x) => x.id !== e.id));
+                                  });
+                                }
+                              }}
+                              title="Delete"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -891,9 +943,9 @@ export function VehicleDetail({
 
       {/* ── Dialogs ── */}
 
-      <Dialog open={showFuelDialog} onOpenChange={setShowFuelDialog}>
+      <Dialog open={showFuelDialog} onOpenChange={(open) => { setShowFuelDialog(open); if (!open) resetFuelForm(); }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Log fuel entry</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingFuelId ? "Edit fuel entry" : "Log fuel entry"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -922,8 +974,8 @@ export function VehicleDetail({
             {fuelError && <p className="text-sm text-destructive">{fuelError}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowFuelDialog(false)}>Cancel</Button>
-            <Button onClick={handleAddFuel} disabled={isPending}>{isPending ? "Saving..." : "Log entry"}</Button>
+            <Button variant="outline" onClick={() => { setShowFuelDialog(false); resetFuelForm(); }}>Cancel</Button>
+            <Button onClick={handleAddFuel} disabled={isPending}>{isPending ? "Saving..." : editingFuelId ? "Save changes" : "Log entry"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
