@@ -42,7 +42,7 @@ interface VehicleDetailProps {
 function fmtAmount(amountMinor: bigint | number, currency: string, masked: boolean): string {
   if (masked) return `${currency === "INR" ? "₹" : currency}***`;
   const minor = typeof amountMinor === "bigint" ? Number(amountMinor) : amountMinor;
-  const f = formatMinorUnits(BigInt(minor), currency);
+  const f = formatMinorUnits(BigInt(Math.round(minor)), currency);
   return `${f.symbol}${f.integerPart}${f.decimalPart ? "." + f.decimalPart : ""}`;
 }
 

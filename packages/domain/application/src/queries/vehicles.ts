@@ -125,8 +125,8 @@ export async function getVehicleDashboard(
   if (!vehicle) return null;
 
   const efficiencyEntries = fuelEntries.map((e) => ({
-    odometer: BigInt(e.odometer),
-    fuelQuantityMl: BigInt(e.fuel_quantity_ml),
+    odometer: BigInt(Math.round(e.odometer)),
+    fuelQuantityMl: BigInt(Math.round(e.fuel_quantity_ml)),
     isFullTank: e.is_full_tank,
     isMissed: e.is_missed,
     excludeDistance: e.exclude_distance,
@@ -143,8 +143,8 @@ export async function getVehicleDashboard(
   const costPerKmEntries = fuelEntries
     .filter((e) => e.currency === currency)
     .map((e) => ({
-      odometer: BigInt(e.odometer),
-      totalCostMinor: e.total_cost_minor !== null ? BigInt(e.total_cost_minor) : null,
+      odometer: BigInt(Math.round(e.odometer)),
+      totalCostMinor: e.total_cost_minor !== null ? BigInt(Math.round(e.total_cost_minor)) : null,
       isMissed: e.is_missed,
       excludeDistance: e.exclude_distance,
       currency: e.currency,
@@ -158,15 +158,15 @@ export async function getVehicleDashboard(
       .filter((e) => e.currency === currency)
       .map((e) => ({
         occurredAt: e.occurred_at,
-        totalCostMinor: e.total_cost_minor !== null ? BigInt(e.total_cost_minor) : null,
-        fuelQuantityMl: BigInt(e.fuel_quantity_ml),
+        totalCostMinor: e.total_cost_minor !== null ? BigInt(Math.round(e.total_cost_minor)) : null,
+        fuelQuantityMl: BigInt(Math.round(e.fuel_quantity_ml)),
         currency: e.currency,
       })),
     expenses
       .filter((e) => e.currency === currency)
       .map((e) => ({
         occurredAt: e.occurred_at,
-        amountMinor: BigInt(e.amount_minor),
+        amountMinor: BigInt(Math.round(e.amount_minor)),
         currency: e.currency,
       })),
   );
