@@ -576,6 +576,331 @@ export type Database = {
           },
         ]
       }
+      epfo_contribution_profiles: {
+        Row: {
+          account_id: string
+          amount_minor: number | null
+          base_amount_minor: number | null
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          employment_id: string | null
+          frequency: Database["public"]["Enums"]["epfo_contribution_frequency"]
+          id: string
+          is_active: boolean
+          kind: Database["public"]["Enums"]["epfo_contribution_kind"]
+          mode: Database["public"]["Enums"]["epfo_contribution_mode"]
+          percent_den: number | null
+          percent_num: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          amount_minor?: number | null
+          base_amount_minor?: number | null
+          created_at?: string
+          effective_from: string
+          effective_to?: string | null
+          employment_id?: string | null
+          frequency?: Database["public"]["Enums"]["epfo_contribution_frequency"]
+          id?: string
+          is_active?: boolean
+          kind: Database["public"]["Enums"]["epfo_contribution_kind"]
+          mode: Database["public"]["Enums"]["epfo_contribution_mode"]
+          percent_den?: number | null
+          percent_num?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          amount_minor?: number | null
+          base_amount_minor?: number | null
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          employment_id?: string | null
+          frequency?: Database["public"]["Enums"]["epfo_contribution_frequency"]
+          id?: string
+          is_active?: boolean
+          kind?: Database["public"]["Enums"]["epfo_contribution_kind"]
+          mode?: Database["public"]["Enums"]["epfo_contribution_mode"]
+          percent_den?: number | null
+          percent_num?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "epfo_contribution_profiles_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epfo_contribution_profiles_employment_id_fkey"
+            columns: ["employment_id"]
+            isOneToOne: false
+            referencedRelation: "epfo_employments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      epfo_employments: {
+        Row: {
+          account_id: string
+          created_at: string
+          employer_name: string
+          end_date: string | null
+          id: string
+          is_active: boolean
+          member_id: string | null
+          notes: string | null
+          source: string
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          employer_name: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean
+          member_id?: string | null
+          notes?: string | null
+          source?: string
+          start_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          employer_name?: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean
+          member_id?: string | null
+          notes?: string | null
+          source?: string
+          start_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "epfo_employments_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      epfo_ledger_entries: {
+        Row: {
+          account_id: string
+          amount_minor: number
+          created_at: string
+          created_by: string
+          currency: string
+          description: string | null
+          employment_id: string | null
+          entry_type: Database["public"]["Enums"]["epfo_entry_type"]
+          external_reference: string | null
+          id: string
+          import_batch_id: string | null
+          metadata: Json
+          occurred_at: string
+          source: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          amount_minor: number
+          created_at?: string
+          created_by: string
+          currency: string
+          description?: string | null
+          employment_id?: string | null
+          entry_type: Database["public"]["Enums"]["epfo_entry_type"]
+          external_reference?: string | null
+          id?: string
+          import_batch_id?: string | null
+          metadata?: Json
+          occurred_at: string
+          source?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          amount_minor?: number
+          created_at?: string
+          created_by?: string
+          currency?: string
+          description?: string | null
+          employment_id?: string | null
+          entry_type?: Database["public"]["Enums"]["epfo_entry_type"]
+          external_reference?: string | null
+          id?: string
+          import_batch_id?: string | null
+          metadata?: Json
+          occurred_at?: string
+          source?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "epfo_ledger_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epfo_ledger_entries_employment_id_fkey"
+            columns: ["employment_id"]
+            isOneToOne: false
+            referencedRelation: "epfo_employments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epfo_ledger_entries_import_batch_id_fkey"
+            columns: ["import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      epfo_reconciliation_matches: {
+        Row: {
+          account_id: string
+          actual_ledger_entry_id: string
+          created_at: string
+          difference_minor: number
+          expected_payload: Json
+          expected_payload_hash: string
+          id: string
+          notes: string | null
+          status: Database["public"]["Enums"]["epfo_reconciliation_status"]
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          actual_ledger_entry_id: string
+          created_at?: string
+          difference_minor?: number
+          expected_payload: Json
+          expected_payload_hash: string
+          id?: string
+          notes?: string | null
+          status: Database["public"]["Enums"]["epfo_reconciliation_status"]
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          actual_ledger_entry_id?: string
+          created_at?: string
+          difference_minor?: number
+          expected_payload?: Json
+          expected_payload_hash?: string
+          id?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["epfo_reconciliation_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "epfo_reconciliation_matches_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epfo_reconciliation_matches_actual_ledger_entry_id_fkey"
+            columns: ["actual_ledger_entry_id"]
+            isOneToOne: false
+            referencedRelation: "epfo_ledger_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      epfo_withdrawal_plans: {
+        Row: {
+          account_id: string
+          amount_minor: number
+          created_at: string
+          created_by: string
+          expected_date: string
+          expected_destination_account_id: string | null
+          id: string
+          linked_ledger_entry_id: string | null
+          notes: string | null
+          purpose: string | null
+          status: Database["public"]["Enums"]["epfo_withdrawal_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          amount_minor: number
+          created_at?: string
+          created_by: string
+          expected_date: string
+          expected_destination_account_id?: string | null
+          id?: string
+          linked_ledger_entry_id?: string | null
+          notes?: string | null
+          purpose?: string | null
+          status?: Database["public"]["Enums"]["epfo_withdrawal_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          amount_minor?: number
+          created_at?: string
+          created_by?: string
+          expected_date?: string
+          expected_destination_account_id?: string | null
+          id?: string
+          linked_ledger_entry_id?: string | null
+          notes?: string | null
+          purpose?: string | null
+          status?: Database["public"]["Enums"]["epfo_withdrawal_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "epfo_withdrawal_plans_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epfo_withdrawal_plans_expected_destination_account_id_fkey"
+            columns: ["expected_destination_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epfo_withdrawal_plans_linked_ledger_entry_id_fkey"
+            columns: ["linked_ledger_entry_id"]
+            isOneToOne: false
+            referencedRelation: "epfo_ledger_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       financial_plan_accounts: {
         Row: {
           account_id: string
@@ -2051,6 +2376,7 @@ export type Database = {
           currency: string
           deleted_at: string | null
           description: string | null
+          epfo_ledger_entry_id: string | null
           goal_id: string | null
           id: string
           import_batch_id: string | null
@@ -2064,6 +2390,8 @@ export type Database = {
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
           user_id: string
+          vehicle_expense_id: string | null
+          vehicle_fuel_entry_id: string | null
         }
         Insert: {
           account_id: string
@@ -2074,6 +2402,7 @@ export type Database = {
           currency: string
           deleted_at?: string | null
           description?: string | null
+          epfo_ledger_entry_id?: string | null
           goal_id?: string | null
           id?: string
           import_batch_id?: string | null
@@ -2087,6 +2416,8 @@ export type Database = {
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
           user_id: string
+          vehicle_expense_id?: string | null
+          vehicle_fuel_entry_id?: string | null
         }
         Update: {
           account_id?: string
@@ -2097,6 +2428,7 @@ export type Database = {
           currency?: string
           deleted_at?: string | null
           description?: string | null
+          epfo_ledger_entry_id?: string | null
           goal_id?: string | null
           id?: string
           import_batch_id?: string | null
@@ -2110,6 +2442,8 @@ export type Database = {
           type?: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
           user_id?: string
+          vehicle_expense_id?: string | null
+          vehicle_fuel_entry_id?: string | null
         }
         Relationships: [
           {
@@ -2131,6 +2465,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_epfo_ledger_entry_id_fkey"
+            columns: ["epfo_ledger_entry_id"]
+            isOneToOne: false
+            referencedRelation: "epfo_ledger_entries"
             referencedColumns: ["id"]
           },
           {
@@ -2168,13 +2509,510 @@ export type Database = {
             referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "transactions_vehicle_expense_id_fkey"
+            columns: ["vehicle_expense_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_vehicle_fuel_entry_id_fkey"
+            columns: ["vehicle_fuel_entry_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_fuel_entries"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      vehicle_documents: {
+        Row: {
+          created_at: string
+          document_type: Database["public"]["Enums"]["vehicle_document_type"]
+          expiry_date: string | null
+          id: string
+          issue_date: string | null
+          issuer: string | null
+          notes: string | null
+          reference_number: string | null
+          reminder_days_before: number[]
+          status: string
+          storage_path: string | null
+          title: string
+          updated_at: string
+          user_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_type?: Database["public"]["Enums"]["vehicle_document_type"]
+          expiry_date?: string | null
+          id?: string
+          issue_date?: string | null
+          issuer?: string | null
+          notes?: string | null
+          reference_number?: string | null
+          reminder_days_before?: number[]
+          status?: string
+          storage_path?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          document_type?: Database["public"]["Enums"]["vehicle_document_type"]
+          expiry_date?: string | null
+          id?: string
+          issue_date?: string | null
+          issuer?: string | null
+          notes?: string | null
+          reference_number?: string | null
+          reminder_days_before?: number[]
+          status?: string
+          storage_path?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_documents_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_expenses: {
+        Row: {
+          amount_minor: number
+          created_at: string
+          currency: string
+          description: string | null
+          expense_category: string
+          id: string
+          import_batch_id: string | null
+          import_guid: string | null
+          notes: string | null
+          occurred_at: string
+          odometer: number | null
+          transaction_id: string | null
+          updated_at: string
+          user_id: string
+          vehicle_id: string
+          vendor: string | null
+        }
+        Insert: {
+          amount_minor: number
+          created_at?: string
+          currency: string
+          description?: string | null
+          expense_category?: string
+          id?: string
+          import_batch_id?: string | null
+          import_guid?: string | null
+          notes?: string | null
+          occurred_at: string
+          odometer?: number | null
+          transaction_id?: string | null
+          updated_at?: string
+          user_id: string
+          vehicle_id: string
+          vendor?: string | null
+        }
+        Update: {
+          amount_minor?: number
+          created_at?: string
+          currency?: string
+          description?: string | null
+          expense_category?: string
+          id?: string
+          import_batch_id?: string | null
+          import_guid?: string | null
+          notes?: string | null
+          occurred_at?: string
+          odometer?: number | null
+          transaction_id?: string | null
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string
+          vendor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_expenses_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_expenses_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_fuel_entries: {
+        Row: {
+          city: string | null
+          created_at: string
+          currency: string
+          exclude_distance: boolean
+          fuel_quantity_ml: number
+          fuel_type: string
+          id: string
+          import_batch_id: string | null
+          import_guid: string | null
+          import_source: string | null
+          is_full_tank: boolean
+          is_missed: boolean
+          latitude: number | null
+          longitude: number | null
+          notes: string | null
+          occurred_at: string
+          odometer: number
+          price_per_unit_minor: number | null
+          station_name: string | null
+          total_cost_minor: number | null
+          transaction_id: string | null
+          updated_at: string
+          user_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          currency?: string
+          exclude_distance?: boolean
+          fuel_quantity_ml: number
+          fuel_type?: string
+          id?: string
+          import_batch_id?: string | null
+          import_guid?: string | null
+          import_source?: string | null
+          is_full_tank?: boolean
+          is_missed?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          notes?: string | null
+          occurred_at: string
+          odometer: number
+          price_per_unit_minor?: number | null
+          station_name?: string | null
+          total_cost_minor?: number | null
+          transaction_id?: string | null
+          updated_at?: string
+          user_id: string
+          vehicle_id: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          currency?: string
+          exclude_distance?: boolean
+          fuel_quantity_ml?: number
+          fuel_type?: string
+          id?: string
+          import_batch_id?: string | null
+          import_guid?: string | null
+          import_source?: string | null
+          is_full_tank?: boolean
+          is_missed?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          notes?: string | null
+          occurred_at?: string
+          odometer?: number
+          price_per_unit_minor?: number | null
+          station_name?: string | null
+          total_cost_minor?: number | null
+          transaction_id?: string | null
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_fuel_entries_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_fuel_entries_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_maintenance_records: {
+        Row: {
+          cost_minor: number | null
+          created_at: string
+          currency: string | null
+          id: string
+          maintenance_category: string
+          next_due_date: string | null
+          next_due_odometer: number | null
+          notes: string | null
+          odometer: number | null
+          recurrence_km: number | null
+          recurrence_months: number | null
+          serviced_at: string | null
+          status: string
+          title: string
+          transaction_id: string | null
+          updated_at: string
+          user_id: string
+          vehicle_id: string
+          vendor: string | null
+        }
+        Insert: {
+          cost_minor?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          maintenance_category?: string
+          next_due_date?: string | null
+          next_due_odometer?: number | null
+          notes?: string | null
+          odometer?: number | null
+          recurrence_km?: number | null
+          recurrence_months?: number | null
+          serviced_at?: string | null
+          status?: string
+          title: string
+          transaction_id?: string | null
+          updated_at?: string
+          user_id: string
+          vehicle_id: string
+          vendor?: string | null
+        }
+        Update: {
+          cost_minor?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          maintenance_category?: string
+          next_due_date?: string | null
+          next_due_odometer?: number | null
+          notes?: string | null
+          odometer?: number | null
+          recurrence_km?: number | null
+          recurrence_months?: number | null
+          serviced_at?: string | null
+          status?: string
+          title?: string
+          transaction_id?: string | null
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string
+          vendor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_maintenance_records_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_records_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_reminders: {
+        Row: {
+          created_at: string
+          due_date: string | null
+          due_odometer: number | null
+          id: string
+          is_completed: boolean
+          is_dismissed: boolean
+          notified_at: string | null
+          reminder_type: Database["public"]["Enums"]["vehicle_reminder_type"]
+          source_id: string | null
+          source_type: string | null
+          title: string
+          updated_at: string
+          user_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          due_date?: string | null
+          due_odometer?: number | null
+          id?: string
+          is_completed?: boolean
+          is_dismissed?: boolean
+          notified_at?: string | null
+          reminder_type: Database["public"]["Enums"]["vehicle_reminder_type"]
+          source_id?: string | null
+          source_type?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          due_date?: string | null
+          due_odometer?: number | null
+          id?: string
+          is_completed?: boolean
+          is_dismissed?: boolean
+          notified_at?: string | null
+          reminder_type?: Database["public"]["Enums"]["vehicle_reminder_type"]
+          source_id?: string | null
+          source_type?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_reminders_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicles: {
+        Row: {
+          created_at: string
+          current_odometer: number
+          fuel_type: string
+          fuel_unit: string
+          id: string
+          make: string | null
+          manufacturing_year: number | null
+          model: string | null
+          name: string
+          notes: string | null
+          odometer_unit: string
+          photo_storage_path: string | null
+          purchase_amount_minor: number | null
+          purchase_currency: string | null
+          purchase_date: string | null
+          registration_number: string | null
+          status: Database["public"]["Enums"]["vehicle_status"]
+          tank_capacity_ml: number | null
+          transmission: string | null
+          updated_at: string
+          user_id: string
+          variant: string | null
+          vehicle_type: string
+          vin: string | null
+        }
+        Insert: {
+          created_at?: string
+          current_odometer?: number
+          fuel_type?: string
+          fuel_unit?: string
+          id?: string
+          make?: string | null
+          manufacturing_year?: number | null
+          model?: string | null
+          name: string
+          notes?: string | null
+          odometer_unit?: string
+          photo_storage_path?: string | null
+          purchase_amount_minor?: number | null
+          purchase_currency?: string | null
+          purchase_date?: string | null
+          registration_number?: string | null
+          status?: Database["public"]["Enums"]["vehicle_status"]
+          tank_capacity_ml?: number | null
+          transmission?: string | null
+          updated_at?: string
+          user_id: string
+          variant?: string | null
+          vehicle_type?: string
+          vin?: string | null
+        }
+        Update: {
+          created_at?: string
+          current_odometer?: number
+          fuel_type?: string
+          fuel_unit?: string
+          id?: string
+          make?: string | null
+          manufacturing_year?: number | null
+          model?: string | null
+          name?: string
+          notes?: string | null
+          odometer_unit?: string
+          photo_storage_path?: string | null
+          purchase_amount_minor?: number | null
+          purchase_currency?: string | null
+          purchase_date?: string | null
+          registration_number?: string | null
+          status?: Database["public"]["Enums"]["vehicle_status"]
+          tank_capacity_ml?: number | null
+          transmission?: string | null
+          updated_at?: string
+          user_id?: string
+          variant?: string | null
+          vehicle_type?: string
+          vin?: string | null
+        }
+        Relationships: []
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      add_epfo_employment: {
+        Args: {
+          p_account_id: string
+          p_actor?: Database["public"]["Enums"]["audit_actor"]
+          p_employer_name: string
+          p_end_date: string
+          p_member_id: string
+          p_notes: string
+          p_start_date: string
+          p_user_id: string
+        }
+        Returns: {
+          account_id: string
+          created_at: string
+          employer_name: string
+          end_date: string | null
+          id: string
+          is_active: boolean
+          member_id: string | null
+          notes: string | null
+          source: string
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "epfo_employments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       add_goal_contribution: {
         Args: {
           p_account_id: string
@@ -2192,6 +3030,7 @@ export type Database = {
           currency: string
           deleted_at: string | null
           description: string | null
+          epfo_ledger_entry_id: string | null
           goal_id: string | null
           id: string
           import_batch_id: string | null
@@ -2205,6 +3044,8 @@ export type Database = {
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
           user_id: string
+          vehicle_expense_id: string | null
+          vehicle_fuel_entry_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -2270,6 +3111,15 @@ export type Database = {
         }
         Returns: Json
       }
+      confirm_epfo_passbook_batch: {
+        Args: {
+          p_actor?: Database["public"]["Enums"]["audit_actor"]
+          p_employment_id: string
+          p_import_batch_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       confirm_import_batch: {
         Args: {
           p_actor?: Database["public"]["Enums"]["audit_actor"]
@@ -2294,6 +3144,39 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "import_batches"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      correct_epfo_balance: {
+        Args: {
+          p_account_id: string
+          p_actor?: Database["public"]["Enums"]["audit_actor"]
+          p_delta_minor: number
+          p_occurred_at: string
+          p_reason: string
+          p_user_id: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          created_at: string
+          created_by: string
+          currency: string
+          description: string | null
+          employment_id: string | null
+          entry_type: Database["public"]["Enums"]["epfo_entry_type"]
+          external_reference: string | null
+          id: string
+          import_batch_id: string | null
+          metadata: Json
+          occurred_at: string
+          source: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "epfo_ledger_entries"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -2328,6 +3211,39 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_epfo_account: {
+        Args: {
+          p_actor?: Database["public"]["Enums"]["audit_actor"]
+          p_as_of: string
+          p_currency: string
+          p_name: string
+          p_opening_balance_minor: number
+          p_user_id: string
+        }
+        Returns: {
+          balance_minor: number
+          created_at: string
+          credit_limit_minor: number | null
+          credit_used_minor: number | null
+          currency: string
+          deleted_at: string | null
+          id: string
+          is_archived: boolean
+          market_value_minor: number | null
+          name: string
+          payment_due_day: number | null
+          statement_close_day: number | null
+          type: Database["public"]["Enums"]["account_type"]
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_transaction: {
         Args: {
           p_account_id: string
@@ -2350,6 +3266,7 @@ export type Database = {
           currency: string
           deleted_at: string | null
           description: string | null
+          epfo_ledger_entry_id: string | null
           goal_id: string | null
           id: string
           import_batch_id: string | null
@@ -2363,6 +3280,8 @@ export type Database = {
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
           user_id: string
+          vehicle_expense_id: string | null
+          vehicle_fuel_entry_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -2379,6 +3298,34 @@ export type Database = {
           p_user_id: string
         }
         Returns: undefined
+      }
+      end_epfo_employment: {
+        Args: {
+          p_actor?: Database["public"]["Enums"]["audit_actor"]
+          p_employment_id: string
+          p_end_date: string
+          p_user_id: string
+        }
+        Returns: {
+          account_id: string
+          created_at: string
+          employer_name: string
+          end_date: string | null
+          id: string
+          is_active: boolean
+          member_id: string | null
+          notes: string | null
+          source: string
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "epfo_employments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       mark_bill_paid: {
         Args: {
@@ -2401,6 +3348,7 @@ export type Database = {
           currency: string
           deleted_at: string | null
           description: string | null
+          epfo_ledger_entry_id: string | null
           goal_id: string | null
           id: string
           import_batch_id: string | null
@@ -2414,6 +3362,8 @@ export type Database = {
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
           user_id: string
+          vehicle_expense_id: string | null
+          vehicle_fuel_entry_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -2461,6 +3411,42 @@ export type Database = {
           p_user_id: string
         }
         Returns: Json
+      }
+      record_epfo_contribution: {
+        Args: {
+          p_account_id: string
+          p_actor?: Database["public"]["Enums"]["audit_actor"]
+          p_amount_minor: number
+          p_description: string
+          p_employment_id: string
+          p_external_reference: string
+          p_kind: Database["public"]["Enums"]["epfo_contribution_kind"]
+          p_occurred_at: string
+          p_user_id: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number
+          created_at: string
+          created_by: string
+          currency: string
+          description: string | null
+          employment_id: string | null
+          entry_type: Database["public"]["Enums"]["epfo_entry_type"]
+          external_reference: string | null
+          id: string
+          import_batch_id: string | null
+          metadata: Json
+          occurred_at: string
+          source: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "epfo_ledger_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       replace_active_ai_provider_credential: {
         Args: {
@@ -2526,6 +3512,7 @@ export type Database = {
           currency: string
           deleted_at: string | null
           description: string | null
+          epfo_ledger_entry_id: string | null
           goal_id: string | null
           id: string
           import_batch_id: string | null
@@ -2539,10 +3526,51 @@ export type Database = {
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
           user_id: string
+          vehicle_expense_id: string | null
+          vehicle_fuel_entry_id: string | null
         }
         SetofOptions: {
           from: "*"
           to: "transactions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      upsert_epfo_contribution_profile: {
+        Args: {
+          p_account_id: string
+          p_actor?: Database["public"]["Enums"]["audit_actor"]
+          p_amount_minor: number
+          p_base_amount_minor: number
+          p_effective_from: string
+          p_employment_id: string
+          p_kind: Database["public"]["Enums"]["epfo_contribution_kind"]
+          p_mode: Database["public"]["Enums"]["epfo_contribution_mode"]
+          p_percent_den: number
+          p_percent_num: number
+          p_user_id: string
+        }
+        Returns: {
+          account_id: string
+          amount_minor: number | null
+          base_amount_minor: number | null
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          employment_id: string | null
+          frequency: Database["public"]["Enums"]["epfo_contribution_frequency"]
+          id: string
+          is_active: boolean
+          kind: Database["public"]["Enums"]["epfo_contribution_kind"]
+          mode: Database["public"]["Enums"]["epfo_contribution_mode"]
+          percent_den: number | null
+          percent_num: number | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "epfo_contribution_profiles"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -2564,6 +3592,7 @@ export type Database = {
           currency: string
           deleted_at: string | null
           description: string | null
+          epfo_ledger_entry_id: string | null
           goal_id: string | null
           id: string
           import_batch_id: string | null
@@ -2577,6 +3606,8 @@ export type Database = {
           type: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
           user_id: string
+          vehicle_expense_id: string | null
+          vehicle_fuel_entry_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -2598,6 +3629,22 @@ export type Database = {
       confirmation_source: "web" | "spensa" | "mcp" | "gmail"
       confirmation_status: "pending" | "confirmed" | "cancelled" | "expired"
       delivery_status: "pending" | "delivered" | "failed" | "skipped"
+      epfo_contribution_frequency: "monthly"
+      epfo_contribution_kind: "employee_epf" | "employer_epf" | "eps"
+      epfo_contribution_mode: "fixed" | "percent" | "imported" | "none"
+      epfo_entry_type:
+        | "opening_balance"
+        | "employee_contribution"
+        | "employer_epf_contribution"
+        | "eps_contribution"
+        | "interest"
+        | "transfer_in"
+        | "transfer_out"
+        | "withdrawal"
+        | "final_settlement"
+        | "adjustment"
+      epfo_reconciliation_status: "matched" | "mismatch" | "dismissed"
+      epfo_withdrawal_status: "PLANNED" | "RECORDED" | "CANCELLED"
       gmail_candidate_type: "transaction" | "bill" | "statement" | "other"
       gmail_sync_status: "idle" | "syncing" | "success" | "error"
       goal_contribution_frequency:
@@ -2610,7 +3657,12 @@ export type Database = {
       goal_plan_status: "active" | "paused" | "completed"
       goal_status: "active" | "completed" | "archived"
       goal_term: "short" | "long"
-      import_source_type: "csv" | "pdf_statement" | "manual" | "copy_paste" | "epfo_passbook"
+      import_source_type:
+        | "csv"
+        | "pdf_statement"
+        | "manual"
+        | "copy_paste"
+        | "epfo_passbook"
       import_status:
         | "uploaded"
         | "processing"
@@ -2639,6 +3691,7 @@ export type Database = {
         | "commitment"
         | "loan"
         | "epfo"
+        | "vehicle"
       notification_channel: "in_app" | "email" | "telegram" | "slack"
       notification_severity: "info" | "warning" | "critical" | "success"
       plan_item_status:
@@ -2684,6 +3737,20 @@ export type Database = {
         | "goal_contribution"
         | "goal_withdrawal"
       two_factor_method: "totp" | "email_otp"
+      vehicle_document_type:
+        | "insurance"
+        | "puc"
+        | "rc"
+        | "road_tax"
+        | "permit"
+        | "warranty"
+        | "other"
+      vehicle_reminder_type:
+        | "maintenance_date"
+        | "maintenance_odometer"
+        | "document_expiry"
+        | "custom"
+      vehicle_status: "active" | "archived"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2822,6 +3889,23 @@ export const Constants = {
       confirmation_source: ["web", "spensa", "mcp", "gmail"],
       confirmation_status: ["pending", "confirmed", "cancelled", "expired"],
       delivery_status: ["pending", "delivered", "failed", "skipped"],
+      epfo_contribution_frequency: ["monthly"],
+      epfo_contribution_kind: ["employee_epf", "employer_epf", "eps"],
+      epfo_contribution_mode: ["fixed", "percent", "imported", "none"],
+      epfo_entry_type: [
+        "opening_balance",
+        "employee_contribution",
+        "employer_epf_contribution",
+        "eps_contribution",
+        "interest",
+        "transfer_in",
+        "transfer_out",
+        "withdrawal",
+        "final_settlement",
+        "adjustment",
+      ],
+      epfo_reconciliation_status: ["matched", "mismatch", "dismissed"],
+      epfo_withdrawal_status: ["PLANNED", "RECORDED", "CANCELLED"],
       gmail_candidate_type: ["transaction", "bill", "statement", "other"],
       gmail_sync_status: ["idle", "syncing", "success", "error"],
       goal_contribution_frequency: [
@@ -2835,7 +3919,13 @@ export const Constants = {
       goal_plan_status: ["active", "paused", "completed"],
       goal_status: ["active", "completed", "archived"],
       goal_term: ["short", "long"],
-      import_source_type: ["csv", "pdf_statement", "manual", "copy_paste", "epfo_passbook"],
+      import_source_type: [
+        "csv",
+        "pdf_statement",
+        "manual",
+        "copy_paste",
+        "epfo_passbook",
+      ],
       import_status: [
         "uploaded",
         "processing",
@@ -2866,6 +3956,7 @@ export const Constants = {
         "commitment",
         "loan",
         "epfo",
+        "vehicle",
       ],
       notification_channel: ["in_app", "email", "telegram", "slack"],
       notification_severity: ["info", "warning", "critical", "success"],
@@ -2917,6 +4008,22 @@ export const Constants = {
         "goal_withdrawal",
       ],
       two_factor_method: ["totp", "email_otp"],
+      vehicle_document_type: [
+        "insurance",
+        "puc",
+        "rc",
+        "road_tax",
+        "permit",
+        "warranty",
+        "other",
+      ],
+      vehicle_reminder_type: [
+        "maintenance_date",
+        "maintenance_odometer",
+        "document_expiry",
+        "custom",
+      ],
+      vehicle_status: ["active", "archived"],
     },
   },
 } as const

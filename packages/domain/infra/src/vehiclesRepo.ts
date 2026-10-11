@@ -1,17 +1,5 @@
 import type { TypedSupabaseClient } from "./supabaseClients.js";
 
-// TYPING NOTE: the vehicle tables (vehicles, vehicle_fuel_entries,
-// vehicle_expenses, vehicle_maintenance_records, vehicle_documents,
-// vehicle_reminders) were added in migration 20261010000001 but the
-// generated database.types.ts has not been regenerated yet (no live
-// Supabase CLI invocation in this session). All .from() calls for
-// these tables go through `(client as any)` to escape the type check;
-// the row shapes are enforced by the explicit Row interfaces above.
-// Run `supabase gen types typescript ...` after applying the migration
-// to replace these casts with real generated types.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = (client: TypedSupabaseClient) => client as any;
-
 /**
  * Vehicles repository.
  *
@@ -204,13 +192,13 @@ export async function listVehicles(
   client: TypedSupabaseClient,
   userId: string,
 ): Promise<VehicleRow[]> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicles")
     .select(VEHICLE_COLS)
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
   if (error) throw new Error(`listVehicles: ${error.message}`);
-  return (data ?? []) as VehicleRow[];
+  return (data ?? []) as unknown as VehicleRow[];
 }
 
 export async function getVehicle(
@@ -218,7 +206,7 @@ export async function getVehicle(
   userId: string,
   vehicleId: string,
 ): Promise<VehicleRow | null> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicles")
     .select(VEHICLE_COLS)
     .eq("user_id", userId)
@@ -226,7 +214,7 @@ export async function getVehicle(
     .single();
   if (error && error.code === "PGRST116") return null;
   if (error) throw new Error(`getVehicle: ${error.message}`);
-  return data as VehicleRow;
+  return data as unknown as VehicleRow;
 }
 
 export interface CreateVehiclePatch {
@@ -255,7 +243,7 @@ export async function createVehicle(
   userId: string,
   patch: CreateVehiclePatch,
 ): Promise<VehicleRow> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicles")
     .insert({
       user_id: userId,
@@ -282,7 +270,7 @@ export async function createVehicle(
     .select(VEHICLE_COLS)
     .single();
   if (error) throw new Error(`createVehicle: ${error.message}`);
-  return data as VehicleRow;
+  return data as unknown as VehicleRow;
 }
 
 export interface UpdateVehiclePatch extends Partial<CreateVehiclePatch> {
@@ -319,15 +307,15 @@ export async function updateVehicle(
   if (patch.notes !== undefined) update.notes = patch.notes;
   if (patch.status !== undefined) update.status = patch.status;
 
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicles")
-    .update(update)
+    .update(update as Partial<VehicleRow>)
     .eq("user_id", userId)
     .eq("id", vehicleId)
     .select(VEHICLE_COLS)
     .single();
   if (error) throw new Error(`updateVehicle: ${error.message}`);
-  return data as VehicleRow;
+  return data as unknown as VehicleRow;
 }
 
 export async function updateVehicleCurrentOdometerIfHigher(
@@ -336,7 +324,7 @@ export async function updateVehicleCurrentOdometerIfHigher(
   vehicleId: string,
   newOdometer: number,
 ): Promise<void> {
-  await db(client)
+  await client
     .from("vehicles")
     .update({ current_odometer: newOdometer })
     .eq("user_id", userId)
@@ -349,7 +337,7 @@ export async function deleteVehicle(
   userId: string,
   vehicleId: string,
 ): Promise<void> {
-  const { error } = await db(client)
+  const { error } = await client
     .from("vehicles")
     .delete()
     .eq("user_id", userId)
@@ -373,7 +361,7 @@ export async function listFuelEntries(
   userId: string,
   options: ListFuelEntriesOptions,
 ): Promise<VehicleFuelEntryRow[]> {
-  let query = db(client)
+  let query = client
     .from("vehicle_fuel_entries")
     .select(FUEL_ENTRY_COLS)
     .eq("user_id", userId)
@@ -386,7 +374,7 @@ export async function listFuelEntries(
 
   const { data, error } = await query;
   if (error) throw new Error(`listFuelEntries: ${error.message}`);
-  return (data ?? []) as VehicleFuelEntryRow[];
+  return (data ?? []) as unknown as VehicleFuelEntryRow[];
 }
 
 export async function getExistingImportGuids(
@@ -397,7 +385,7 @@ export async function getExistingImportGuids(
   guids: string[],
 ): Promise<string[]> {
   if (guids.length === 0) return [];
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_fuel_entries")
     .select("import_guid")
     .eq("user_id", userId)
@@ -415,7 +403,7 @@ export async function getFuelEntry(
   userId: string,
   entryId: string,
 ): Promise<VehicleFuelEntryRow | null> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_fuel_entries")
     .select(FUEL_ENTRY_COLS)
     .eq("user_id", userId)
@@ -423,7 +411,7 @@ export async function getFuelEntry(
     .single();
   if (error && error.code === "PGRST116") return null;
   if (error) throw new Error(`getFuelEntry: ${error.message}`);
-  return data as VehicleFuelEntryRow;
+  return data as unknown as VehicleFuelEntryRow;
 }
 
 export interface CreateFuelEntryPatch {
@@ -454,7 +442,7 @@ export async function createFuelEntry(
   userId: string,
   patch: CreateFuelEntryPatch,
 ): Promise<VehicleFuelEntryRow> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_fuel_entries")
     .insert({
       user_id: userId,
@@ -482,7 +470,7 @@ export async function createFuelEntry(
     .select(FUEL_ENTRY_COLS)
     .single();
   if (error) throw new Error(`createFuelEntry: ${error.message}`);
-  return data as VehicleFuelEntryRow;
+  return data as unknown as VehicleFuelEntryRow;
 }
 
 export interface UpdateFuelEntryPatch extends Partial<Omit<CreateFuelEntryPatch, "vehicleId">> {
@@ -513,15 +501,15 @@ export async function updateFuelEntry(
   if (patch.notes !== undefined)             update.notes = patch.notes;
   if (patch.transactionId !== undefined)     update.transaction_id = patch.transactionId;
 
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_fuel_entries")
-    .update(update)
+    .update(update as Partial<VehicleFuelEntryRow>)
     .eq("user_id", userId)
     .eq("id", entryId)
     .select(FUEL_ENTRY_COLS)
     .single();
   if (error) throw new Error(`updateFuelEntry: ${error.message}`);
-  return data as VehicleFuelEntryRow;
+  return data as unknown as VehicleFuelEntryRow;
 }
 
 export async function deleteFuelEntry(
@@ -529,7 +517,7 @@ export async function deleteFuelEntry(
   userId: string,
   entryId: string,
 ): Promise<void> {
-  const { error } = await db(client)
+  const { error } = await client
     .from("vehicle_fuel_entries")
     .delete()
     .eq("user_id", userId)
@@ -546,14 +534,14 @@ export async function listVehicleExpenses(
   userId: string,
   vehicleId: string,
 ): Promise<VehicleExpenseRow[]> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_expenses")
     .select(EXPENSE_COLS)
     .eq("user_id", userId)
     .eq("vehicle_id", vehicleId)
     .order("occurred_at", { ascending: false });
   if (error) throw new Error(`listVehicleExpenses: ${error.message}`);
-  return (data ?? []) as VehicleExpenseRow[];
+  return (data ?? []) as unknown as VehicleExpenseRow[];
 }
 
 export interface CreateVehicleExpensePatch {
@@ -576,7 +564,7 @@ export async function createVehicleExpense(
   userId: string,
   patch: CreateVehicleExpensePatch,
 ): Promise<VehicleExpenseRow> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_expenses")
     .insert({
       user_id: userId,
@@ -596,7 +584,7 @@ export async function createVehicleExpense(
     .select(EXPENSE_COLS)
     .single();
   if (error) throw new Error(`createVehicleExpense: ${error.message}`);
-  return data as VehicleExpenseRow;
+  return data as unknown as VehicleExpenseRow;
 }
 
 export async function deleteVehicleExpense(
@@ -604,7 +592,7 @@ export async function deleteVehicleExpense(
   userId: string,
   expenseId: string,
 ): Promise<void> {
-  const { error } = await db(client)
+  const { error } = await client
     .from("vehicle_expenses")
     .delete()
     .eq("user_id", userId)
@@ -621,14 +609,14 @@ export async function listMaintenanceRecords(
   userId: string,
   vehicleId: string,
 ): Promise<VehicleMaintenanceRow[]> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_maintenance_records")
     .select(MAINTENANCE_COLS)
     .eq("user_id", userId)
     .eq("vehicle_id", vehicleId)
     .order("serviced_at", { ascending: false, nullsFirst: false });
   if (error) throw new Error(`listMaintenanceRecords: ${error.message}`);
-  return (data ?? []) as VehicleMaintenanceRow[];
+  return (data ?? []) as unknown as VehicleMaintenanceRow[];
 }
 
 export interface CreateMaintenancePatch {
@@ -654,7 +642,7 @@ export async function createMaintenanceRecord(
   userId: string,
   patch: CreateMaintenancePatch,
 ): Promise<VehicleMaintenanceRow> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_maintenance_records")
     .insert({
       user_id: userId,
@@ -677,7 +665,7 @@ export async function createMaintenanceRecord(
     .select(MAINTENANCE_COLS)
     .single();
   if (error) throw new Error(`createMaintenanceRecord: ${error.message}`);
-  return data as VehicleMaintenanceRow;
+  return data as unknown as VehicleMaintenanceRow;
 }
 
 export async function deleteMaintenanceRecord(
@@ -685,7 +673,7 @@ export async function deleteMaintenanceRecord(
   userId: string,
   recordId: string,
 ): Promise<void> {
-  const { error } = await db(client)
+  const { error } = await client
     .from("vehicle_maintenance_records")
     .delete()
     .eq("user_id", userId)
@@ -702,14 +690,14 @@ export async function listVehicleDocuments(
   userId: string,
   vehicleId: string,
 ): Promise<VehicleDocumentRow[]> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_documents")
     .select(DOCUMENT_COLS)
     .eq("user_id", userId)
     .eq("vehicle_id", vehicleId)
     .order("expiry_date", { ascending: true, nullsFirst: false });
   if (error) throw new Error(`listVehicleDocuments: ${error.message}`);
-  return (data ?? []) as VehicleDocumentRow[];
+  return (data ?? []) as unknown as VehicleDocumentRow[];
 }
 
 export interface CreateVehicleDocumentPatch {
@@ -730,7 +718,7 @@ export async function createVehicleDocument(
   userId: string,
   patch: CreateVehicleDocumentPatch,
 ): Promise<VehicleDocumentRow> {
-  const { data, error } = await db(client)
+  const { data, error } = await client
     .from("vehicle_documents")
     .insert({
       user_id: userId,
@@ -749,7 +737,7 @@ export async function createVehicleDocument(
     .select(DOCUMENT_COLS)
     .single();
   if (error) throw new Error(`createVehicleDocument: ${error.message}`);
-  return data as VehicleDocumentRow;
+  return data as unknown as VehicleDocumentRow;
 }
 
 export async function deleteVehicleDocument(
@@ -757,7 +745,7 @@ export async function deleteVehicleDocument(
   userId: string,
   documentId: string,
 ): Promise<void> {
-  const { error } = await db(client)
+  const { error } = await client
     .from("vehicle_documents")
     .delete()
     .eq("user_id", userId)
@@ -775,7 +763,7 @@ export async function listVehicleReminders(
   vehicleId: string,
   includeDismissed = false,
 ): Promise<VehicleReminderRow[]> {
-  let query = db(client)
+  let query = client
     .from("vehicle_reminders")
     .select(REMINDER_COLS)
     .eq("user_id", userId)
@@ -788,7 +776,7 @@ export async function listVehicleReminders(
 
   const { data, error } = await query;
   if (error) throw new Error(`listVehicleReminders: ${error.message}`);
-  return (data ?? []) as VehicleReminderRow[];
+  return (data ?? []) as unknown as VehicleReminderRow[];
 }
 
 export async function upsertReminderForMaintenance(
@@ -803,7 +791,7 @@ export async function upsertReminderForMaintenance(
   if (!dueDate && !dueOdometer) return;
 
   // Delete any prior reminder tied to this maintenance record before inserting.
-  await db(client)
+  await client
     .from("vehicle_reminders")
     .delete()
     .eq("user_id", userId)
@@ -814,7 +802,7 @@ export async function upsertReminderForMaintenance(
     ? "maintenance_odometer"
     : "maintenance_date";
 
-  const { error } = await db(client)
+  const { error } = await client
     .from("vehicle_reminders")
     .insert({
       user_id: userId,
@@ -838,7 +826,7 @@ export async function upsertReminderForDocument(
   dueDates: string[],
 ): Promise<void> {
   // Delete prior reminders tied to this document.
-  await db(client)
+  await client
     .from("vehicle_reminders")
     .delete()
     .eq("user_id", userId)
@@ -858,7 +846,7 @@ export async function upsertReminderForDocument(
     source_id: documentId,
   }));
 
-  const { error } = await db(client).from("vehicle_reminders").insert(rows);
+  const { error } = await client.from("vehicle_reminders").insert(rows);
   if (error) throw new Error(`upsertReminderForDocument: ${error.message}`);
 }
 
@@ -867,7 +855,7 @@ export async function dismissReminder(
   userId: string,
   reminderId: string,
 ): Promise<void> {
-  const { error } = await db(client)
+  const { error } = await client
     .from("vehicle_reminders")
     .update({ is_dismissed: true })
     .eq("user_id", userId)
