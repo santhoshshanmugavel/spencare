@@ -725,7 +725,7 @@ export function VehicleDetail({
         <StatCard
           label="Cost per km"
           value={costPerKm.type === "computed"
-            ? `${currency === "INR" ? "₹" : currency}${(costPerKm.costPerKmCx100 / 100).toFixed(2)}/km`
+            ? `${currency === "INR" ? "₹" : currency}${(costPerKm.costPerKmCx100 / 10000).toFixed(2)}/km`
             : "—"}
           Icon={Gauge}
         />
@@ -1486,7 +1486,7 @@ export function VehicleDetail({
                     )}
                     {costPerKm.type === "computed" && !masked && (
                       <>
-                        <StatRow label="Avg cost per km" value={`${currency === "INR" ? "₹" : currency}${(costPerKm.costPerKmCx100 / 100).toFixed(2)}/km`} />
+                        <StatRow label="Avg cost per km" value={`${currency === "INR" ? "₹" : currency}${(costPerKm.costPerKmCx100 / 10000).toFixed(2)}/km`} />
                         {bestCostPerKm != null && (
                           <>
                             <div className="h-px bg-border" />
