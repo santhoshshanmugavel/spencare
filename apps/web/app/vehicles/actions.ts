@@ -18,6 +18,7 @@ import {
   createTransaction,
   getVehicle,
   getExistingImportGuids,
+  searchTransactions,
   type CreateVehicleInput,
   type UpdateVehicleInput,
   type CreateFuelEntryInput,
@@ -26,6 +27,8 @@ import {
   type CreateMaintenanceInput,
   type CreateVehicleDocumentInput,
   type AuthContext,
+  type SearchTransactionsOptions,
+  type SearchTransactionsResult,
 } from "@spencare/domain-application";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
@@ -536,4 +539,12 @@ export async function checkImportDuplicatesAction(
   } catch (e) {
     return { ok: false as const, error: { code: "query_failed", message: e instanceof Error ? e.message : "Failed to check duplicates." } };
   }
+}
+
+export async function searchTransactionsForExpenseAction(
+  options: Pick<SearchTransactionsOptions, "search" | "occurredFrom" | "occurredTo" | "cursor">,
+): Promise<SearchTransactionsResult> {
+  const ctx = await getAuthContext();
+  if (!ctx) return { transactions: [], nextCursor: null };
+  return searchTransactions(ctx, options);
 }

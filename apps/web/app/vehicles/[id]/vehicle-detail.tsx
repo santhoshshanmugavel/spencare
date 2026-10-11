@@ -4,7 +4,7 @@ import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Fuel, Wrench, FileText, Bell, DollarSign, BarChart3,
-  Plus, Trash2, Gauge, Pencil,
+  Plus, Trash2, Gauge, Pencil, Link2, X,
 } from "lucide-react";
 import type {
   VehicleMaintenanceRow,
@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatMinorUnits } from "@/lib/currency-format";
+import type { TransactionRow } from "@spencare/domain-application";
 import {
   createFuelEntryAction,
   updateFuelEntryAction,
@@ -32,6 +33,7 @@ import {
   deleteVehicleDocumentAction,
   dismissVehicleReminderAction,
 } from "../actions";
+import { LinkTransactionDialog } from "../link-transaction-dialog";
 
 // ── Formatters ─────────────────────────────────────────────────────────────
 
@@ -252,11 +254,35 @@ export function VehicleDetail({
   // ── Expense dialog ───────────────────────────────────────────────────────
 
   const [showExpenseDialog, setShowExpenseDialog] = useState(false);
+  const [showLinkTxnDialog, setShowLinkTxnDialog] = useState(false);
+  const [linkedTxn, setLinkedTxn] = useState<TransactionRow | null>(null);
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10));
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseCategory, setExpenseCategory] = useState("repair");
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseError, setExpenseError] = useState<string | null>(null);
+
+  function handleLinkTxn(txn: TransactionRow) {
+    setLinkedTxn(txn);
+    // Pre-fill amount and date from the selected transaction
+    setExpenseAmount((txn.amount_minor / 100).toFixed(2));
+    setExpenseDate(new Date(txn.occurred_at).toISOString().slice(0, 10));
+    if (!expenseDesc) {
+      const { displayTitle } = (() => {
+        try { return { displayTitle: txn.item_name ?? txn.merchant ?? "" }; } catch { return { displayTitle: "" }; }
+      })();
+      if (displayTitle) setExpenseDesc(displayTitle);
+    }
+  }
+
+  function resetExpenseForm() {
+    setLinkedTxn(null);
+    setExpenseDate(new Date().toISOString().slice(0, 10));
+    setExpenseAmount("");
+    setExpenseCategory("repair");
+    setExpenseDesc("");
+    setExpenseError(null);
+  }
 
   function handleAddExpense() {
     const amountMinor = Math.round(parseFloat(expenseAmount) * 100);
@@ -266,8 +292,9 @@ export function VehicleDetail({
       const result = await createVehicleExpenseAction({
         vehicleId, occurredAt: expenseDate, amountMinor,
         currency, expenseCategory, description: expenseDesc.trim() || null,
+        transactionId: linkedTxn?.id ?? null,
       });
-      if (result.ok) { setExpenses((prev) => [result.value, ...prev]); setShowExpenseDialog(false); }
+      if (result.ok) { setExpenses((prev) => [result.value, ...prev]); setShowExpenseDialog(false); resetExpenseForm(); }
       else { setExpenseError(result.error.message); }
     });
   }
@@ -597,7 +624,7 @@ export function VehicleDetail({
               <span className="text-sm text-muted-foreground">
                 {expenses.length} expense{expenses.length !== 1 ? "s" : ""}
               </span>
-              <Button size="sm" className="text-xs" onClick={() => setShowExpenseDialog(true)}>
+              <Button size="sm" className="text-xs" onClick={() => { resetExpenseForm(); setShowExpenseDialog(true); }}>
                 <Plus className="size-3.5 mr-1" /> Add expense
               </Button>
             </div>
@@ -980,10 +1007,42 @@ export function VehicleDetail({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showExpenseDialog} onOpenChange={setShowExpenseDialog}>
+      <Dialog open={showExpenseDialog} onOpenChange={(open) => { setShowExpenseDialog(open); if (!open) resetExpenseForm(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Add vehicle expense</DialogTitle></DialogHeader>
           <div className="space-y-4">
+
+            {/* Linked transaction chip */}
+            {linkedTxn ? (
+              <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                <Link2 className="size-3.5 text-primary shrink-0" />
+                <span className="flex-1 min-w-0">
+                  <span className="font-medium text-foreground truncate block">
+                    {linkedTxn.item_name ?? linkedTxn.merchant ?? "Transaction"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">Linked transaction</span>
+                </span>
+                <button
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                  onClick={() => setLinkedTxn(null)}
+                  title="Remove link"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full text-muted-foreground border-dashed"
+                onClick={() => setShowLinkTxnDialog(true)}
+              >
+                <Link2 className="size-3.5 mr-1.5" />
+                Link to existing transaction
+              </Button>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Date</Label>
@@ -1016,11 +1075,17 @@ export function VehicleDetail({
             {expenseError && <p className="text-sm text-destructive">{expenseError}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowExpenseDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowExpenseDialog(false); resetExpenseForm(); }}>Cancel</Button>
             <Button onClick={handleAddExpense} disabled={isPending}>{isPending ? "Saving..." : "Add expense"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LinkTransactionDialog
+        open={showLinkTxnDialog}
+        onOpenChange={setShowLinkTxnDialog}
+        onSelect={handleLinkTxn}
+      />
 
       <Dialog open={showMaintenanceDialog} onOpenChange={setShowMaintenanceDialog}>
         <DialogContent className="sm:max-w-md">
