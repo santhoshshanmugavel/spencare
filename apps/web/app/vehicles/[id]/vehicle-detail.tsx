@@ -158,7 +158,7 @@ function VehiclePhotoUploader({
   }
 
   return (
-    <div className="relative aspect-[3/2] w-full overflow-hidden rounded-2xl bg-primary/10 flex items-center justify-center">
+    <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-primary/10 flex items-center justify-center">
       {photoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={photoUrl} alt={vehicleName} className="size-full object-cover" />

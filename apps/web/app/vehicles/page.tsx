@@ -1,5 +1,5 @@
 import { getProfile, getProfileForDisplay, type AuthContext } from "@spencare/domain-application";
-import { listVehicles } from "@spencare/domain-application";
+import { listVehicles, getVehiclePhotoSignedUrl } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { PRIMARY_NAV_ITEMS } from "@/lib/nav-items";
@@ -26,6 +26,19 @@ export default async function VehiclesPage() {
     getProfile(ctx),
   ]);
 
+  const vehiclePhotoUrls: Record<string, string> = {};
+  await Promise.all(
+    vehicles
+      .filter((v) => v.photo_storage_path)
+      .map(async (v) => {
+        try {
+          vehiclePhotoUrls[v.id] = await getVehiclePhotoSignedUrl(supabase, v.photo_storage_path!);
+        } catch {
+          // skip
+        }
+      })
+  );
+
   const displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null =
     displayProfile?.avatarSignedUrl ??
@@ -51,6 +64,7 @@ export default async function VehiclesPage() {
         <VehiclesList
           initialVehicles={vehicles}
           masked={profile?.privacy_mode_enabled ?? false}
+          vehiclePhotoUrls={vehiclePhotoUrls}
         />
       </div>
     </AppShell>

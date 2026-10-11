@@ -34,11 +34,12 @@ function getIcon(vehicleType: string): React.ElementType {
 interface VehiclesListProps {
   initialVehicles: VehicleRow[];
   masked: boolean;
+  vehiclePhotoUrls?: Record<string, string>;
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export function VehiclesList({ initialVehicles }: VehiclesListProps) {
+export function VehiclesList({ initialVehicles, vehiclePhotoUrls = {} }: VehiclesListProps) {
   const router = useRouter();
   const [vehicles, setVehicles] = useState(initialVehicles);
   const [showCreate, setShowCreate] = useState(false);
@@ -128,6 +129,7 @@ export function VehiclesList({ initialVehicles }: VehiclesListProps) {
             <VehicleHeroCard
               key={v.id}
               vehicle={v}
+              photoUrl={vehiclePhotoUrls[v.id] ?? null}
               isPending={isPending}
               onNavigate={() => router.push(`/vehicles/${v.id}`)}
               onDelete={() => handleDelete(v.id)}
@@ -242,11 +244,13 @@ export function VehiclesList({ initialVehicles }: VehiclesListProps) {
 
 function VehicleHeroCard({
   vehicle: v,
+  photoUrl,
   isPending,
   onNavigate,
   onDelete,
 }: {
   vehicle: VehicleRow;
+  photoUrl: string | null;
   isPending: boolean;
   onNavigate: () => void;
   onDelete: () => void;
@@ -258,9 +262,14 @@ function VehicleHeroCard({
       className="rounded-2xl overflow-hidden bg-card border cursor-pointer hover:border-primary/30 hover:shadow-md transition-all group"
       onClick={onNavigate}
     >
-      {/* Hero section with primary tint */}
+      {/* Hero section */}
       <div className="relative h-32 bg-primary/8 flex items-center justify-center overflow-hidden">
-        <Icon className="size-20 text-primary/12" strokeWidth={1} />
+        {photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photoUrl} alt={v.name} className="size-full object-cover" />
+        ) : (
+          <Icon className="size-20 text-primary/12" strokeWidth={1} />
+        )}
         {/* Delete button */}
         <button
           className="absolute top-3 right-3 size-7 rounded-full bg-background/70 hover:bg-destructive/10 flex items-center justify-center text-muted-foreground/40 hover:text-destructive transition-all opacity-0 group-hover:opacity-100"
@@ -272,7 +281,7 @@ function VehicleHeroCard({
         </button>
         {/* Fuel type badge */}
         <div className="absolute bottom-3 left-3">
-          <span className="flex items-center gap-1 text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full capitalize font-medium">
+          <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full capitalize font-medium ${photoUrl ? "bg-background/80 backdrop-blur-sm text-foreground" : "bg-primary/10 text-primary"}`}>
             <Fuel className="size-2.5" />
             {v.fuel_type}
           </span>
