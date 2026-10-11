@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Fuel, Wrench, FileText, Bell, DollarSign, BarChart3,
-  Plus, Trash2, Gauge, Pencil, Link2, X, Droplets, Navigation,
+  Plus, Trash2, Gauge, Pencil, Link2, X, Droplets, Navigation, Camera,
 } from "lucide-react";
 import type {
   VehicleMaintenanceRow,
@@ -33,7 +33,9 @@ import {
   deleteVehicleDocumentAction,
   dismissVehicleReminderAction,
 } from "../actions";
+import { updateVehiclePhotoAction, removeVehiclePhotoAction } from "./actions";
 import { LinkTransactionDialog } from "../link-transaction-dialog";
+import { toastConfirmed, toastError } from "@/lib/toast";
 
 // ── Formatters ─────────────────────────────────────────────────────────────
 
@@ -108,12 +110,114 @@ const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
 
 // ── Props ──────────────────────────────────────────────────────────────────
 
+// ── Vehicle photo uploader ──────────────────────────────────────────────────
+
+function VehiclePhotoUploader({
+  vehicleId,
+  vehicleName,
+  initialUrl,
+}: {
+  vehicleId: string;
+  vehicleName: string;
+  initialUrl: string | null;
+}) {
+  const [photoUrl, setPhotoUrl] = useState(initialUrl);
+  const [isUploading, startUpload] = useTransition();
+  const [isRemoving, startRemove] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isPending = isUploading || isRemoving;
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.set("image", file);
+    startUpload(async () => {
+      const result = await updateVehiclePhotoAction(vehicleId, formData);
+      if (result.ok) {
+        setPhotoUrl(result.value.signedUrl);
+        toastConfirmed("Vehicle photo updated.");
+      } else {
+        toastError(result.error.message);
+      }
+      if (inputRef.current) inputRef.current.value = "";
+    });
+  }
+
+  function handleRemove(e: React.MouseEvent) {
+    e.stopPropagation();
+    startRemove(async () => {
+      const result = await removeVehiclePhotoAction(vehicleId);
+      if (result.ok) {
+        setPhotoUrl(null);
+        toastConfirmed("Vehicle photo removed.");
+      } else {
+        toastError(result.error.message);
+      }
+    });
+  }
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => !isPending && inputRef.current?.click()}
+        className="relative size-[72px] rounded-2xl overflow-hidden border-2 border-border bg-primary/8 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-opacity"
+        style={{ opacity: isPending ? 0.6 : 1 }}
+        aria-label={photoUrl ? `Change ${vehicleName} photo` : `Add photo for ${vehicleName}`}
+        disabled={isPending}
+      >
+        {photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photoUrl} alt={vehicleName} className="size-full object-cover" />
+        ) : (
+          <Camera className="size-6 text-primary/50" />
+        )}
+        {!isPending && (
+          <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-end justify-center pb-1.5">
+            <span className="text-[9px] font-semibold text-white/80 uppercase tracking-wider bg-black/40 rounded-sm px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              {photoUrl ? "Change" : "Add"}
+            </span>
+          </div>
+        )}
+        {isPending && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+            <div className="size-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+        )}
+      </button>
+      {photoUrl && !isPending && (
+        <button
+          type="button"
+          onClick={handleRemove}
+          className="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-background border border-border shadow flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          aria-label={`Remove ${vehicleName} photo`}
+        >
+          <X className="size-3" />
+        </button>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="sr-only"
+        aria-label={`Upload photo for ${vehicleName}`}
+        onChange={handleFileChange}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
+// ── Props ───────────────────────────────────────────────────────────────────
+
 interface VehicleDetailProps {
   dashboard: VehicleDashboardData;
   maintenanceRecords: VehicleMaintenanceRow[];
   documents: VehicleDocumentRow[];
   reminders: VehicleReminderRow[];
   masked: boolean;
+  vehiclePhotoUrl: string | null;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -124,6 +228,7 @@ export function VehicleDetail({
   documents: initialDocuments,
   reminders: initialReminders,
   masked,
+  vehiclePhotoUrl,
 }: VehicleDetailProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -659,6 +764,11 @@ export function VehicleDetail({
             </div>
           )}
         </div>
+        <VehiclePhotoUploader
+          vehicleId={dashboard.vehicle.id}
+          vehicleName={dashboard.vehicle.name}
+          initialUrl={vehiclePhotoUrl}
+        />
       </div>
 
       {/* ── Hero metric: km/l ── */}

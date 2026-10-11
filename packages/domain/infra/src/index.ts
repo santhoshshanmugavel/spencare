@@ -29,6 +29,7 @@ export * from "./notificationsRepo.js";
 export * from "./channelConnectionsRepo.js";
 export * from "./notificationPreferencesRepo.js";
 export * from "./vehiclesRepo.js";
+export * from "./vehiclePhotoStorageRepo.js";
 export * from "./creditCardPaymentSourcesRepo.js";
 export * from "./financialPlansRepo.js";
 export {

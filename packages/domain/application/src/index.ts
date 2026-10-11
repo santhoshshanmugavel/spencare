@@ -603,3 +603,13 @@ export {
   type VehicleReminderRow,
   type VehicleDashboardData,
 } from "./queries/vehicles.js";
+
+export {
+  updateVehiclePhoto,
+  removeVehiclePhoto,
+  type UpdateVehiclePhotoInput,
+  type UpdateVehiclePhotoOutput,
+  type RemoveVehiclePhotoInput,
+} from "./commands/vehiclePhoto.js";
+
+export { getVehiclePhotoSignedUrl } from "@spencare/domain-infra";

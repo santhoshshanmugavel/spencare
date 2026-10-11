@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getProfile, getProfileForDisplay, type AuthContext } from "@spencare/domain-application";
 import {
   getVehicleDashboard,
+  getVehiclePhotoSignedUrl,
   listMaintenanceRecords,
   listVehicleDocuments,
   listVehicleReminders,
@@ -42,6 +43,16 @@ export default async function VehicleDetailPage({ params }: Props) {
 
   if (!dashboard) notFound();
 
+  // Resolve vehicle photo signed URL server-side (same pattern as avatar / goal images)
+  let vehiclePhotoUrl: string | null = null;
+  if (dashboard.vehicle.photo_storage_path) {
+    try {
+      vehiclePhotoUrl = await getVehiclePhotoSignedUrl(supabase, dashboard.vehicle.photo_storage_path);
+    } catch {
+      vehiclePhotoUrl = null;
+    }
+  }
+
   const displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null =
     displayProfile?.avatarSignedUrl ??
@@ -70,6 +81,7 @@ export default async function VehicleDetailPage({ params }: Props) {
           documents={documents}
           reminders={reminders}
           masked={profile?.privacy_mode_enabled ?? false}
+          vehiclePhotoUrl={vehiclePhotoUrl}
         />
       </div>
     </AppShell>
