@@ -72,6 +72,7 @@ export default async function AccountsSettingsPage() {
         dueDate: status.obligation.dueDate,
         paidMinor: status.obligation.paidMinor,
         remainingMinor: status.obligation.remainingMinor,
+        nextBillDueDate: status.snapshot.nextCycle.dueDate,
       };
     }
   }

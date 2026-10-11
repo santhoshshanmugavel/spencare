@@ -294,6 +294,8 @@ export function deriveCreditCardCardStatus(input: {
     paidMinor: number;
     remainingMinor: number;
     obligationStatus: "unpaid" | "partial" | "paid";
+    /** Due date of the next (not-yet-closed) billing cycle, used to show "Next due 5 Nov" after payment. */
+    nextBillDueDate?: string | null;
   } | null;
 }): CreditCardCardStatus {
   if (input.billing == null) {
@@ -308,7 +310,10 @@ export function deriveCreditCardCardStatus(input: {
     return { kind: "no_bill", text: "No bill due", tone: "neutral", remainingMinor: 0 };
   }
   if (input.billing.obligationStatus === "paid" || input.billing.remainingMinor <= 0) {
-    return { kind: "paid", text: "Bill paid", tone: "success", remainingMinor: 0 };
+    const nextText = input.billing.nextBillDueDate
+      ? ` · Next due ${formatShortDate(input.billing.nextBillDueDate)}`
+      : "";
+    return { kind: "paid", text: `Bill paid${nextText}`, tone: "success", remainingMinor: 0 };
   }
 
   // Date-driven states below: the obligation is real and unpaid, so
@@ -539,4 +544,11 @@ export function billingConfigFromAccount(
   const day = account.payment_due_day;
   if (day == null) return null;
   return { billDueDay: day };
+}
+
+const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function formatShortDate(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${parseInt(d, 10)} ${SHORT_MONTHS[parseInt(m, 10) - 1]}`;
 }

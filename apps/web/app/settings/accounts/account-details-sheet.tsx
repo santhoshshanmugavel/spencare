@@ -76,6 +76,8 @@ export interface CreditCardBillingStatusView {
   paidMinor?: number;
   /** Minor units still owed on this bill (0 when paid). */
   remainingMinor?: number;
+  /** Due date of the next billing cycle, shown as "Next due 5 Nov" after payment. */
+  nextBillDueDate?: string | null;
 }
 
 /** One goal contributing to the account's goal reservation. */
