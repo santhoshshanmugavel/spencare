@@ -106,9 +106,9 @@ export interface VehicleDashboardData {
   efficiency: FuelEfficiencyResult;
   costPerKm: CostPerKmResult;
   monthlyCosts: VehicleMonthlyCost[];
-  totalFuelCostMinor: bigint;
-  totalOtherCostMinor: bigint;
-  totalCostMinor: bigint;
+  totalFuelCostMinor: number;
+  totalOtherCostMinor: number;
+  totalCostMinor: number;
   currency: string;
 }
 
@@ -173,11 +173,11 @@ export async function getVehicleDashboard(
 
   const totalFuelCostMinor = fuelEntries
     .filter((e) => e.currency === currency && e.total_cost_minor !== null)
-    .reduce((acc, e) => acc + BigInt(e.total_cost_minor!), 0n);
+    .reduce((acc, e) => acc + Number(e.total_cost_minor!), 0);
 
   const totalOtherCostMinor = expenses
     .filter((e) => e.currency === currency)
-    .reduce((acc, e) => acc + BigInt(e.amount_minor), 0n);
+    .reduce((acc, e) => acc + Number(e.amount_minor), 0);
 
   return {
     vehicle,
@@ -188,7 +188,7 @@ export async function getVehicleDashboard(
     monthlyCosts,
     totalFuelCostMinor,
     totalOtherCostMinor,
-    totalCostMinor: totalFuelCostMinor + totalOtherCostMinor,
+    totalCostMinor: totalFuelCostMinor + totalOtherCostMinor,  // both are now number
     currency,
   };
 }

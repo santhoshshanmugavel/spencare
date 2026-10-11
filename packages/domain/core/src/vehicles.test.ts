@@ -56,7 +56,7 @@ describe("calculateFuelEfficiency", () => {
     expect(result.type).toBe("computed");
     if (result.type === "computed") {
       expect(result.intervalCount).toBe(1);
-      expect(result.kmPerLitreCx100).toBe(1000n); // 10.00 km/L
+      expect(result.kmPerLitreCx100).toBe(1000); // 10.00 km/L
     }
   });
 
@@ -73,7 +73,7 @@ describe("calculateFuelEfficiency", () => {
     expect(result.type).toBe("computed");
     if (result.type === "computed") {
       expect(result.intervalCount).toBe(2);
-      expect(result.kmPerLitreCx100).toBe(1000n);
+      expect(result.kmPerLitreCx100).toBe(1000);
     }
   });
 
@@ -90,7 +90,7 @@ describe("calculateFuelEfficiency", () => {
     expect(result.type).toBe("computed");
     if (result.type === "computed") {
       expect(result.intervalCount).toBe(1);
-      expect(result.kmPerLitreCx100).toBe(2000n);
+      expect(result.kmPerLitreCx100).toBe(2000);
     }
   });
 
@@ -135,7 +135,7 @@ describe("calculateFuelEfficiency", () => {
     expect(result.type).toBe("computed");
     if (result.type === "computed") {
       expect(result.intervalCount).toBe(1);
-      expect(result.kmPerLitreCx100).toBe(1333n);
+      expect(result.kmPerLitreCx100).toBe(1333);
     }
   });
 });
@@ -172,7 +172,7 @@ describe("calculateCostPerKm", () => {
     if (result.type === "computed") {
       // totalCost=10000, distanceDkm=1000
       // costPerKmCx100 = (10000 * 1000) / 1000 = 10000
-      expect(result.costPerKmCx100).toBe(10000n);
+      expect(result.costPerKmCx100).toBe(10000);
       expect(result.currency).toBe("INR");
     }
   });
@@ -196,7 +196,7 @@ describe("calculateCostPerKm", () => {
       // validEntries (not missed, not excludeDistance) = [0n, 1000n]
       // distance = 1000dkm
       // costPerKmCx100 = (2000 * 1000) / 1000 = 2000
-      expect(result.costPerKmCx100).toBe(2000n);
+      expect(result.costPerKmCx100).toBe(2000);
     }
   });
 });
@@ -223,16 +223,16 @@ describe("aggregateMonthlyCosts", () => {
     expect(result).toHaveLength(2);
 
     const jan = result.find((m) => m.month === "2026-01");
-    expect(jan?.fuelCostMinor).toBe(9000n);
-    expect(jan?.otherCostMinor).toBe(2000n);
-    expect(jan?.totalCostMinor).toBe(11000n);
-    expect(jan?.fuelLitresMl).toBe(18000n);
+    expect(jan?.fuelCostMinor).toBe(9000);
+    expect(jan?.otherCostMinor).toBe(2000);
+    expect(jan?.totalCostMinor).toBe(11000);
+    expect(jan?.fuelLitresMl).toBe(18000);
     expect(jan?.fuelEntryCount).toBe(2);
     expect(jan?.expenseCount).toBe(1);
 
     const feb = result.find((m) => m.month === "2026-02");
-    expect(feb?.fuelCostMinor).toBe(6000n);
-    expect(feb?.otherCostMinor).toBe(0n);
+    expect(feb?.fuelCostMinor).toBe(6000);
+    expect(feb?.otherCostMinor).toBe(0);
   });
 
   it("filters out entries with a different currency", () => {
@@ -248,8 +248,8 @@ describe("aggregateMonthlyCosts", () => {
     ];
     const result = aggregateMonthlyCosts("INR", fuel, []);
     expect(result).toHaveLength(1);
-    expect(result[0]!.fuelCostMinor).toBe(0n);
-    expect(result[0]!.fuelLitresMl).toBe(10000n); // ml still accumulated
+    expect(result[0]!.fuelCostMinor).toBe(0);
+    expect(result[0]!.fuelLitresMl).toBe(10000); // ml still accumulated
   });
 
   it("returns months in chronological order", () => {

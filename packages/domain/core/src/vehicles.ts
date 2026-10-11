@@ -256,7 +256,7 @@ export interface VehicleReminder {
  * - "no_entries": the entry list is empty.
  */
 export type FuelEfficiencyResult =
-  | { type: "computed"; intervalCount: number; kmPerLitreCx100: bigint }
+  | { type: "computed"; intervalCount: number; kmPerLitreCx100: number }
   | { type: "insufficient_data" }
   | { type: "no_entries" };
 
@@ -347,7 +347,7 @@ export function calculateFuelEfficiency(
 
   if (intervalCount === 0 || totalFuelMl === 0n) return { type: "insufficient_data" };
 
-  const kmPerLitreCx100 = (totalDistanceDkm * 10_000n) / totalFuelMl;
+  const kmPerLitreCx100 = Number((totalDistanceDkm * 10_000n) / totalFuelMl);
   return { type: "computed", intervalCount, kmPerLitreCx100 };
 }
 
@@ -369,7 +369,7 @@ export function calculateFuelEfficiency(
  *   paise/km × 100 = (totalCostMinor * 1000) / totalDistanceDkm
  */
 export type CostPerKmResult =
-  | { type: "computed"; costPerKmCx100: bigint; currency: string }
+  | { type: "computed"; costPerKmCx100: number; currency: string }
   | { type: "no_data" };
 
 export interface CostPerKmEntry {
@@ -413,7 +413,7 @@ export function calculateCostPerKm(
   const distanceDkm = lastOdo - firstOdo;
   if (distanceDkm <= 0n) return { type: "no_data" };
 
-  const costPerKmCx100 = (totalCostMinor * 1000n) / distanceDkm;
+  const costPerKmCx100 = Number((totalCostMinor * 1000n) / distanceDkm);
   return { type: "computed", costPerKmCx100, currency };
 }
 
@@ -425,11 +425,11 @@ export function calculateCostPerKm(
 export interface VehicleMonthlyCost {
   /** "YYYY-MM" */
   month: string;
-  fuelCostMinor: bigint;
-  otherCostMinor: bigint;
-  totalCostMinor: bigint;
+  fuelCostMinor: number;
+  otherCostMinor: number;
+  totalCostMinor: number;
   currency: string;
-  fuelLitresMl: bigint;
+  fuelLitresMl: number;
   fuelEntryCount: number;
   expenseCount: number;
 }
@@ -463,11 +463,11 @@ export function aggregateMonthlyCosts(
     if (!monthMap.has(month)) {
       monthMap.set(month, {
         month,
-        fuelCostMinor: 0n,
-        otherCostMinor: 0n,
-        totalCostMinor: 0n,
+        fuelCostMinor: 0,
+        otherCostMinor: 0,
+        totalCostMinor: 0,
         currency,
-        fuelLitresMl: 0n,
+        fuelLitresMl: 0,
         fuelEntryCount: 0,
         expenseCount: 0,
       });
@@ -479,11 +479,11 @@ export function aggregateMonthlyCosts(
     if (fe.currency !== currency) continue;
     const month = fe.occurredAt.slice(0, 7);
     const bucket = getOrCreate(month);
-    bucket.fuelLitresMl += fe.fuelQuantityMl;
+    bucket.fuelLitresMl += Number(fe.fuelQuantityMl);
     bucket.fuelEntryCount++;
     if (fe.totalCostMinor !== null && fe.totalCostMinor > 0n) {
-      bucket.fuelCostMinor += fe.totalCostMinor;
-      bucket.totalCostMinor += fe.totalCostMinor;
+      bucket.fuelCostMinor += Number(fe.totalCostMinor);
+      bucket.totalCostMinor += Number(fe.totalCostMinor);
     }
   }
 
@@ -491,8 +491,8 @@ export function aggregateMonthlyCosts(
     if (ex.currency !== currency) continue;
     const month = ex.occurredAt.slice(0, 7);
     const bucket = getOrCreate(month);
-    bucket.otherCostMinor += ex.amountMinor;
-    bucket.totalCostMinor += ex.amountMinor;
+    bucket.otherCostMinor += Number(ex.amountMinor);
+    bucket.totalCostMinor += Number(ex.amountMinor);
     bucket.expenseCount++;
   }
 
