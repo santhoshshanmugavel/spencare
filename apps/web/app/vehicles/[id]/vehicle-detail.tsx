@@ -97,15 +97,13 @@ function prevYearMonth(): string {
 
 // ── Tab config ─────────────────────────────────────────────────────────────
 
-type TabId = "fuel" | "expenses" | "maintenance" | "documents" | "reminders" | "analytics";
+type TabId = "fuel" | "expenses" | "analytics" | "service";
 
 const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: "fuel", label: "Fuel Log", Icon: Fuel },
   { id: "expenses", label: "Expenses", Icon: DollarSign },
-  { id: "maintenance", label: "Service", Icon: Wrench },
-  { id: "documents", label: "Docs", Icon: FileText },
-  { id: "reminders", label: "Alerts", Icon: Bell },
   { id: "analytics", label: "Analytics", Icon: BarChart3 },
+  { id: "service", label: "Service & Docs", Icon: Wrench },
 ];
 
 // ── Props ──────────────────────────────────────────────────────────────────
@@ -183,15 +181,28 @@ export function VehicleDetail({
     return totalDistanceKm / (fuelEntries.length - 1);
   }, [totalDistanceKm, fuelEntries]);
 
-  const lastFuelPricePerL = useMemo(() => {
-    const entry = fuelEntries.find(
-      (e) => e.total_cost_minor != null && Number(e.fuel_quantity_ml) > 0
-    );
-    if (!entry) return null;
-    return (Number(entry.total_cost_minor!) / 100) / (Number(entry.fuel_quantity_ml) / 1000);
-  }, [fuelEntries]);
+  const fuelPricesPerL = useMemo(() =>
+    fuelEntries
+      .filter((e) => e.total_cost_minor != null && Number(e.fuel_quantity_ml) > 0)
+      .map((e) => (Number(e.total_cost_minor!) / 100) / (Number(e.fuel_quantity_ml) / 1000)),
+    [fuelEntries]
+  );
+  const lastFuelPricePerL = fuelPricesPerL[0] ?? null;
+  const bestFuelPricePerL = fuelPricesPerL.length > 0 ? Math.min(...fuelPricesPerL) : null;
+  const worstFuelPricePerL = fuelPricesPerL.length > 1 ? Math.max(...fuelPricesPerL) : null;
 
-  const lastFuelEntry = fuelEntries[0] ?? null;
+  const thisYear = new Date().getFullYear().toString();
+  const thisYearMonths = useMemo(
+    () => dashboard.monthlyCosts.filter((m) => m.month.startsWith(thisYear)),
+    [dashboard.monthlyCosts]
+  );
+  const thisYearFuelCostMinor = thisYearMonths.reduce((a, m) => a + m.fuelCostMinor, 0);
+  const thisYearLitres = thisYearMonths.reduce((a, m) => a + m.fuelLitresMl, 0) / 1000;
+
+  const avgCostPerMonth = useMemo(() => {
+    if (!dashboard.monthlyCosts.length) return null;
+    return dashboard.monthlyCosts.reduce((a, m) => a + m.totalCostMinor, 0) / dashboard.monthlyCosts.length;
+  }, [dashboard.monthlyCosts]);
 
   // Distance delta: entry id -> km driven since previous fill-up
   const distanceDeltaMap = useMemo(() => {
@@ -533,8 +544,12 @@ export function VehicleDetail({
             : "—"}
           Icon={Gauge}
         />
-        <StatCard label="Fill-ups" value={String(fuelEntries.length)} Icon={BarChart3} />
-        <StatCard label="Total litres" value={`${totalLitres.toFixed(1)} L`} Icon={Fuel} />
+        <StatCard
+          label="Distance tracked"
+          value={totalDistanceKm != null ? `${totalDistanceKm.toFixed(0)} km` : "—"}
+          Icon={BarChart3}
+        />
+        <StatCard label="Fill-ups" value={String(fuelEntries.length)} Icon={Fuel} />
         <StatCard label="Fuel cost" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} Icon={DollarSign} />
       </div>
 
@@ -550,14 +565,16 @@ export function VehicleDetail({
                 label="This month"
                 fuelCost={thisMonthCosts?.fuelCostMinor ?? 0}
                 otherCost={thisMonthCosts?.otherCostMinor ?? 0}
+                litresMl={thisMonthCosts?.fuelLitresMl ?? 0}
                 currency={currency}
                 masked={masked}
                 highlight
               />
               <MonthCostCol
-                label="Previous month"
+                label="Last month"
                 fuelCost={prevMonthCosts?.fuelCostMinor ?? 0}
                 otherCost={prevMonthCosts?.otherCostMinor ?? 0}
+                litresMl={prevMonthCosts?.fuelLitresMl ?? 0}
                 currency={currency}
                 masked={masked}
               />
@@ -582,7 +599,7 @@ export function VehicleDetail({
               >
                 <Icon className="size-3.5" />
                 {label}
-                {id === "reminders" && reminders.length > 0 && (
+                {id === "service" && reminders.length > 0 && (
                   <span className="size-[18px] rounded-full bg-destructive text-destructive-foreground text-[9px] flex items-center justify-center font-bold">
                     {reminders.length}
                   </span>
@@ -784,114 +801,97 @@ export function VehicleDetail({
           </div>
         )}
 
-        {/* Maintenance */}
-        {activeTab === "maintenance" && (
-          <div className="space-y-4">
-            <div className="flex justify-end">
-              <Button size="sm" className="text-xs" onClick={() => setShowMaintenanceDialog(true)}>
-                <Plus className="size-3.5 mr-1" /> Add record
-              </Button>
-            </div>
-            {maintenance.length === 0 ? (
-              <EmptyState Icon={Wrench} message="No service records yet." />
-            ) : (
+        {/* Service & Docs — combined tab */}
+        {activeTab === "service" && (
+          <div className="space-y-6">
+
+            {/* Reminders / Alerts */}
+            {reminders.length > 0 && (
               <div className="space-y-2">
-                {maintenance.map((m) => (
-                  <Card key={m.id}>
-                    <CardContent className="p-4 flex gap-3">
-                      <div className="size-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
-                        <Wrench className="size-3.5 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between gap-2">
-                          <p className="text-sm font-medium">{m.title}</p>
-                          {m.cost_minor != null && m.currency && (
-                            <p className="text-sm font-bold tabular-nums shrink-0">
-                              {fmtAmount(Number(m.cost_minor), m.currency, masked)}
+                <SectionHeader label="Alerts" count={reminders.length} />
+                {reminders.map((r) => {
+                  const daysLeft = r.due_date ? daysUntil(r.due_date) : null;
+                  const isUrgent = daysLeft !== null && daysLeft <= 7;
+                  return (
+                    <Card key={r.id}>
+                      <CardContent className="p-4 flex items-start gap-3">
+                        <div className={[
+                          "size-8 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                          isUrgent ? "bg-destructive/10" : "bg-amber-500/10",
+                        ].join(" ")}>
+                          <Bell className={["size-3.5", isUrgent ? "text-destructive" : "text-amber-600"].join(" ")} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{r.title}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 capitalize">{r.reminder_type.replace("_", " ")}</p>
+                          {r.due_date && (
+                            <p className={["text-xs mt-1 font-medium", daysLeft !== null && daysLeft < 0 ? "text-destructive" : "text-muted-foreground"].join(" ")}>
+                              Due {r.due_date}
+                              {daysLeft !== null && (daysLeft < 0 ? " · Overdue" : daysLeft === 0 ? " · Today" : ` · ${daysLeft}d`)}
                             </p>
                           )}
                         </div>
-                        <div className="flex flex-wrap gap-x-2 mt-1 text-xs text-muted-foreground">
-                          <span className="capitalize">{m.maintenance_category.replace("_", " ")}</span>
-                          {m.serviced_at && <span>· {m.serviced_at}</span>}
-                          {m.next_due_date && <span>· Next: {m.next_due_date}</span>}
-                          {m.status === "overdue" && <span className="text-destructive font-medium">· Overdue</span>}
-                        </div>
-                      </div>
-                      <button
-                        disabled={isPending}
-                        className="size-6 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
-                        onClick={() => {
-                          if (confirm("Delete this maintenance record?")) {
+                        <Button
+                          variant="outline" size="sm" className="shrink-0 h-7 text-xs"
+                          disabled={isPending}
+                          onClick={() => {
                             startTransition(async () => {
-                              const r = await deleteMaintenanceRecordAction(vehicleId, m.id);
-                              if (r.ok) setMaintenance((prev) => prev.filter((x) => x.id !== m.id));
+                              const res = await dismissVehicleReminderAction(r.id);
+                              if (res.ok) setReminders((prev) => prev.filter((x) => x.id !== r.id));
                             });
-                          }
-                        }}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </CardContent>
-                  </Card>
-                ))}
+                          }}
+                        >
+                          Dismiss
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
-          </div>
-        )}
 
-        {/* Documents */}
-        {activeTab === "documents" && (
-          <div className="space-y-4">
-            <div className="flex justify-end">
-              <Button size="sm" className="text-xs" onClick={() => setShowDocDialog(true)}>
-                <Plus className="size-3.5 mr-1" /> Add document
-              </Button>
-            </div>
-            {documents.length === 0 ? (
-              <EmptyState Icon={FileText} message="No documents added yet." />
-            ) : (
-              <div className="space-y-2">
-                {documents.map((d) => {
-                  const daysLeft = d.expiry_date ? daysUntil(d.expiry_date) : null;
-                  const urgency = daysLeft === null ? "none" : daysLeft < 0 ? "expired" : daysLeft <= 7 ? "urgent" : daysLeft <= 30 ? "warning" : "ok";
-                  return (
-                    <Card key={d.id}>
+            {/* Service records */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <SectionHeader label="Service records" count={maintenance.length} />
+                <Button size="sm" className="text-xs h-7" variant="outline" onClick={() => setShowMaintenanceDialog(true)}>
+                  <Plus className="size-3.5 mr-1" /> Add
+                </Button>
+              </div>
+              {maintenance.length === 0 ? (
+                <EmptyState Icon={Wrench} message="No service records yet." />
+              ) : (
+                <div className="space-y-2">
+                  {maintenance.map((m) => (
+                    <Card key={m.id}>
                       <CardContent className="p-4 flex gap-3">
-                        <div className={[
-                          "size-8 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                          urgency === "expired" || urgency === "urgent" ? "bg-destructive/10" : "bg-muted",
-                        ].join(" ")}>
-                          <FileText className={[
-                            "size-3.5",
-                            urgency === "expired" || urgency === "urgent" ? "text-destructive" : "text-muted-foreground",
-                          ].join(" ")} />
+                        <div className="size-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                          <Wrench className="size-3.5 text-muted-foreground" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between gap-2">
-                            <p className="text-sm font-medium">{d.title}</p>
-                            {d.expiry_date && (
-                              <span className={[
-                                "text-xs font-semibold shrink-0",
-                                urgency === "expired" || urgency === "urgent" ? "text-destructive" : urgency === "warning" ? "text-amber-600" : "text-muted-foreground",
-                              ].join(" ")}>
-                                {urgency === "expired" ? "Expired" : urgency === "urgent" ? `${daysLeft}d left` : urgency === "warning" ? `${daysLeft}d left` : "Valid"}
-                              </span>
+                            <p className="text-sm font-medium">{m.title}</p>
+                            {m.cost_minor != null && m.currency && (
+                              <p className="text-sm font-bold tabular-nums shrink-0">
+                                {fmtAmount(Number(m.cost_minor), m.currency, masked)}
+                              </p>
                             )}
                           </div>
-                          <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
-                            <span className="uppercase tracking-wide">{d.document_type.replace("_", " ")}</span>
-                            {d.expiry_date && <span>· {d.expiry_date}</span>}
+                          <div className="flex flex-wrap gap-x-2 mt-1 text-xs text-muted-foreground">
+                            <span className="capitalize">{m.maintenance_category.replace("_", " ")}</span>
+                            {m.serviced_at && <span>· {m.serviced_at}</span>}
+                            {m.next_due_date && <span>· Next: {m.next_due_date}</span>}
+                            {m.status === "overdue" && <span className="text-destructive font-medium">· Overdue</span>}
                           </div>
                         </div>
                         <button
                           disabled={isPending}
                           className="size-6 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
                           onClick={() => {
-                            if (confirm("Delete this document?")) {
+                            if (confirm("Delete this record?")) {
                               startTransition(async () => {
-                                const r = await deleteVehicleDocumentAction(vehicleId, d.id);
-                                if (r.ok) setDocuments((prev) => prev.filter((x) => x.id !== d.id));
+                                const r = await deleteMaintenanceRecordAction(vehicleId, m.id);
+                                if (r.ok) setMaintenance((prev) => prev.filter((x) => x.id !== m.id));
                               });
                             }
                           }}
@@ -900,60 +900,76 @@ export function VehicleDetail({
                         </button>
                       </CardContent>
                     </Card>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                  ))}
+                </div>
+              )}
+            </div>
 
-        {/* Reminders */}
-        {activeTab === "reminders" && (
-          <div className="space-y-2">
-            {reminders.length === 0 ? (
-              <EmptyState Icon={Bell} message="No active reminders." />
-            ) : (
-              reminders.map((r) => {
-                const daysLeft = r.due_date ? daysUntil(r.due_date) : null;
-                const isUrgent = daysLeft !== null && daysLeft <= 7;
-                return (
-                  <Card key={r.id}>
-                    <CardContent className="p-4 flex items-start gap-3">
-                      <div className={[
-                        "size-8 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                        isUrgent ? "bg-destructive/10" : "bg-muted",
-                      ].join(" ")}>
-                        <Bell className={["size-3.5", isUrgent ? "text-destructive" : "text-muted-foreground"].join(" ")} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{r.title}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 capitalize">{r.reminder_type.replace("_", " ")}</p>
-                        {r.due_date && (
-                          <p className={["text-xs mt-1 font-medium", daysLeft !== null && daysLeft < 0 ? "text-destructive" : "text-muted-foreground"].join(" ")}>
-                            Due {r.due_date}
-                            {daysLeft !== null && (daysLeft < 0 ? " · Overdue" : daysLeft === 0 ? " · Today" : ` · ${daysLeft}d`)}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0 h-7 text-xs"
-                        disabled={isPending}
-                        onClick={() => {
-                          startTransition(async () => {
-                            const res = await dismissVehicleReminderAction(r.id);
-                            if (res.ok) setReminders((prev) => prev.filter((x) => x.id !== r.id));
-                          });
-                        }}
-                      >
-                        Dismiss
-                      </Button>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
+            {/* Documents */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <SectionHeader label="Documents" count={documents.length} />
+                <Button size="sm" className="text-xs h-7" variant="outline" onClick={() => setShowDocDialog(true)}>
+                  <Plus className="size-3.5 mr-1" /> Add
+                </Button>
+              </div>
+              {documents.length === 0 ? (
+                <EmptyState Icon={FileText} message="No documents added yet." />
+              ) : (
+                <div className="space-y-2">
+                  {documents.map((d) => {
+                    const daysLeft = d.expiry_date ? daysUntil(d.expiry_date) : null;
+                    const urgency = daysLeft === null ? "none" : daysLeft < 0 ? "expired" : daysLeft <= 7 ? "urgent" : daysLeft <= 30 ? "warning" : "ok";
+                    return (
+                      <Card key={d.id}>
+                        <CardContent className="p-4 flex gap-3">
+                          <div className={[
+                            "size-8 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                            urgency === "expired" || urgency === "urgent" ? "bg-destructive/10" : "bg-muted",
+                          ].join(" ")}>
+                            <FileText className={[
+                              "size-3.5",
+                              urgency === "expired" || urgency === "urgent" ? "text-destructive" : "text-muted-foreground",
+                            ].join(" ")} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between gap-2">
+                              <p className="text-sm font-medium">{d.title}</p>
+                              {d.expiry_date && (
+                                <span className={[
+                                  "text-xs font-semibold shrink-0",
+                                  urgency === "expired" || urgency === "urgent" ? "text-destructive" : urgency === "warning" ? "text-amber-600" : "text-muted-foreground",
+                                ].join(" ")}>
+                                  {urgency === "expired" ? "Expired" : urgency === "urgent" ? `${daysLeft}d left` : urgency === "warning" ? `${daysLeft}d left` : "Valid"}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
+                              <span className="uppercase tracking-wide">{d.document_type.replace("_", " ")}</span>
+                              {d.expiry_date && <span>· {d.expiry_date}</span>}
+                            </div>
+                          </div>
+                          <button
+                            disabled={isPending}
+                            className="size-6 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-all shrink-0"
+                            onClick={() => {
+                              if (confirm("Delete this document?")) {
+                                startTransition(async () => {
+                                  const r = await deleteVehicleDocumentAction(vehicleId, d.id);
+                                  if (r.ok) setDocuments((prev) => prev.filter((x) => x.id !== d.id));
+                                });
+                              }
+                            }}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1077,57 +1093,29 @@ export function VehicleDetail({
               </Card>
             )}
 
-            {/* Fuel statistics */}
+            {/* Fuel efficiency & distance */}
             <Card>
               <CardContent className="p-5">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-                  Fuel statistics
+                  Efficiency & distance
                 </p>
                 <div className="space-y-3">
                   <StatRow
                     label="Avg efficiency"
                     value={efficiency.type === "computed"
                       ? `${(efficiency.kmPerLitreCx100 / 100).toFixed(2)} km/L`
-                      : simpleKmPerL != null
-                        ? `${simpleKmPerL.toFixed(2)} km/L`
-                        : "—"}
+                      : simpleKmPerL != null ? `${simpleKmPerL.toFixed(2)} km/L` : "—"}
                   />
-                  <div className="h-px bg-border" />
                   {totalDistanceKm != null && (
                     <>
-                      <StatRow label="Total distance" value={`${totalDistanceKm.toFixed(0)} km`} />
                       <div className="h-px bg-border" />
+                      <StatRow label="Total distance" value={`${totalDistanceKm.toFixed(0)} km`} />
                     </>
                   )}
-                  <StatRow label="Total litres fuelled" value={`${totalLitres.toFixed(2)} L`} />
-                  <div className="h-px bg-border" />
-                  <StatRow label="Fill-ups" value={String(fuelEntries.length)} />
                   {avgKmPerFillup != null && (
                     <>
                       <div className="h-px bg-border" />
                       <StatRow label="Avg distance per fill-up" value={`${avgKmPerFillup.toFixed(0)} km`} />
-                    </>
-                  )}
-                  {minFillupL != null && maxFillupL != null && (
-                    <>
-                      <div className="h-px bg-border" />
-                      <div className="flex justify-between items-baseline text-sm">
-                        <span className="text-muted-foreground">Min fill-up</span>
-                        <span className="font-bold tabular-nums">{minFillupL.toFixed(2)} L</span>
-                      </div>
-                      <div className="flex justify-between items-baseline text-sm">
-                        <span className="text-muted-foreground">Max fill-up</span>
-                        <span className="font-bold tabular-nums">{maxFillupL.toFixed(2)} L</span>
-                      </div>
-                    </>
-                  )}
-                  {lastFuelPricePerL != null && (
-                    <>
-                      <div className="h-px bg-border" />
-                      <StatRow
-                        label="Last fuel price"
-                        value={masked ? "***" : `${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`}
-                      />
                     </>
                   )}
                   {costPerKm.type === "computed" && (
@@ -1143,6 +1131,39 @@ export function VehicleDetail({
               </CardContent>
             </Card>
 
+            {/* Fill-up stats */}
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
+                  Fill-up statistics
+                </p>
+                <div className="space-y-3">
+                  <StatRow label="Total fill-ups" value={String(fuelEntries.length)} />
+                  <div className="h-px bg-border" />
+                  <StatRow label="Total litres" value={`${totalLitres.toFixed(2)} L`} />
+                  {minFillupL != null && maxFillupL != null && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <StatRow label="Smallest fill-up" value={`${minFillupL.toFixed(2)} L`} />
+                      <StatRow label="Largest fill-up" value={`${maxFillupL.toFixed(2)} L`} />
+                    </>
+                  )}
+                  {!masked && bestFuelPricePerL != null && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <StatRow label="Best fuel price" value={`${currency === "INR" ? "₹" : currency}${bestFuelPricePerL.toFixed(2)}/L`} />
+                      {worstFuelPricePerL != null && (
+                        <StatRow label="Worst fuel price" value={`${currency === "INR" ? "₹" : currency}${worstFuelPricePerL.toFixed(2)}/L`} />
+                      )}
+                      {lastFuelPricePerL != null && (
+                        <StatRow label="Last fuel price" value={`${currency === "INR" ? "₹" : currency}${lastFuelPricePerL.toFixed(2)}/L`} />
+                      )}
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Cost breakdown */}
             <Card>
               <CardContent className="p-5">
@@ -1150,7 +1171,13 @@ export function VehicleDetail({
                   Cost breakdown
                 </p>
                 <div className="space-y-3">
-                  <StatRow label="Fuel" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} />
+                  {thisYearFuelCostMinor > 0 && (
+                    <>
+                      <StatRow label={`This year (${thisYear})`} value={fmtAmount(thisYearFuelCostMinor, currency, masked)} />
+                      <div className="h-px bg-border" />
+                    </>
+                  )}
+                  <StatRow label="All-time fuel" value={fmtAmount(dashboard.totalFuelCostMinor, currency, masked)} />
                   <div className="h-px bg-border" />
                   <StatRow label="Other expenses" value={fmtAmount(dashboard.totalOtherCostMinor, currency, masked)} />
                   <div className="h-px bg-border" />
@@ -1158,6 +1185,12 @@ export function VehicleDetail({
                     <span className="font-semibold">Total</span>
                     <span className="font-bold tabular-nums">{fmtAmount(dashboard.totalCostMinor, currency, masked)}</span>
                   </div>
+                  {avgCostPerMonth != null && !masked && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <StatRow label="Avg cost per month" value={fmtAmount(avgCostPerMonth, currency, false)} />
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1390,10 +1423,11 @@ function StatCard({ label, value, Icon }: { label: string; value: string; Icon: 
 }
 
 function MonthCostCol({
-  label, fuelCost, otherCost, currency, masked, highlight = false,
+  label, fuelCost, otherCost, litresMl, currency, masked, highlight = false,
 }: {
-  label: string; fuelCost: number; otherCost: number; currency: string; masked: boolean; highlight?: boolean;
+  label: string; fuelCost: number; otherCost: number; litresMl: number; currency: string; masked: boolean; highlight?: boolean;
 }) {
+  const litres = litresMl / 1000;
   return (
     <div className={["rounded-lg p-3", highlight ? "bg-primary/5" : "bg-muted/40"].join(" ")}>
       <p className={["text-[10px] font-semibold uppercase tracking-widest mb-2", highlight ? "text-primary" : "text-muted-foreground"].join(" ")}>
@@ -1405,12 +1439,31 @@ function MonthCostCol({
           <span className="text-sm font-semibold tabular-nums">{fmtAmount(fuelCost, currency, masked)}</span>
           <span className="text-xs text-muted-foreground">Fuel</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <DollarSign className="size-3 text-muted-foreground shrink-0" />
-          <span className="text-sm font-medium tabular-nums text-muted-foreground">{fmtAmount(otherCost, currency, masked)}</span>
-          <span className="text-xs text-muted-foreground">Other</span>
-        </div>
+        {litres > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="size-3 shrink-0" />
+            <span className="text-xs text-muted-foreground tabular-nums">{litres.toFixed(1)} L</span>
+          </div>
+        )}
+        {otherCost > 0 && (
+          <div className="flex items-center gap-1.5">
+            <DollarSign className="size-3 text-muted-foreground shrink-0" />
+            <span className="text-sm font-medium tabular-nums text-muted-foreground">{fmtAmount(otherCost, currency, masked)}</span>
+            <span className="text-xs text-muted-foreground">Other</span>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function SectionHeader({ label, count }: { label: string; count: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">{label}</p>
+      {count > 0 && (
+        <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full tabular-nums">{count}</span>
+      )}
     </div>
   );
 }
