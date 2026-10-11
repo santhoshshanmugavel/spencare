@@ -513,6 +513,7 @@ export function PlanDetailView({
       <ArchivePlanDialog plan={plan} open={archiveOpen} onOpenChange={setArchiveOpen} onArchived={() => { setArchiveOpen(false); refresh(); }} />
       <DeletePlanDialog plan={plan} open={deleteOpen} onOpenChange={setDeleteOpen} />
       <PlanItemSheet
+        key={itemSheet.item?.id ?? "new"}
         planId={plan.id}
         currency={plan.base_currency}
         categories={categories}
