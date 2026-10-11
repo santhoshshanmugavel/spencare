@@ -306,36 +306,18 @@ export function PlanDetailView({
             </p>
           )}
 
-          {!calculations.committedAmount.isZero() || !calculations.upcomingAmount.isZero() ? (
-            <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-              {!calculations.upcomingAmount.isZero() ? (
-                <>
-                  Upcoming <Money value={calculations.upcomingAmount} masked={masked} size="body" />
-                </>
+          {!variance.planned.isZero() ? (
+            <div className="border-t border-border pt-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">Items estimated</p>
+                <Money value={variance.planned} masked={masked} size="body" />
+              </div>
+              {!variance.actual.isZero() ? (
+                <div className="mt-1 flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">Items spent</p>
+                  <Money value={variance.actual} masked={masked} size="body" />
+                </div>
               ) : null}
-              {!calculations.committedAmount.isZero() && !calculations.upcomingAmount.isZero() ? " · " : null}
-              {!calculations.committedAmount.isZero() ? (
-                <>
-                  Committed <Money value={calculations.committedAmount} masked={masked} size="body" />
-                </>
-              ) : null}
-            </p>
-          ) : null}
-
-          {!variance.planned.isZero() || !variance.actual.isZero() ? (
-            <div className="grid grid-cols-3 gap-3 border-t border-border pt-3 text-center">
-              <div>
-                <p className="text-xs text-muted-foreground">Planned</p>
-                <Money value={variance.planned} masked={masked} size="numeric" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Actual</p>
-                <Money value={variance.actual} masked={masked} size="numeric" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Variance</p>
-                <Money value={variance.variance} masked={masked} tone="auto" size="numeric" />
-              </div>
             </div>
           ) : null}
 
