@@ -685,34 +685,96 @@ export function VehicleDetail({
       </div>
 
       {/* ── This month vs Previous month ── */}
-      {(thisMonthCosts || prevMonthCosts) && (
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
-              Monthly costs
-            </p>
-            <div className="grid grid-cols-2 gap-4">
-              <MonthCostCol
-                label="This month"
-                fuelCost={thisMonthCosts?.fuelCostMinor ?? 0}
-                otherCost={thisMonthCosts?.otherCostMinor ?? 0}
-                litresMl={thisMonthCosts?.fuelLitresMl ?? 0}
-                currency={currency}
-                masked={masked}
-                highlight
-              />
-              <MonthCostCol
-                label="Last month"
-                fuelCost={prevMonthCosts?.fuelCostMinor ?? 0}
-                otherCost={prevMonthCosts?.otherCostMinor ?? 0}
-                litresMl={prevMonthCosts?.fuelLitresMl ?? 0}
-                currency={currency}
-                masked={masked}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {(thisMonthCosts || prevMonthCosts) && (() => {
+        const currTotal = thisMonthCosts?.totalCostMinor ?? 0;
+        const prevTotal = prevMonthCosts?.totalCostMinor ?? 0;
+        const changePct = prevTotal > 0 ? ((currTotal - prevTotal) / prevTotal) * 100 : null;
+        const currL = (thisMonthCosts?.fuelLitresMl ?? 0) / 1000;
+        const prevL = (prevMonthCosts?.fuelLitresMl ?? 0) / 1000;
+        const currPricePerL = currL > 0 && (thisMonthCosts?.fuelCostMinor ?? 0) > 0
+          ? (thisMonthCosts!.fuelCostMinor / 100) / currL : null;
+        const prevPricePerL = prevL > 0 && (prevMonthCosts?.fuelCostMinor ?? 0) > 0
+          ? (prevMonthCosts!.fuelCostMinor / 100) / prevL : null;
+        const sym = currency === "INR" ? "₹" : currency;
+        return (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Monthly costs</p>
+                {changePct !== null && !masked && (
+                  <span className={[
+                    "text-xs font-bold px-2 py-0.5 rounded-full",
+                    changePct < 0 ? "bg-emerald-500/10 text-emerald-600" : "bg-destructive/10 text-destructive",
+                  ].join(" ")}>
+                    {changePct >= 0 ? "▲" : "▼"} {Math.abs(changePct).toFixed(1)}% vs last month
+                  </span>
+                )}
+              </div>
+
+              {/* This month */}
+              <div className="rounded-lg bg-primary/5 border border-primary/10 p-3.5 mb-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-semibold text-primary uppercase tracking-widest">
+                    {formatMonthLabel(currentYearMonth())}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {thisMonthFillupsList.length} fill-up{thisMonthFillupsList.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <p className="text-2xl font-bold tabular-nums">{fmtAmount(currTotal, currency, masked)}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
+                  {(thisMonthCosts?.fuelCostMinor ?? 0) > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Fuel className="size-3 shrink-0" />
+                      {fmtAmount(thisMonthCosts!.fuelCostMinor, currency, masked)} fuel
+                    </span>
+                  )}
+                  {currL > 0 && <span className="tabular-nums">{currL.toFixed(1)} L</span>}
+                  {currPricePerL != null && !masked && (
+                    <span className="tabular-nums font-medium">{sym}{currPricePerL.toFixed(2)}/L</span>
+                  )}
+                  {(thisMonthCosts?.otherCostMinor ?? 0) > 0 && (
+                    <span className="flex items-center gap-1">
+                      <DollarSign className="size-3 shrink-0" />
+                      {fmtAmount(thisMonthCosts!.otherCostMinor, currency, masked)} other
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Last month */}
+              {prevMonthCosts && (
+                <div className="rounded-lg bg-muted/30 p-3.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+                      {formatMonthLabel(prevYearMonth())}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {prevMonthFillupsList.length} fill-up{prevMonthFillupsList.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold tabular-nums text-muted-foreground">{fmtAmount(prevTotal, currency, masked)}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
+                    {prevMonthCosts.fuelCostMinor > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Fuel className="size-3 shrink-0" />
+                        {fmtAmount(prevMonthCosts.fuelCostMinor, currency, masked)} fuel
+                      </span>
+                    )}
+                    {prevL > 0 && <span className="tabular-nums">{prevL.toFixed(1)} L</span>}
+                    {prevPricePerL != null && !masked && (
+                      <span className="tabular-nums">{sym}{prevPricePerL.toFixed(2)}/L</span>
+                    )}
+                    {prevMonthCosts.otherCostMinor > 0 && (
+                      <span>{fmtAmount(prevMonthCosts.otherCostMinor, currency, masked)} other</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* ── Tab bar ── */}
       <div className="overflow-x-auto -mx-1 px-1 pb-px">
