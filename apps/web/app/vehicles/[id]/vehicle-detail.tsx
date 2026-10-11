@@ -108,17 +108,17 @@ const TABS: { id: TabId; label: string; Icon: React.ElementType }[] = [
   { id: "service", label: "Service & Docs", Icon: Wrench },
 ];
 
-// ── Props ──────────────────────────────────────────────────────────────────
-
-// ── Vehicle photo uploader ──────────────────────────────────────────────────
+// ── Vehicle photo uploader — full-width card, same pattern as GoalImageUploader ─
 
 function VehiclePhotoUploader({
   vehicleId,
   vehicleName,
+  vehicleSubtitle,
   initialUrl,
 }: {
   vehicleId: string;
   vehicleName: string;
+  vehicleSubtitle: string | null;
   initialUrl: string | null;
 }) {
   const [photoUrl, setPhotoUrl] = useState(initialUrl);
@@ -136,7 +136,7 @@ function VehiclePhotoUploader({
       const result = await updateVehiclePhotoAction(vehicleId, formData);
       if (result.ok) {
         setPhotoUrl(result.value.signedUrl);
-        toastConfirmed("Vehicle photo updated.");
+        toastConfirmed("Photo updated.");
       } else {
         toastError(result.error.message);
       }
@@ -150,7 +150,7 @@ function VehiclePhotoUploader({
       const result = await removeVehiclePhotoAction(vehicleId);
       if (result.ok) {
         setPhotoUrl(null);
-        toastConfirmed("Vehicle photo removed.");
+        toastConfirmed("Photo removed.");
       } else {
         toastError(result.error.message);
       }
@@ -158,44 +158,48 @@ function VehiclePhotoUploader({
   }
 
   return (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => !isPending && inputRef.current?.click()}
-        className="relative size-[72px] rounded-2xl overflow-hidden border-2 border-border bg-primary/8 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-opacity"
-        style={{ opacity: isPending ? 0.6 : 1 }}
-        aria-label={photoUrl ? `Change ${vehicleName} photo` : `Add photo for ${vehicleName}`}
-        disabled={isPending}
-      >
-        {photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoUrl} alt={vehicleName} className="size-full object-cover" />
-        ) : (
-          <Camera className="size-6 text-primary/50" />
-        )}
-        {!isPending && (
-          <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-end justify-center pb-1.5">
-            <span className="text-[9px] font-semibold text-white/80 uppercase tracking-wider bg-black/40 rounded-sm px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              {photoUrl ? "Change" : "Add"}
-            </span>
-          </div>
-        )}
-        {isPending && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/60">
-            <div className="size-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          </div>
-        )}
-      </button>
-      {photoUrl && !isPending && (
-        <button
-          type="button"
-          onClick={handleRemove}
-          className="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-background border border-border shadow flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-          aria-label={`Remove ${vehicleName} photo`}
-        >
-          <X className="size-3" />
-        </button>
+    <div className="relative aspect-[3/2] w-full overflow-hidden rounded-2xl bg-primary/10 flex items-center justify-center">
+      {photoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photoUrl} alt={vehicleName} className="size-full object-cover" />
+      ) : (
+        <div className="flex flex-col items-center gap-1 px-6 text-center select-none">
+          <p className="text-xl font-bold text-primary leading-tight">{vehicleName}</p>
+          {vehicleSubtitle && (
+            <p className="text-sm text-primary/60 font-medium">{vehicleSubtitle}</p>
+          )}
+        </div>
       )}
+
+      {isPending ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/70">
+          <div className="size-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        </div>
+      ) : (
+        <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1.5 p-2.5">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="flex items-center gap-1.5 rounded-lg bg-background/85 backdrop-blur-sm border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-background transition-colors shadow-sm"
+            aria-label={photoUrl ? `Replace ${vehicleName} photo` : `Add photo for ${vehicleName}`}
+          >
+            <Camera className="size-3.5" />
+            {photoUrl ? "Replace" : "Add photo"}
+          </button>
+          {photoUrl && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              className="flex items-center gap-1.5 rounded-lg bg-background/85 backdrop-blur-sm border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-background transition-colors shadow-sm"
+              aria-label={`Remove ${vehicleName} photo`}
+            >
+              <X className="size-3.5" />
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+
       <input
         ref={inputRef}
         type="file"
@@ -764,12 +768,15 @@ export function VehicleDetail({
             </div>
           )}
         </div>
-        <VehiclePhotoUploader
-          vehicleId={dashboard.vehicle.id}
-          vehicleName={dashboard.vehicle.name}
-          initialUrl={vehiclePhotoUrl}
-        />
       </div>
+
+      {/* ── Vehicle photo — full-width, any aspect uploaded, shown 3:2 ── */}
+      <VehiclePhotoUploader
+        vehicleId={dashboard.vehicle.id}
+        vehicleName={dashboard.vehicle.name}
+        vehicleSubtitle={[dashboard.vehicle.make, dashboard.vehicle.model].filter(Boolean).join(" ") || null}
+        initialUrl={vehiclePhotoUrl}
+      />
 
       {/* ── Hero metric: km/l ── */}
       <Card className="border-primary/20 bg-primary/5">
