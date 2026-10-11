@@ -352,7 +352,7 @@ describe("<PlanDetailView> — transactions (never alters financial fields)", ()
     render(
       <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
-    expect(screen.getByText("No transactions attached yet")).toBeInTheDocument();
+    expect(screen.getByText("No transactions yet")).toBeInTheDocument();
   });
 
   it("renders an attached transaction's merchant and amount", () => {
@@ -382,7 +382,7 @@ describe("<PlanDetailView> — transactions (never alters financial fields)", ()
         masked={false}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /detach from this plan/i }));
+    await user.click(screen.getByRole("button", { name: /detach.*from this plan/i }));
     expect(setTransactionPlanAction).toHaveBeenCalledWith(PLAN_ID, "txn-1", { planId: null, planItemId: null });
   });
 
@@ -391,7 +391,8 @@ describe("<PlanDetailView> — transactions (never alters financial fields)", ()
     render(
       <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
-    await user.click(screen.getByRole("button", { name: /attach transaction/i }));
+    // Two "Attach transaction" buttons exist (card header + empty-state action); either opens the dialog.
+    await user.click(screen.getAllByRole("button", { name: /attach transaction/i })[0]!);
     expect(screen.getByRole("heading", { name: "Attach a transaction" })).toBeInTheDocument();
   });
 });

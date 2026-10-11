@@ -277,7 +277,7 @@ export function PlanDetailView({
             <>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
-                  <p className="text-xs text-muted-foreground">Plan budget</p>
+                  <p className="text-xs text-muted-foreground">Budget</p>
                   <Money value={budgetStatus.currentBudget} masked={masked} size="numeric" />
                 </div>
                 <div>
@@ -445,7 +445,12 @@ export function PlanDetailView({
             </Button>
           </div>
           {transactions.length === 0 ? (
-            <EmptyState size="sm" title="No transactions attached yet" />
+            <EmptyState
+              size="sm"
+              title="No transactions yet"
+              description="Attach existing transactions to track actual spending against this plan."
+              action={{ label: "Attach transaction", onClick: () => setTransactionDialogOpen(true) }}
+            />
           ) : (
             transactions.map((t) => (
               <ListRow
@@ -463,7 +468,12 @@ export function PlanDetailView({
                   />
                 }
                 hoverActions={
-                  <Button variant="ghost" size="icon" aria-label="Detach from this Plan" onClick={() => handleDetachTransaction(t.id)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Detach ${t.merchant ?? t.description ?? "transaction"} from this Plan`}
+                    onClick={() => handleDetachTransaction(t.id)}
+                  >
                     <Unlink className="size-4" aria-hidden="true" />
                   </Button>
                 }
@@ -547,8 +557,9 @@ function AssociationCard({
       <CardContent className="space-y-2 p-4">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-foreground">{title}</p>
-          <Button variant="ghost" size="sm" onClick={onAdd} aria-label={addLabel}>
+          <Button variant="ghost" size="sm" onClick={onAdd}>
             <Plus className="size-4" aria-hidden="true" />
+            {addLabel}
           </Button>
         </div>
         {entries.length === 0 ? (

@@ -284,6 +284,28 @@ describe("<AssociateTransactionDialog> — reassignment is explicit, never silen
   });
 });
 
+describe("<AssociateTransactionDialog> — failed attachment request handling", () => {
+  it("keeps the dialog open and preserves selections when the server action returns an error", async () => {
+    const { searchTransactionsForPlanAction, setTransactionPlanAction } = await import("../actions");
+    vi.mocked(searchTransactionsForPlanAction).mockResolvedValue(page([txn()]));
+    vi.mocked(setTransactionPlanAction).mockResolvedValue({
+      ok: false,
+      error: { code: "attach_failed", message: "Failed to attach transaction. Try again." },
+    } as never);
+    const onAssociated = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AssociateTransactionDialog {...commonProps} planId={PLAN_ID} currency="INR" items={items} open onOpenChange={() => {}} onAssociated={onAssociated} />,
+    );
+    await user.click(await screen.findByRole("checkbox", { name: /select thai airways/i }));
+    await user.click(screen.getByRole("button", { name: "Attach transaction" }));
+    // onAssociated must NOT be called when the server action fails
+    expect(onAssociated).not.toHaveBeenCalled();
+    // The selection count should still be visible — the dialog stays open
+    expect(screen.getByText("1 transaction selected")).toBeInTheDocument();
+  });
+});
+
 describe("<AssociateTransactionDialog> — server-side search across the full history", () => {
   it("passes planId as the attachment context on every search so the server-side query can exclude duplicates", async () => {
     const { searchTransactionsForPlanAction } = await import("../actions");
