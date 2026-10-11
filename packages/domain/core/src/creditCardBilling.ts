@@ -549,6 +549,8 @@ export function billingConfigFromAccount(
 const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function formatShortDate(iso: string): string {
-  const [, m, d] = iso.split("-");
+  const parts = iso.split("-");
+  const m = parts[1] ?? "1";
+  const d = parts[2] ?? "1";
   return `${parseInt(d, 10)} ${SHORT_MONTHS[parseInt(m, 10) - 1]}`;
 }
