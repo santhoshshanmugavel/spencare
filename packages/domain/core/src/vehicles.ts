@@ -570,10 +570,11 @@ export function parseFuelioCSV(content: string): FuelioParsedCSV {
     const raw = (lines[i] ?? "").trim();
     if (raw === "") continue;
 
-    if (raw === "## Vehicle") { section = "vehicle"; headerRow = null; continue; }
-    if (raw === "## Log")     { section = "log";     headerRow = null; continue; }
-    if (raw === "## Category"){ section = "category"; headerRow = null; continue; }
-    if (raw.startsWith("##")) { section = "none"; continue; }
+    const firstField = parseCsvLine(raw)[0] ?? "";
+    if (firstField === "## Vehicle") { section = "vehicle"; headerRow = null; continue; }
+    if (firstField === "## Log")     { section = "log";     headerRow = null; continue; }
+    if (firstField === "## Category"){ section = "category"; headerRow = null; continue; }
+    if (firstField.startsWith("##")) { section = "none"; continue; }
 
     const cols = parseCsvLine(raw);
 
@@ -741,7 +742,7 @@ export interface GenericCsvParseResult {
 export function parseGenericCSV(content: string): GenericCsvParseResult | null {
   const raw = content.startsWith("﻿") ? content.slice(1) : content;
   const lines = raw.split(/\r?\n/);
-  const isFuelio = lines.some((l) => l.trim() === "## Vehicle" || l.trim() === "## Log");
+  const isFuelio = lines.some((l) => { const f = parseCsvLine(l.trim())[0] ?? ""; return f === "## Vehicle" || f === "## Log"; });
   const nonEmpty = lines.filter((l) => l.trim() !== "");
   if (nonEmpty.length < 2) return null;
   const firstLine = nonEmpty[0];
