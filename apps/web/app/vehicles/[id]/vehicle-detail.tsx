@@ -392,6 +392,47 @@ export function VehicleDetail({
   const bestCostPerKm = fillupCostPerKm.length > 0 ? Math.min(...fillupCostPerKm) : null;
   const worstCostPerKm = fillupCostPerKm.length > 1 ? Math.max(...fillupCostPerKm) : null;
 
+  // Average days between fill-ups
+  const avgDaysBetweenFillups = useMemo(() => {
+    if (fuelEntries.length < 2) return null;
+    const dates = fuelEntries.map((e) => new Date(e.occurred_at).getTime());
+    const totalDays = (Math.max(...dates) - Math.min(...dates)) / 86_400_000;
+    return totalDays / (fuelEntries.length - 1);
+  }, [fuelEntries]);
+
+  // YTD total spend (fuel + other)
+  const thisYearTotalMinor = useMemo(
+    () => thisYearMonths.reduce((a, m) => a + m.totalCostMinor, 0),
+    [thisYearMonths]
+  );
+
+  // Best and worst spending months (all-time)
+  const bestCostMonth = useMemo(() => {
+    const months = dashboard.monthlyCosts.filter((m) => m.totalCostMinor > 0);
+    if (!months.length) return null;
+    return months.reduce((min, m) => m.totalCostMinor < min.totalCostMinor ? m : min);
+  }, [dashboard.monthlyCosts]);
+
+  const worstCostMonth = useMemo(() => {
+    const months = dashboard.monthlyCosts.filter((m) => m.totalCostMinor > 0);
+    if (months.length < 2) return null;
+    return months.reduce((max, m) => m.totalCostMinor > max.totalCostMinor ? m : max);
+  }, [dashboard.monthlyCosts]);
+
+  // Monthly distance data for bar chart (last 7 months)
+  const monthlyDistanceData = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of fuelEntries) {
+      const month = e.occurred_at.slice(0, 7);
+      const delta = distanceDeltaMap.get(e.id) ?? 0;
+      map.set(month, (map.get(month) ?? 0) + delta);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-7)
+      .map(([month, km]) => ({ month, km }));
+  }, [fuelEntries, distanceDeltaMap]);
+
   // Chart data filtered by period selector
   const filteredChartData = useMemo(() => {
     const sorted = [...dashboard.monthlyCosts].reverse();
@@ -803,6 +844,31 @@ export function VehicleDetail({
           </Card>
         );
       })()}
+
+      {/* ── YTD quick-stats band ── */}
+      {(thisYearTotalMinor > 0 || thisYearFillupsList.length > 0) && (
+        <div className="overflow-x-auto -mx-4 px-4">
+          <div className="flex gap-2.5 min-w-max pb-0.5">
+            <YtdPill
+              label={new Date().getFullYear() + " spend"}
+              value={fmtAmount(thisYearTotalMinor, currency, masked)}
+              accent
+            />
+            {thisYearLitresL > 0 && (
+              <YtdPill label="Litres" value={`${thisYearLitresL.toFixed(1)} L`} />
+            )}
+            {thisYearDistKm > 0 && (
+              <YtdPill label="Distance" value={`${thisYearDistKm.toFixed(0)} km`} />
+            )}
+            {thisYearFillupsList.length > 0 && (
+              <YtdPill label="Fill-ups" value={String(thisYearFillupsList.length)} />
+            )}
+            {avgDaysBetweenFillups != null && (
+              <YtdPill label="Every" value={`${avgDaysBetweenFillups.toFixed(0)} days`} />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Tab bar ── */}
       <div className="overflow-x-auto -mx-1 px-1 pb-px">
@@ -1315,6 +1381,12 @@ export function VehicleDetail({
                         <StatRow label="Avg km per fill-up" value={`${avgKmPerFillup.toFixed(0)} km`} />
                       </>
                     )}
+                    {avgDaysBetweenFillups != null && (
+                      <>
+                        <div className="h-px bg-border" />
+                        <StatRow label="Avg days between fill-ups" value={`${avgDaysBetweenFillups.toFixed(0)} days`} />
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -1339,6 +1411,38 @@ export function VehicleDetail({
                         })}
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-2">km/L per fill-up</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Fuel price trend chart */}
+                {priceTrend.length >= 2 && !masked && (
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Fuel price trend</p>
+                      <div className="flex items-end gap-1.5 h-24">
+                        {(() => {
+                          const maxP = Math.max(...priceTrend.map((p) => p.pricePerL));
+                          const minP = Math.min(...priceTrend.map((p) => p.pricePerL));
+                          const range = maxP - minP || 1;
+                          return priceTrend.map((pt, i) => {
+                            const pct = ((pt.pricePerL - minP) / range) * 80 + 20;
+                            const sym = currency === "INR" ? "₹" : currency;
+                            return (
+                              <div key={i} className="flex-1 flex flex-col items-center h-full">
+                                <div className="flex-1 w-full flex flex-col justify-end">
+                                  <span className="text-[8px] text-emerald-600 font-semibold text-center tabular-nums mb-0.5 block leading-none">
+                                    {sym}{pt.pricePerL.toFixed(0)}
+                                  </span>
+                                  <div className="w-full bg-emerald-500/70 rounded-t-sm min-h-[3px]" style={{ height: `${pct}%` }} />
+                                </div>
+                                <span className="text-muted-foreground text-[9px] tabular-nums mt-1">{pt.label}</span>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-2">Price per litre (last {priceTrend.length} fill-ups)</p>
                     </CardContent>
                   </Card>
                 )}
@@ -1436,6 +1540,26 @@ export function VehicleDetail({
                         <>
                           <div className="h-px bg-border" />
                           <StatRow label="Worst fuel price" value={`${currency === "INR" ? "₹" : currency}${worstFuelPricePerL.toFixed(2)}/L`} accent="destructive" />
+                        </>
+                      )}
+                      {bestCostMonth != null && (
+                        <>
+                          <div className="h-px bg-border" />
+                          <StatRow
+                            label={`Best month (${formatMonthLabel(bestCostMonth.month).split(" ").slice(0, 1).join("")} '${bestCostMonth.month.slice(2, 4)})`}
+                            value={fmtAmount(bestCostMonth.totalCostMinor, currency, false)}
+                            accent="emerald"
+                          />
+                        </>
+                      )}
+                      {worstCostMonth != null && (
+                        <>
+                          <div className="h-px bg-border" />
+                          <StatRow
+                            label={`Worst month (${formatMonthLabel(worstCostMonth.month).split(" ").slice(0, 1).join("")} '${worstCostMonth.month.slice(2, 4)})`}
+                            value={fmtAmount(worstCostMonth.totalCostMinor, currency, false)}
+                            accent="destructive"
+                          />
                         </>
                       )}
                     </CardContent>
@@ -1545,6 +1669,35 @@ export function VehicleDetail({
                           <StatRow label="Avg km per fill-up" value={`${avgKmPerFillup.toFixed(0)} km`} />
                         </>
                       )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Monthly distance bar chart */}
+                {monthlyDistanceData.length >= 2 && (
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Distance by month</p>
+                      <div className="flex items-end gap-1.5 h-24">
+                        {(() => {
+                          const maxKm = Math.max(...monthlyDistanceData.map((m) => m.km), 1);
+                          return monthlyDistanceData.map((m) => {
+                            const pct = (m.km / maxKm) * 100;
+                            return (
+                              <div key={m.month} className="flex-1 flex flex-col items-center h-full">
+                                <div className="flex-1 w-full flex flex-col justify-end">
+                                  <span className="text-[8px] text-primary font-semibold text-center tabular-nums mb-0.5 block leading-none">
+                                    {m.km.toFixed(0)}
+                                  </span>
+                                  <div className="w-full bg-primary rounded-t-sm min-h-[3px]" style={{ height: `${pct}%` }} />
+                                </div>
+                                <span className="text-muted-foreground text-[9px] tabular-nums mt-1">{m.month.slice(5)}</span>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-2">km per month</p>
                     </CardContent>
                   </Card>
                 )}
@@ -1898,6 +2051,20 @@ function EmptyState({ Icon, message }: { Icon: React.ElementType; message: strin
         <Icon className="size-5 text-muted-foreground" />
       </div>
       <p className="text-sm text-muted-foreground max-w-xs">{message}</p>
+    </div>
+  );
+}
+
+function YtdPill({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className={[
+      "rounded-xl px-3.5 py-2.5 min-w-[80px]",
+      accent ? "bg-primary/8 border border-primary/15" : "bg-muted/60",
+    ].join(" ")}>
+      <p className={["text-base font-bold tabular-nums leading-none", accent ? "text-primary" : "text-foreground"].join(" ")}>
+        {value}
+      </p>
+      <p className="text-[11px] text-muted-foreground mt-0.5 whitespace-nowrap">{label}</p>
     </div>
   );
 }
