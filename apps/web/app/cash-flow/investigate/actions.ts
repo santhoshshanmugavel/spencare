@@ -51,12 +51,12 @@ export async function fetchInvestigation(
  * Uses the user's configured AI provider; returns a deterministic fallback
  * summary when no provider is configured or the provider is unavailable.
  *
- * Privacy mode is resolved server-side from the user's profile — the
- * client-supplied result is used only for the analysis data (which is the
- * authenticated user's own data returned by a prior fetchInvestigation call).
+ * Accepts the investigation query parameters (not client-supplied financial
+ * figures) and re-runs the investigation server-side so the AI prompt is
+ * always based on authoritative server-computed data.
  */
 export async function explainInvestigation(
-  result: InvestigationResult,
+  query: InvestigationQuery,
 ): Promise<ExplainActionResult> {
   const supabase = await createServerSupabaseClient();
   const {
@@ -71,7 +71,16 @@ export async function explainInvestigation(
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
 
-  // Resolve privacy mode server-side — do not trust client-supplied value.
+  // Re-run the investigation server-side — never trust client-supplied amounts.
+  let result;
+  try {
+    result = await getDecisionInvestigation(ctx, query);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not run investigation.";
+    return { explanation: null, error: message };
+  }
+
+  // Resolve privacy mode server-side — never trust a client-supplied value.
   const profile = await getProfile(ctx);
   const privacyMode = profile?.privacy_mode_enabled ?? false;
 

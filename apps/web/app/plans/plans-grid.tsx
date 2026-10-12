@@ -137,7 +137,7 @@ export function PlansGrid({
                   role="button"
                   tabIndex={0}
                   onClick={() => router.push(`/plans/${plan.id}`)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") router.push(`/plans/${plan.id}`); }}
+                  onKeyDown={(e) => { if (e.key === " ") e.preventDefault(); if (e.key === "Enter" || e.key === " ") router.push(`/plans/${plan.id}`); }}
                   aria-label={`Open ${plan.name}`}
                   className="cursor-pointer space-y-3 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                 >

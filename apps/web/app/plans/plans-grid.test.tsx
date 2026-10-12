@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, createEvent, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { describe, expect, it, vi } from "vitest";
@@ -166,6 +166,46 @@ describe("<PlansGrid> — date display (Gate 5 §5/§9)", () => {
     render(<PlansGrid initialPlans={plans} masked={false} />);
     expect(screen.getByText(/Dec 1, 2026/)).toBeInTheDocument();
     expect(screen.getByText(/Dec 15, 2026/)).toBeInTheDocument();
+  });
+});
+
+describe("<PlansGrid> — plan card keyboard navigation", () => {
+  it("Enter opens the plan detail page", () => {
+    push.mockClear();
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const card = screen.getByRole("button", { name: /open Thailand Trip/i });
+    fireEvent.keyDown(card, { key: "Enter", bubbles: true, cancelable: true });
+    expect(push).toHaveBeenCalledWith(`/plans/8f14e45f-ceea-467e-951c-d5f9f8e6d123`);
+  });
+
+  it("Space opens the plan detail page", () => {
+    push.mockClear();
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const card = screen.getByRole("button", { name: /open Thailand Trip/i });
+    fireEvent.keyDown(card, { key: " ", bubbles: true, cancelable: true });
+    expect(push).toHaveBeenCalledWith(`/plans/8f14e45f-ceea-467e-951c-d5f9f8e6d123`);
+  });
+
+  it("Space calls preventDefault to suppress page scroll", () => {
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const card = screen.getByRole("button", { name: /open Thailand Trip/i });
+    const event = createEvent.keyDown(card, { key: " ", bubbles: true, cancelable: true });
+    fireEvent(card, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("other keys do not navigate", () => {
+    push.mockClear();
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const card = screen.getByRole("button", { name: /open Thailand Trip/i });
+    fireEvent.keyDown(card, { key: "Tab" });
+    fireEvent.keyDown(card, { key: "Escape" });
+    fireEvent.keyDown(card, { key: "ArrowDown" });
+    expect(push).not.toHaveBeenCalled();
   });
 });
 

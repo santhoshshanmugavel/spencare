@@ -202,7 +202,7 @@ function ContributorRow({
           aria-label={`Change: ${contributor.absoluteChangeMinor} minor units`}
         >
           {isIncrease ? "+" : ""}
-          {masked ? "***" : (contributor.absoluteChangeMinor / 100).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          <Money value={toMoney(Math.abs(contributor.absoluteChangeMinor), currency)} tone="neutral" masked={masked} />
         </span>
       </div>
       <div className="mt-1 flex items-center gap-2">
@@ -327,7 +327,12 @@ export function InvestigationView({
     setExplanation(null);
     setExplainError(null);
     startExplaining(async () => {
-      const res = await explainInvestigation(result);
+      const res = await explainInvestigation({
+        metric,
+        currentPeriod: { start: currentMonth, end: lastDayOfMonth(currentMonth) },
+        comparisonPeriod: { start: comparisonMonth, end: lastDayOfMonth(comparisonMonth) },
+        currency,
+      });
       if (res.error) setExplainError(res.error);
       setExplanation(res.explanation);
     });
