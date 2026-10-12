@@ -2,7 +2,7 @@
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
-import { getDecisionInvestigation, type InvestigationQuery } from "@spencare/domain-application";
+import { getDecisionInvestigation, getProfile, type InvestigationQuery } from "@spencare/domain-application";
 import { buildInvestigationAiContext, type InvestigationResult } from "@spencare/domain-core";
 import { resolveProviderAdapter, NoProviderConfiguredError } from "@spencare/ai";
 import type { AuthContext } from "@spencare/domain-application";
@@ -50,10 +50,13 @@ export async function fetchInvestigation(
  * Generates a concise AI explanation for the investigation result.
  * Uses the user's configured AI provider; returns a deterministic fallback
  * summary when no provider is configured or the provider is unavailable.
+ *
+ * Privacy mode is resolved server-side from the user's profile — the
+ * client-supplied result is used only for the analysis data (which is the
+ * authenticated user's own data returned by a prior fetchInvestigation call).
  */
 export async function explainInvestigation(
   result: InvestigationResult,
-  privacyMode: boolean,
 ): Promise<ExplainActionResult> {
   const supabase = await createServerSupabaseClient();
   const {
@@ -67,6 +70,10 @@ export async function explainInvestigation(
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
+
+  // Resolve privacy mode server-side — do not trust client-supplied value.
+  const profile = await getProfile(ctx);
+  const privacyMode = profile?.privacy_mode_enabled ?? false;
 
   const context = buildInvestigationAiContext(result, privacyMode);
 

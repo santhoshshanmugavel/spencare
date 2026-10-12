@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { TrendingUp, TrendingDown, Minus, Search, Sparkles, AlertCircle, ChevronRight, BarChart3 } from "lucide-react";
-import { Money as DomainMoney } from "@spencare/domain-core";
+import { Money as DomainMoney, lastDayOfMonth } from "@spencare/domain-core";
 import type {
   InvestigationResult,
   ContributorSummary,
@@ -39,24 +39,6 @@ interface Props {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function shiftMonth(periodStart: string, delta: number): string {
-  const [year, month] = periodStart.split("-").map(Number);
-  const d = new Date(Date.UTC(year!, month! - 1 + delta, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function lastDayOfMonth(start: string): string {
-  const [year, month] = start.split("-").map(Number);
-  const d = new Date(Date.UTC(year!, month!, 0));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}
-
-function formatMonth(periodStart: string): string {
-  const [year, month] = periodStart.split("-").map(Number);
-  const d = new Date(Date.UTC(year!, month! - 1, 1));
-  return d.toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
-}
 
 function directionIcon(direction: ContributorSummary["direction"]) {
   switch (direction) {
@@ -297,6 +279,7 @@ export function InvestigationView({
     nextComparisonMonth: string,
     nextMetric: InvestigableMetric,
   ) {
+    if (nextCurrentMonth === nextComparisonMonth) return;
     setExplanation(null);
     setExplainError(null);
     startTransition(async () => {
@@ -344,7 +327,7 @@ export function InvestigationView({
     setExplanation(null);
     setExplainError(null);
     startExplaining(async () => {
-      const res = await explainInvestigation(result, masked);
+      const res = await explainInvestigation(result);
       if (res.error) setExplainError(res.error);
       setExplanation(res.explanation);
     });

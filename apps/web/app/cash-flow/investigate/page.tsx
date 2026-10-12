@@ -1,5 +1,6 @@
 import { getDecisionInvestigation, getProfile, type AuthContext } from "@spencare/domain-application";
 import { lastDayOfMonth } from "@spencare/domain-core";
+import Image from "next/image";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { PRIMARY_NAV_ITEMS } from "@/lib/nav-items";
@@ -10,7 +11,6 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { InvestigationView } from "./investigation-view";
 
-const CURRENCY = "INR";
 const AVAILABLE_MONTHS_BACK = 12;
 
 function currentPeriodStart(): string {
@@ -55,17 +55,20 @@ export default async function InvestigatePage() {
   const lastMonth = shiftMonth(thisMonth, -1);
   const availableMonths = buildAvailableMonths(thisMonth, AVAILABLE_MONTHS_BACK);
 
-  const [profile, initialResult] = await Promise.all([
-    getProfile(ctx),
-    getDecisionInvestigation(ctx, {
-      metric: "total_expenses",
-      currentPeriod: { start: thisMonth, end: lastDayOfMonth(thisMonth) },
-      comparisonPeriod: { start: lastMonth, end: lastDayOfMonth(lastMonth) },
-      currency: CURRENCY,
-    }).catch((err: unknown) => ({
-      _error: err instanceof Error ? err.message : "Failed to load investigation.",
-    })),
-  ]);
+  // Profile must be fetched first to resolve currency — preferred_currency is
+  // the authoritative source; hard-coding INR would silently wrong-label amounts
+  // for any user whose profile differs.
+  const profile = await getProfile(ctx);
+  const currency = profile?.preferred_currency ?? "INR";
+
+  const initialResult = await getDecisionInvestigation(ctx, {
+    metric: "total_expenses",
+    currentPeriod: { start: thisMonth, end: lastDayOfMonth(thisMonth) },
+    comparisonPeriod: { start: lastMonth, end: lastDayOfMonth(lastMonth) },
+    currency,
+  }).catch((err: unknown) => ({
+    _error: err instanceof Error ? err.message : "Failed to load investigation.",
+  }));
 
   const masked = profile?.privacy_mode_enabled ?? false;
 
@@ -77,7 +80,7 @@ export default async function InvestigatePage() {
     <AppShell
       rail={
         <NavigationRail
-          brand={<img src="/spencare-icon.svg" alt="Spencare" width={24} height={24} className="shrink-0" />}
+          brand={<Image src="/spencare-icon.svg" alt="Spencare" width={24} height={24} className="shrink-0" />}
           items={PRIMARY_NAV_ITEMS}
           extraFooterSlot={
             <>
@@ -100,7 +103,7 @@ export default async function InvestigatePage() {
         <InvestigationView
           initialResult={data}
           initialError={error}
-          currency={CURRENCY}
+          currency={currency}
           masked={masked}
           availableMonths={availableMonths}
           initialCurrentMonth={thisMonth}

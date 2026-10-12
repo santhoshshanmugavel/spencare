@@ -314,3 +314,122 @@ describe("buildInvestigationAiContext", () => {
     expect(text).toContain("still in progress");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Currency handling
+// ---------------------------------------------------------------------------
+
+describe("currency handling in investigation results", () => {
+  it("single currency: amounts and currency label are consistent", () => {
+    // InvestigationResult carries the currency passed to comparePeriods.
+    // All amounts are in minor units of that currency.
+    const metrics = [
+      makeMetric({ metricId: "cat_a", currentValue: 50000, comparisonValue: 40000, absoluteDiff: 10000 }),
+    ];
+    const result = rankContributorsByAbsoluteChange(metrics, "category");
+    expect(result[0]!.currentValueMinor).toBe(50000);
+    expect(result[0]!.comparisonValueMinor).toBe(40000);
+    expect(result[0]!.absoluteChangeMinor).toBe(10000);
+    // No currency field on ContributorSummary — currency lives on InvestigationResult.
+    // This confirms no implicit currency conversion happens inside the ranking function.
+  });
+
+  it("AI context includes the currency label from InvestigationResult", () => {
+    // Verifies that the currency passed to InvestigationResult flows through to
+    // the AI context rather than being replaced with a hard-coded value.
+    const result: InvestigationResult = {
+      investigatedMetric: "total_expenses",
+      metric: makeMetric({
+        metricId: "total_expenses",
+        label: "Total Expenses",
+        currentValue: 200000,
+        comparisonValue: 150000,
+        absoluteDiff: 50000,
+        percentageDiff: 33.3,
+        currency: "USD",
+      }),
+      categoryContributors: [],
+      merchantContributors: [],
+      currency: "USD",
+      limitations: [],
+      calculatedAt: "2026-10-01T00:00:00.000Z",
+    };
+    const text = buildInvestigationAiContext(result, false);
+    expect(text).toContain("USD");
+    // Should not show INR when currency is USD
+    expect(text).not.toContain("INR");
+  });
+
+  it("AI context with missing (zero) comparison baseline marks percentage as N/A", () => {
+    // When comparison period has no income/expense, percentageDiff is null.
+    // N/A must appear — never NaN or Infinity.
+    const result: InvestigationResult = {
+      investigatedMetric: "total_income",
+      metric: makeMetric({
+        metricId: "total_income",
+        currentValue: 100000,
+        comparisonValue: 0,
+        absoluteDiff: 100000,
+        percentageDiff: null,
+        currency: "INR",
+      }),
+      categoryContributors: [],
+      merchantContributors: [],
+      currency: "INR",
+      limitations: ["No comparison period data."],
+      calculatedAt: "2026-10-01T00:00:00.000Z",
+    };
+    const text = buildInvestigationAiContext(result, false);
+    expect(text).toContain("N/A");
+    expect(text).not.toContain("NaN");
+    expect(text).not.toContain("Infinity");
+  });
+
+  it("privacy mode redacts amounts for all currencies", () => {
+    // Ensures redaction works regardless of which currency is in use.
+    for (const currency of ["INR", "USD", "EUR", "GBP"]) {
+      const result: InvestigationResult = {
+        investigatedMetric: "total_expenses",
+        metric: makeMetric({
+          metricId: "total_expenses",
+          currentValue: 99999,
+          comparisonValue: 88888,
+          absoluteDiff: 11111,
+          percentageDiff: 12.5,
+          currency,
+        }),
+        categoryContributors: [],
+        merchantContributors: [],
+        currency,
+        limitations: [],
+        calculatedAt: "2026-10-01T00:00:00.000Z",
+      };
+      const text = buildInvestigationAiContext(result, true);
+      expect(text).toContain("[redacted]");
+      expect(text).not.toContain("999.99");
+    }
+  });
+
+  it("currency mismatch is not silently hidden: limitations must describe it", () => {
+    // Phase 1 does not perform currency conversion. If a limitation is added
+    // for multi-currency data, it must appear in the AI context.
+    const result: InvestigationResult = {
+      investigatedMetric: "total_expenses",
+      metric: makeMetric({
+        metricId: "total_expenses",
+        currentValue: 50000,
+        comparisonValue: 40000,
+        absoluteDiff: 10000,
+        percentageDiff: 25,
+        currency: "INR",
+      }),
+      categoryContributors: [],
+      merchantContributors: [],
+      currency: "INR",
+      limitations: ["Accounts in multiple currencies detected; amounts are not converted and may not be directly comparable."],
+      calculatedAt: "2026-10-01T00:00:00.000Z",
+    };
+    const text = buildInvestigationAiContext(result, false);
+    expect(text).toContain("multiple currencies");
+  });
+});
