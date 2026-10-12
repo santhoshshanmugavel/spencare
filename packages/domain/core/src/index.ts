@@ -291,6 +291,17 @@ export {
 } from "./scenario.js";
 
 export {
+  classifyDirection,
+  rankContributorsByAbsoluteChange,
+  buildInvestigationAiContext,
+  INVESTIGABLE_METRIC_LABELS,
+  type InvestigableMetric,
+  type ContributorDirection,
+  type ContributorSummary,
+  type InvestigationResult,
+} from "./investigation.js";
+
+export {
   generateAuthorizationCode,
   hashAuthorizationCode,
   generateOAuthClientId,

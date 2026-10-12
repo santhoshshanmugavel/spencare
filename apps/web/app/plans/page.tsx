@@ -1,4 +1,4 @@
-import { listPlansWithSummaries, getProfile, getProfileForDisplay, type AuthContext } from "@spencare/domain-application";
+import { listPlansWithSummaries, resolvePlanImageUrls, getProfile, getProfileForDisplay, type AuthContext } from "@spencare/domain-application";
 import { AppShell } from "@/components/spencare/app-shell";
 import { NavigationRail } from "@/components/spencare/navigation-rail";
 import { PRIMARY_NAV_ITEMS } from "@/lib/nav-items";
@@ -33,6 +33,7 @@ export default async function PlansPage() {
   };
   const asOfIso = new Date().toISOString();
   const [plansWithSummaries, profile] = await Promise.all([listPlansWithSummaries(ctx, asOfIso), getProfile(ctx)]);
+  const coverImageUrls = await resolvePlanImageUrls(ctx, plansWithSummaries.map((p) => p.plan));
   const displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null =
     displayProfile?.avatarSignedUrl ?? ((user.user_metadata?.avatar_url as string | null) ?? null);
@@ -60,6 +61,7 @@ export default async function PlansPage() {
             calculations: serializePlanCalculations(p.calculations),
             itemCount: p.itemCount,
             transactionCount: p.transactionCount,
+            coverImageSignedUrl: coverImageUrls[p.plan.id] ?? null,
           }))}
           masked={profile?.privacy_mode_enabled ?? false}
         />

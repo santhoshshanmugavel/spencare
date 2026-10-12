@@ -38,6 +38,8 @@ vi.mock("../actions", () => ({
   dissociatePlanAccountAction: vi.fn(async () => ({ ok: true, value: {} })),
   setTransactionPlanAction: vi.fn(async () => ({ ok: true, value: {} })),
   searchTransactionsForPlanAction: vi.fn(async () => []),
+  updatePlanImageAction: vi.fn(async () => ({ ok: true, value: { signedUrl: "https://signed.example/new.png" } })),
+  removePlanImageAction: vi.fn(async () => ({ ok: true, value: {} })),
 }));
 
 beforeEach(() => {
@@ -116,6 +118,7 @@ function buildDetail(opts: {
     updated_at: "2026-01-01T00:00:00Z",
     completed_at: status === "completed" ? "2026-01-10T00:00:00Z" : null,
     archived_at: status === "archived" ? "2026-01-10T00:00:00Z" : null,
+    cover_image_url: null,
   };
 
   const calculations = summarizePlan({
@@ -182,7 +185,7 @@ const categories: CategoryRow[] = [];
 describe("<PlanDetailView> — accessibility", () => {
   it("has no axe violations", async () => {
     const { container } = render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     expect(await axe(container)).toHaveNoViolations();
   });
@@ -201,7 +204,7 @@ async function openActionsMenu(user: ReturnType<typeof userEvent.setup>, planNam
 describe("<PlanDetailView> — header and lifecycle", () => {
   it("renders the Plan name, purpose, and status", () => {
     render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     expect(screen.getByRole("heading", { name: "Thailand Trip" })).toBeInTheDocument();
     expect(screen.getByText("December vacation")).toBeInTheDocument();
@@ -211,7 +214,7 @@ describe("<PlanDetailView> — header and lifecycle", () => {
   it("shows only valid next-status actions for an active Plan (Pause/Postpone/Mark complete/Archive, never Reopen)", async () => {
     const user = userEvent.setup();
     render(
-      <PlanDetailView initialDetail={buildDetail({ status: "active" })} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail({ status: "active" })} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     await openActionsMenu(user, "Thailand Trip");
     expect(screen.getByRole("menuitem", { name: "Pause" })).toBeInTheDocument();
@@ -224,7 +227,7 @@ describe("<PlanDetailView> — header and lifecycle", () => {
   it("an archived Plan offers Reopen instead of Archive, and a completed Plan stays accessible with Reopen available (E2E flow F/G)", async () => {
     const user = userEvent.setup();
     render(
-      <PlanDetailView initialDetail={buildDetail({ status: "archived" })} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail({ status: "archived" })} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     await openActionsMenu(user, "Thailand Trip");
     expect(screen.getByRole("menuitem", { name: "Reopen" })).toBeInTheDocument();
@@ -234,9 +237,9 @@ describe("<PlanDetailView> — header and lifecycle", () => {
   it("a completed Plan is still fully viewable and offers Reopen", async () => {
     const user = userEvent.setup();
     render(
-      <PlanDetailView initialDetail={buildDetail({ status: "completed" })} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail({ status: "completed" })} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
-    expect(screen.getByText("Thailand Trip")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Thailand Trip" })).toBeInTheDocument();
     await openActionsMenu(user, "Thailand Trip");
     expect(screen.getByRole("menuitem", { name: "Reopen" })).toBeInTheDocument();
   });
@@ -245,7 +248,7 @@ describe("<PlanDetailView> — header and lifecycle", () => {
     const { updatePlanStatusAction } = await import("../actions");
     const user = userEvent.setup();
     render(
-      <PlanDetailView initialDetail={buildDetail({ status: "active" })} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail({ status: "active" })} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     await openActionsMenu(user, "Thailand Trip");
     await user.click(screen.getByRole("menuitem", { name: "Pause" }));
@@ -255,7 +258,7 @@ describe("<PlanDetailView> — header and lifecycle", () => {
   it("always offers Delete regardless of plan status or content", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
-      <PlanDetailView initialDetail={buildDetail({ status: "draft" })} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail({ status: "draft" })} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     await openActionsMenu(user, "Thailand Trip");
     expect(screen.getByRole("menuitem", { name: "Delete Plan" })).toBeInTheDocument();
@@ -264,6 +267,7 @@ describe("<PlanDetailView> — header and lifecycle", () => {
     rerender(
       <PlanDetailView
         initialDetail={buildDetail({ status: "draft", items: [planItem()] })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -279,7 +283,7 @@ describe("<PlanDetailView> — header and lifecycle", () => {
 describe("<PlanDetailView> — budget and over-budget UX (calm, not alarmist)", () => {
   it("shows a tracking-only message when no budget is set", () => {
     render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     expect(screen.getByText(/no plan budget/i)).toBeInTheDocument();
   });
@@ -288,6 +292,7 @@ describe("<PlanDetailView> — budget and over-budget UX (calm, not alarmist)", 
     render(
       <PlanDetailView
         initialDetail={buildDetail({ budgetMinor: 10000000, transactions: [transactionRow({ amount_minor: 500000 })] })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -303,6 +308,7 @@ describe("<PlanDetailView> — budget and over-budget UX (calm, not alarmist)", 
     render(
       <PlanDetailView
         initialDetail={buildDetail({ budgetMinor: 100000, transactions: [transactionRow({ amount_minor: 500000 })] })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -318,7 +324,7 @@ describe("<PlanDetailView> — budget and over-budget UX (calm, not alarmist)", 
 describe("<PlanDetailView> — items", () => {
   it("shows an honest empty state with no items", () => {
     render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     expect(screen.getByText("No items yet")).toBeInTheDocument();
   });
@@ -327,6 +333,7 @@ describe("<PlanDetailView> — items", () => {
     render(
       <PlanDetailView
         initialDetail={buildDetail({ items: [planItem()] })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -340,7 +347,7 @@ describe("<PlanDetailView> — items", () => {
   it("opens the add-item sheet from the header button", async () => {
     const user = userEvent.setup();
     render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     await user.click(screen.getByRole("button", { name: /add item/i }));
     expect(screen.getByRole("heading", { name: "Add a Plan item" })).toBeInTheDocument();
@@ -350,7 +357,7 @@ describe("<PlanDetailView> — items", () => {
 describe("<PlanDetailView> — transactions (never alters financial fields)", () => {
   it("shows an honest empty state with no attached transactions", () => {
     render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     expect(screen.getByText("No transactions yet")).toBeInTheDocument();
   });
@@ -359,6 +366,7 @@ describe("<PlanDetailView> — transactions (never alters financial fields)", ()
     render(
       <PlanDetailView
         initialDetail={buildDetail({ transactions: [transactionRow()] })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -375,6 +383,7 @@ describe("<PlanDetailView> — transactions (never alters financial fields)", ()
     render(
       <PlanDetailView
         initialDetail={buildDetail({ transactions: [transactionRow()] })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -389,7 +398,7 @@ describe("<PlanDetailView> — transactions (never alters financial fields)", ()
   it("opens the attach-transaction dialog from the header button", async () => {
     const user = userEvent.setup();
     render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     // Two "Attach transaction" buttons exist (card header + empty-state action); either opens the dialog.
     await user.click(screen.getAllByRole("button", { name: /attach transaction/i })[0]!);
@@ -401,7 +410,7 @@ describe("<PlanDetailView> — currency-mismatch honesty", () => {
   it("reports excluded, differently-currencied transactions rather than silently converting or dropping them", () => {
     const detail = buildDetail({ budgetMinor: 10000000, transactions: [transactionRow({ id: "usd-1", currency: "USD", amount_minor: 5000 })] });
     render(
-      <PlanDetailView initialDetail={detail} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={detail} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     expect(screen.getByText(/aren.t included in these totals/i)).toBeInTheDocument();
   });
@@ -412,6 +421,7 @@ describe("<PlanDetailView> — Privacy Mode", () => {
     render(
       <PlanDetailView
         initialDetail={buildDetail({ budgetMinor: 10000000, transactions: [transactionRow({ amount_minor: 500000 })] })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -426,7 +436,7 @@ describe("<PlanDetailView> — Privacy Mode", () => {
 describe("<PlanDetailView> — no-date state (Gate 5 §9)", () => {
   it("shows no date line at all when neither start nor end date is set, never '-'/'N/A'", () => {
     render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     expect(screen.queryByText("-")).not.toBeInTheDocument();
     expect(screen.queryByText(/n\/a/i)).not.toBeInTheDocument();
@@ -437,6 +447,7 @@ describe("<PlanDetailView> — no-date state (Gate 5 §9)", () => {
     render(
       <PlanDetailView
         initialDetail={buildDetail({ startDate: "2026-12-01", endDate: "2026-12-15" })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -453,6 +464,7 @@ describe("<PlanDetailView> — no-date state (Gate 5 §9)", () => {
     render(
       <PlanDetailView
         initialDetail={buildDetail({ startDate: "2026-12-01" })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -469,6 +481,7 @@ describe("<PlanDetailView> — Committed / Upcoming (Gate 5 §7)", () => {
     render(
       <PlanDetailView
         initialDetail={buildDetail({ items: [planItem({ status: "committed" }), planItem({ id: "item-2", status: "booked" })] })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={categories}
         goals={goals}
@@ -481,7 +494,7 @@ describe("<PlanDetailView> — Committed / Upcoming (Gate 5 §7)", () => {
 
   it("hides the Committed/Upcoming line entirely when both are zero, rather than showing ₹0", () => {
     render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     expect(screen.queryByText(/Committed/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Upcoming/)).not.toBeInTheDocument();
@@ -497,6 +510,7 @@ describe("<PlanDetailView> — category breakdown planned vs. actual (Gate 5 §2
           items: [planItem({ category_id: categoryId, estimated_amount_minor: 2000000 })],
           transactions: [transactionRow({ category_id: categoryId, amount_minor: 500000 })],
         })}
+        coverImageSignedUrl={null}
         accounts={accounts}
         categories={[{ id: categoryId, user_id: null, name: "Travel", icon: null, is_system: true }]}
         goals={goals}
@@ -510,7 +524,7 @@ describe("<PlanDetailView> — category breakdown planned vs. actual (Gate 5 §2
 
   it("shows nothing at all (no empty chart) when there is no priced item and no transaction to break down", () => {
     render(
-      <PlanDetailView initialDetail={buildDetail()} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
+      <PlanDetailView initialDetail={buildDetail()} coverImageSignedUrl={null} accounts={accounts} categories={categories} goals={goals} commitments={commitments} masked={false} />,
     );
     expect(screen.queryByText("By category")).not.toBeInTheDocument();
   });

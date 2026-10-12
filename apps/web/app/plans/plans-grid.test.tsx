@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, createEvent, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { describe, expect, it, vi } from "vitest";
@@ -9,13 +9,16 @@ import { PlansGrid, type SerializedPlanWithSummary } from "./plans-grid";
 import { serializePlanCalculations } from "@/lib/plan-calculations-serialization";
 
 const refresh = vi.fn();
+const push = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh, push: vi.fn() }),
+  useRouter: () => ({ refresh, push }),
 }));
 
 vi.mock("./actions", () => ({
   createPlanAction: vi.fn(async () => ({ ok: true, value: {} })),
   updatePlanBudgetAction: vi.fn(async () => ({ ok: true, value: {} })),
+  updatePlanImageAction: vi.fn(async () => ({ ok: true, value: { signedUrl: "https://signed.example/new.png" } })),
+  removePlanImageAction: vi.fn(async () => ({ ok: true, value: {} })),
 }));
 
 function planRow(overrides: Partial<FinancialPlanRow> = {}): FinancialPlanRow {
@@ -34,6 +37,7 @@ function planRow(overrides: Partial<FinancialPlanRow> = {}): FinancialPlanRow {
     updated_at: "2026-01-01T00:00:00Z",
     completed_at: null,
     archived_at: null,
+    cover_image_url: null,
     ...overrides,
   };
 }
@@ -41,6 +45,7 @@ function planRow(overrides: Partial<FinancialPlanRow> = {}): FinancialPlanRow {
 function withSummary(
   row: FinancialPlanRow,
   opts: { budgetMinor?: number; spentMinor?: number } = {},
+  coverImageSignedUrl: string | null = null,
 ): SerializedPlanWithSummary {
   const calculations = summarizePlan({
     plan: {
@@ -80,6 +85,7 @@ function withSummary(
     calculations: serializePlanCalculations(calculations),
     itemCount: 0,
     transactionCount: opts.spentMinor != null ? 1 : 0,
+    coverImageSignedUrl,
   };
 }
 
@@ -137,7 +143,7 @@ describe("<PlansGrid> — populated", () => {
     render(<PlansGrid initialPlans={plans} masked={false} />);
     await user.type(screen.getByLabelText("Search Plans"), "renovation");
     expect(screen.queryByText("Thailand Trip")).not.toBeInTheDocument();
-    expect(screen.getByText("Home Renovation")).toBeInTheDocument();
+    expect(screen.getAllByText("Home Renovation").length).toBeGreaterThan(0);
   });
 
   it("masks amounts when Privacy Mode is on", () => {
@@ -160,5 +166,71 @@ describe("<PlansGrid> — date display (Gate 5 §5/§9)", () => {
     render(<PlansGrid initialPlans={plans} masked={false} />);
     expect(screen.getByText(/Dec 1, 2026/)).toBeInTheDocument();
     expect(screen.getByText(/Dec 15, 2026/)).toBeInTheDocument();
+  });
+});
+
+describe("<PlansGrid> — plan card keyboard navigation", () => {
+  it("Enter opens the plan detail page", () => {
+    push.mockClear();
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const card = screen.getByRole("button", { name: /open Thailand Trip/i });
+    fireEvent.keyDown(card, { key: "Enter", bubbles: true, cancelable: true });
+    expect(push).toHaveBeenCalledWith(`/plans/8f14e45f-ceea-467e-951c-d5f9f8e6d123`);
+  });
+
+  it("Space opens the plan detail page", () => {
+    push.mockClear();
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const card = screen.getByRole("button", { name: /open Thailand Trip/i });
+    fireEvent.keyDown(card, { key: " ", bubbles: true, cancelable: true });
+    expect(push).toHaveBeenCalledWith(`/plans/8f14e45f-ceea-467e-951c-d5f9f8e6d123`);
+  });
+
+  it("Space calls preventDefault to suppress page scroll", () => {
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const card = screen.getByRole("button", { name: /open Thailand Trip/i });
+    const event = createEvent.keyDown(card, { key: " ", bubbles: true, cancelable: true });
+    fireEvent(card, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("other keys do not navigate", () => {
+    push.mockClear();
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const card = screen.getByRole("button", { name: /open Thailand Trip/i });
+    fireEvent.keyDown(card, { key: "Tab" });
+    fireEvent.keyDown(card, { key: "Escape" });
+    fireEvent.keyDown(card, { key: "ArrowDown" });
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe("<PlansGrid> — cover image discoverability", () => {
+  it("shows 'Add cover image' placeholder when no image exists (discoverable without hover)", () => {
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    expect(screen.getByRole("button", { name: /add cover image/i })).toBeInTheDocument();
+    expect(screen.getByText(/add cover image/i)).toBeInTheDocument();
+  });
+
+  it("Add cover image placeholder does not navigate — stopPropagation works", async () => {
+    const user = userEvent.setup();
+    push.mockClear();
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const addBtn = screen.getByRole("button", { name: /add cover image/i });
+    await user.click(addBtn);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("shows 'Change' and 'Remove' controls when an image already exists", () => {
+    const plans = [withSummary(planRow(), {}, "https://signed.example/existing.png")];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    expect(screen.getByRole("button", { name: /change cover image/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /remove cover image/i })).toBeInTheDocument();
   });
 });

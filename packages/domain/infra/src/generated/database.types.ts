@@ -1093,6 +1093,7 @@ export type Database = {
           archived_at: string | null
           base_currency: string
           completed_at: string | null
+          cover_image_url: string | null
           created_at: string
           current_budget_minor: number | null
           description: string | null
@@ -1109,6 +1110,7 @@ export type Database = {
           archived_at?: string | null
           base_currency: string
           completed_at?: string | null
+          cover_image_url?: string | null
           created_at?: string
           current_budget_minor?: number | null
           description?: string | null
@@ -1125,6 +1127,7 @@ export type Database = {
           archived_at?: string | null
           base_currency?: string
           completed_at?: string | null
+          cover_image_url?: string | null
           created_at?: string
           current_budget_minor?: number | null
           description?: string | null

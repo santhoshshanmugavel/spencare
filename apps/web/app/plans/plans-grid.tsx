@@ -15,6 +15,7 @@ import { PLAN_STATUS_LABELS } from "@/lib/plan-status-labels";
 import { formatPlanDate } from "@/lib/plan-date-format";
 import { CreatePlanSheet } from "./create-plan-sheet";
 import { revivePlanCalculations, type SerializedPlanCalculationResult } from "@/lib/plan-calculations-serialization";
+import { PlanImageUploader } from "@/components/spencare/plan-image-uploader";
 
 /**
  * /plans list. Each card's figures come straight from
@@ -31,6 +32,7 @@ export interface SerializedPlanWithSummary {
   calculations: SerializedPlanCalculationResult;
   itemCount: number;
   transactionCount: number;
+  coverImageSignedUrl: string | null;
 }
 
 export function PlansGrid({
@@ -51,6 +53,7 @@ export function PlansGrid({
         calculations: revivePlanCalculations(p.calculations),
         itemCount: p.itemCount,
         transactionCount: p.transactionCount,
+        coverImageSignedUrl: p.coverImageSignedUrl,
       })),
     [initialPlans],
   );
@@ -115,7 +118,7 @@ export function PlansGrid({
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map(({ plan, calculations, itemCount, transactionCount }) => {
+          {filtered.map(({ plan, calculations, itemCount, transactionCount, coverImageSignedUrl }) => {
             const { budgetStatus, actualSpend, committedAmount, upcomingAmount } = calculations;
             const percent = budgetStatus.hasBudget
               ? Math.min(100, Math.max(0, calculations.progress.percentOfBudgetUsed ?? 0))
@@ -123,72 +126,73 @@ export function PlansGrid({
             const startLabel = formatPlanDate(plan.start_date);
             const endLabel = formatPlanDate(plan.end_date);
             return (
-              <button
-                key={plan.id}
-                type="button"
-                onClick={() => router.push(`/plans/${plan.id}`)}
-                className="text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 rounded-xl"
-              >
-                <Card className="h-full transition-colors hover:bg-accent/40">
-                  <CardContent className="space-y-3 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-foreground">{plan.name}</p>
-                        {plan.description ? (
-                          <p className="truncate text-xs text-muted-foreground">{plan.description}</p>
-                        ) : null}
-                        {/* Hidden entirely when neither date is set, rather than showing "-"/"N/A" for a valid, dateless Plan. */}
-                        {startLabel || endLabel ? (
-                          <p className="truncate text-xs text-muted-foreground">
-                            {startLabel ?? "No start"} – {endLabel ?? "No end"}
-                          </p>
-                        ) : null}
-                      </div>
-                      <Badge variant={plan.status === "active" ? "default" : "outline"}>
-                        {PLAN_STATUS_LABELS[plan.status]}
-                      </Badge>
+              <Card key={plan.id} className="gap-0 overflow-hidden p-0 transition-colors hover:bg-accent/40">
+                <PlanImageUploader
+                  planId={plan.id}
+                  planName={plan.name}
+                  initialSignedUrl={coverImageSignedUrl}
+                />
+                {/* Clickable body — plain div avoids invalid button>div nesting */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/plans/${plan.id}`)}
+                  onKeyDown={(e) => { if (e.key === " ") e.preventDefault(); if (e.key === "Enter" || e.key === " ") router.push(`/plans/${plan.id}`); }}
+                  aria-label={`Open ${plan.name}`}
+                  className="cursor-pointer space-y-3 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">{plan.name}</p>
+                      {plan.description ? (
+                        <p className="truncate text-xs text-muted-foreground">{plan.description}</p>
+                      ) : null}
+                      {startLabel || endLabel ? (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {startLabel ?? "No start"} – {endLabel ?? "No end"}
+                        </p>
+                      ) : null}
                     </div>
+                    <Badge variant={plan.status === "active" ? "default" : "outline"}>
+                      {PLAN_STATUS_LABELS[plan.status]}
+                    </Badge>
+                  </div>
 
-                    {budgetStatus.hasBudget && budgetStatus.currentBudget ? (
-                      <div className="space-y-1.5">
-                        <div className="flex items-baseline justify-between text-xs text-muted-foreground">
-                          <span>
-                            <Money value={actualSpend} masked={masked} size="body" /> of{" "}
-                            <Money value={budgetStatus.currentBudget} masked={masked} size="body" />
-                          </span>
-                          {budgetStatus.overBudget ? <span className="text-warning">Over budget</span> : null}
-                        </div>
-                        <Progress value={percent ?? 0} tone={budgetStatus.overBudget ? "warning" : undefined} />
+                  {budgetStatus.hasBudget && budgetStatus.currentBudget ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-baseline justify-between text-xs text-muted-foreground">
+                        <span>
+                          <Money value={actualSpend} masked={masked} size="body" /> of{" "}
+                          <Money value={budgetStatus.currentBudget} masked={masked} size="body" />
+                        </span>
+                        {budgetStatus.overBudget ? <span className="text-warning">Over budget</span> : null}
                       </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        Tracking spend only — <Money value={actualSpend} masked={masked} size="body" /> so far
-                      </p>
-                    )}
-
-                    {!committedAmount.isZero() || !upcomingAmount.isZero() ? (
-                      <p className="text-xs text-muted-foreground">
-                        {!upcomingAmount.isZero() ? (
-                          <>
-                            Upcoming <Money value={upcomingAmount} masked={masked} size="body" />
-                          </>
-                        ) : null}
-                        {!committedAmount.isZero() && !upcomingAmount.isZero() ? " · " : null}
-                        {!committedAmount.isZero() ? (
-                          <>
-                            Committed <Money value={committedAmount} masked={masked} size="body" />
-                          </>
-                        ) : null}
-                      </p>
-                    ) : null}
-
+                      <Progress value={percent ?? 0} tone={budgetStatus.overBudget ? "warning" : undefined} />
+                    </div>
+                  ) : (
                     <p className="text-xs text-muted-foreground">
-                      {transactionCount} transaction{transactionCount === 1 ? "" : "s"} · {itemCount} item
-                      {itemCount === 1 ? "" : "s"}
+                      Tracking spend only — <Money value={actualSpend} masked={masked} size="body" /> so far
                     </p>
-                  </CardContent>
-                </Card>
-              </button>
+                  )}
+
+                  {!committedAmount.isZero() || !upcomingAmount.isZero() ? (
+                    <p className="text-xs text-muted-foreground">
+                      {!upcomingAmount.isZero() ? (
+                        <>Upcoming <Money value={upcomingAmount} masked={masked} size="body" /></>
+                      ) : null}
+                      {!committedAmount.isZero() && !upcomingAmount.isZero() ? " · " : null}
+                      {!committedAmount.isZero() ? (
+                        <>Committed <Money value={committedAmount} masked={masked} size="body" /></>
+                      ) : null}
+                    </p>
+                  ) : null}
+
+                  <p className="text-xs text-muted-foreground">
+                    {transactionCount} transaction{transactionCount === 1 ? "" : "s"} · {itemCount} item
+                    {itemCount === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </Card>
             );
           })}
         </div>

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import {
   getPlanDetail,
+  resolvePlanImageUrls,
   getProfile,
   getProfileForDisplay,
   listAccounts,
@@ -57,6 +58,9 @@ export default async function PlanDetailPage(props: PageProps<"/plans/[planId]">
 
   if (!detail) notFound();
 
+  const coverImageUrls = await resolvePlanImageUrls(ctx, [detail.plan]);
+  const coverImageSignedUrl = coverImageUrls[detail.plan.id] ?? null;
+
   const displayProfile = await getProfileForDisplay(ctx).catch(() => null);
   const navAvatarUrl: string | null =
     displayProfile?.avatarSignedUrl ?? ((user.user_metadata?.avatar_url as string | null) ?? null);
@@ -84,6 +88,7 @@ export default async function PlanDetailPage(props: PageProps<"/plans/[planId]">
             calculations: serializePlanCalculations(detail.calculations),
             categoryBreakdown: serializeCategoryBreakdown(detail.categoryBreakdown),
           }}
+          coverImageSignedUrl={coverImageSignedUrl}
           accounts={accounts}
           categories={categories}
           goals={goals}

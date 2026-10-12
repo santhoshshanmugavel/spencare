@@ -45,6 +45,7 @@ import { AssociateGoalDialog } from "./associate-goal-dialog";
 import { AssociateCommitmentDialog } from "./associate-commitment-dialog";
 import { AssociateAccountDialog } from "./associate-account-dialog";
 import { AssociateTransactionDialog } from "./associate-transaction-dialog";
+import { PlanImageUploader } from "@/components/spencare/plan-image-uploader";
 
 /**
  * Verb-phrased button labels for a lifecycle transition, distinct from
@@ -79,6 +80,7 @@ export interface SerializedPlanDetail extends Omit<PlanDetail, "calculations" | 
 
 export function PlanDetailView({
   initialDetail,
+  coverImageSignedUrl,
   accounts,
   categories,
   goals,
@@ -86,6 +88,7 @@ export function PlanDetailView({
   masked,
 }: {
   initialDetail: SerializedPlanDetail;
+  coverImageSignedUrl: string | null;
   accounts: AccountRow[];
   categories: CategoryRow[];
   goals: GoalRow[];
@@ -214,6 +217,14 @@ export function PlanDetailView({
         <ArrowLeft className="size-4" aria-hidden="true" />
         Plans
       </Link>
+
+      {/* Cover image — optional; editable in place just like the list card */}
+      <PlanImageUploader
+        planId={plan.id}
+        planName={plan.name}
+        initialSignedUrl={coverImageSignedUrl}
+        className="rounded-xl"
+      />
 
       {/* Header — what is this Plan, and its current state */}
       <div className="flex flex-wrap items-start justify-between gap-3">
