@@ -10,6 +10,7 @@ export * from "./budgetsRepo.js";
 export * from "./goalsRepo.js";
 export * from "./goalContributionPlansRepo.js";
 export * from "./goalImageStorageRepo.js";
+export * from "./planImageStorageRepo.js";
 export * from "./billsRepo.js";
 export * from "./importsRepo.js";
 export * from "./importStagedTransactionsRepo.js";

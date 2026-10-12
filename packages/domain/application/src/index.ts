@@ -98,6 +98,13 @@ export {
   type UpdateGoalImageOutput,
   type RemoveGoalImageInput,
 } from "./commands/goalImage.js";
+export {
+  updatePlanImage,
+  removePlanImage,
+  type UpdatePlanImageInput,
+  type UpdatePlanImageOutput,
+  type RemovePlanImageInput,
+} from "./commands/planImage.js";
 
 export {
   createGoalContributionPlan,
@@ -532,6 +539,7 @@ export {
   getPlan,
   getPlanDetail,
   listPlansWithSummaries,
+  resolvePlanImageUrls,
   calculatePlanCategoryBreakdown,
   getPlanContextForUpcomingSources,
   type PlanDetail,
@@ -545,6 +553,9 @@ export {
 export { comparePeriods } from "./queries/periodComparison.js";
 export { buildForecastInput } from "./queries/forecasting.js";
 export { captureScenarioBaseline } from "./queries/scenario.js";
+
+// Phase 2A — Financial Decision Investigator (F01)
+export { getDecisionInvestigation, type InvestigationQuery } from "./queries/investigation.js";
 export {
   calculatePeriodDiff,
   isPeriodPartial,
@@ -576,6 +587,14 @@ export {
   type ScenarioBaseline,
   type ScenarioInput,
   type ScenarioResult,
+  classifyDirection,
+  rankContributorsByAbsoluteChange,
+  buildInvestigationAiContext,
+  INVESTIGABLE_METRIC_LABELS,
+  type InvestigableMetric,
+  type ContributorDirection,
+  type ContributorSummary,
+  type InvestigationResult,
 } from "@spencare/domain-core";
 
 export {

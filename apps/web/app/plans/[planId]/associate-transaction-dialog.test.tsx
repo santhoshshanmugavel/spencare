@@ -52,6 +52,7 @@ const accounts: AccountRow[] = [
     opening_balance_minor: 0,
     opening_balance_at: "2026-01-01",
     archived_at: null,
+    cover_image_url: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   } as never,

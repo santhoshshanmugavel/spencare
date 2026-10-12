@@ -116,6 +116,7 @@ function buildDetail(opts: {
     updated_at: "2026-01-01T00:00:00Z",
     completed_at: status === "completed" ? "2026-01-10T00:00:00Z" : null,
     archived_at: status === "archived" ? "2026-01-10T00:00:00Z" : null,
+    cover_image_url: null,
   };
 
   const calculations = summarizePlan({

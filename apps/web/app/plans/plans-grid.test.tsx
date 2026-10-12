@@ -34,6 +34,7 @@ function planRow(overrides: Partial<FinancialPlanRow> = {}): FinancialPlanRow {
     updated_at: "2026-01-01T00:00:00Z",
     completed_at: null,
     archived_at: null,
+    cover_image_url: null,
     ...overrides,
   };
 }
@@ -80,6 +81,7 @@ function withSummary(
     calculations: serializePlanCalculations(calculations),
     itemCount: 0,
     transactionCount: opts.spentMinor != null ? 1 : 0,
+    coverImageSignedUrl: null,
   };
 }
 

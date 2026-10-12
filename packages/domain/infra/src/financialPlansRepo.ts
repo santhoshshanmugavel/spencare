@@ -44,10 +44,11 @@ export interface FinancialPlanRow {
   updated_at: string;
   completed_at: string | null;
   archived_at: string | null;
+  cover_image_url: string | null;
 }
 
 const PLAN_COLUMNS =
-  "id, user_id, name, description, status, start_date, end_date, base_currency, original_budget_minor, current_budget_minor, created_at, updated_at, completed_at, archived_at";
+  "id, user_id, name, description, status, start_date, end_date, base_currency, original_budget_minor, current_budget_minor, created_at, updated_at, completed_at, archived_at, cover_image_url";
 
 export interface CreateFinancialPlanPatch {
   name: string;
@@ -624,4 +625,22 @@ export async function listPlanAccountLinkRowsForUser(client: TypedSupabaseClient
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as PlanAccountLinkRow[];
+}
+
+/** Sets or clears the cover_image_url on a Plan row. `imageUrl` is a Storage path (or null to clear). */
+export async function updatePlanImageUrl(
+  client: TypedSupabaseClient,
+  userId: string,
+  planId: string,
+  imageUrl: string | null,
+): Promise<FinancialPlanRow> {
+  const { data, error } = await client
+    .from("financial_plans")
+    .update({ cover_image_url: imageUrl })
+    .eq("id", planId)
+    .eq("user_id", userId)
+    .select(PLAN_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as FinancialPlanRow;
 }

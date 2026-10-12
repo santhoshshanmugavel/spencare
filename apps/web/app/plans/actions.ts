@@ -41,6 +41,8 @@ import {
   getPlanDetail,
   listPlansWithSummaries,
   searchTransactionsForPlanAttachment,
+  updatePlanImage,
+  removePlanImage,
   type AuthContext,
   type ListFinancialPlansOptions,
   type SearchTransactionsForPlanOptions,
@@ -270,5 +272,24 @@ export async function setTransactionPlanAction(planId: string, transactionId: st
   const result = await setTransactionPlan.execute(ctx, { transactionId, ...input });
   revalidatePath("/plans");
   revalidatePath(`/plans/${planId}`);
+  return result;
+}
+
+// ── Cover image ──────────────────────────────────────────────────────────
+
+export async function updatePlanImageAction(planId: string, formData: FormData) {
+  const ctx = await requireAuthContext();
+  const file = formData.get("image") as File | null;
+  if (!file) return { ok: false as const, error: { code: "validation_error", message: "No file supplied." } };
+  const fileBytes = new Uint8Array(await file.arrayBuffer());
+  const result = await updatePlanImage.execute(ctx, { planId, fileBytes, declaredMimeType: file.type });
+  if (result.ok) revalidatePath("/plans");
+  return result;
+}
+
+export async function removePlanImageAction(planId: string) {
+  const ctx = await requireAuthContext();
+  const result = await removePlanImage.execute(ctx, { planId });
+  if (result.ok) revalidatePath("/plans");
   return result;
 }

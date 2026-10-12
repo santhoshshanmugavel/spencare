@@ -12,6 +12,7 @@ import { summarizePlan, type PlanCalculationResult } from "./financialPlans.js";
 import { toFinancialPlan, toPlanItem, toPlanTransactionInput } from "../mappers/financialPlanMappers.js";
 import {
   getFinancialPlanRow,
+  getPlanImageSignedUrl,
   listFinancialPlanRows,
   listPlanItemRows,
   listPlanItemRowsForUser,
@@ -251,4 +252,24 @@ export async function getPlanContextForUpcomingSources(ctx: AuthContext): Promis
     goalIdToPlans: buildMap(goalLinks, (l) => l.goal_id),
     accountIdToPlans: buildMap(accountLinks, (l) => l.account_id),
   };
+}
+
+/**
+ * Batch-resolves signed URLs for every plan that has a cover_image_url set,
+ * mirroring resolveGoalImageUrls in queries/goals.ts. Returns a Record keyed
+ * by plan id — plans without an image are absent from the map.
+ */
+export async function resolvePlanImageUrls(
+  ctx: AuthContext,
+  plans: FinancialPlanRow[],
+): Promise<Record<string, string>> {
+  const withImages = plans.filter((p) => p.cover_image_url);
+  if (withImages.length === 0) return {};
+  const entries = await Promise.all(
+    withImages.map(async (p) => {
+      const url = await getPlanImageSignedUrl(ctx.supabase, p.cover_image_url!);
+      return [p.id, url] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
 }
