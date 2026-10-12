@@ -9,13 +9,16 @@ import { PlansGrid, type SerializedPlanWithSummary } from "./plans-grid";
 import { serializePlanCalculations } from "@/lib/plan-calculations-serialization";
 
 const refresh = vi.fn();
+const push = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh, push: vi.fn() }),
+  useRouter: () => ({ refresh, push }),
 }));
 
 vi.mock("./actions", () => ({
   createPlanAction: vi.fn(async () => ({ ok: true, value: {} })),
   updatePlanBudgetAction: vi.fn(async () => ({ ok: true, value: {} })),
+  updatePlanImageAction: vi.fn(async () => ({ ok: true, value: { signedUrl: "https://signed.example/new.png" } })),
+  removePlanImageAction: vi.fn(async () => ({ ok: true, value: {} })),
 }));
 
 function planRow(overrides: Partial<FinancialPlanRow> = {}): FinancialPlanRow {
@@ -42,6 +45,7 @@ function planRow(overrides: Partial<FinancialPlanRow> = {}): FinancialPlanRow {
 function withSummary(
   row: FinancialPlanRow,
   opts: { budgetMinor?: number; spentMinor?: number } = {},
+  coverImageSignedUrl: string | null = null,
 ): SerializedPlanWithSummary {
   const calculations = summarizePlan({
     plan: {
@@ -81,7 +85,7 @@ function withSummary(
     calculations: serializePlanCalculations(calculations),
     itemCount: 0,
     transactionCount: opts.spentMinor != null ? 1 : 0,
-    coverImageSignedUrl: null,
+    coverImageSignedUrl,
   };
 }
 
@@ -162,5 +166,31 @@ describe("<PlansGrid> — date display (Gate 5 §5/§9)", () => {
     render(<PlansGrid initialPlans={plans} masked={false} />);
     expect(screen.getByText(/Dec 1, 2026/)).toBeInTheDocument();
     expect(screen.getByText(/Dec 15, 2026/)).toBeInTheDocument();
+  });
+});
+
+describe("<PlansGrid> — cover image discoverability", () => {
+  it("shows 'Add cover image' placeholder when no image exists (discoverable without hover)", () => {
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    expect(screen.getByRole("button", { name: /add cover image/i })).toBeInTheDocument();
+    expect(screen.getByText(/add cover image/i)).toBeInTheDocument();
+  });
+
+  it("Add cover image placeholder does not navigate — stopPropagation works", async () => {
+    const user = userEvent.setup();
+    push.mockClear();
+    const plans = [withSummary(planRow())];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    const addBtn = screen.getByRole("button", { name: /add cover image/i });
+    await user.click(addBtn);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("shows 'Change' and 'Remove' controls when an image already exists", () => {
+    const plans = [withSummary(planRow(), {}, "https://signed.example/existing.png")];
+    render(<PlansGrid initialPlans={plans} masked={false} />);
+    expect(screen.getByRole("button", { name: /change cover image/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /remove cover image/i })).toBeInTheDocument();
   });
 });
