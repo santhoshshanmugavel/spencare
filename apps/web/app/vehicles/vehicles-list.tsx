@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Car, Plus, Trash2, Fuel, Zap, Truck, Bike, Gauge } from "lucide-react";
+import { Car, Plus, Trash2, Fuel, Zap, Truck, Bike, Gauge, Camera } from "lucide-react";
 import type { VehicleRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createVehicleAction, deleteVehicleAction } from "./actions";
+import { createVehicleAction, deleteVehicleAction, updateVehiclePhotoAction } from "./actions";
 
 // ── Vehicle type config ─────────────────────────────────────────────────────
 
@@ -235,7 +235,7 @@ export function VehiclesList({ initialVehicles, vehiclePhotoUrls = {} }: Vehicle
 
 function VehicleHeroCard({
   vehicle: v,
-  photoUrl,
+  photoUrl: initialPhotoUrl,
   isPending,
   onNavigate,
   onDelete,
@@ -247,6 +247,21 @@ function VehicleHeroCard({
   onDelete: () => void;
 }) {
   const Icon = getIcon(v.vehicle_type);
+  const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl);
+  const [isUploading, startUpload] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.set("image", file);
+    startUpload(async () => {
+      const result = await updateVehiclePhotoAction(v.id, formData);
+      if (result.ok) setPhotoUrl(result.value.signedUrl);
+      if (inputRef.current) inputRef.current.value = "";
+    });
+  }
 
   return (
     <div
@@ -261,6 +276,35 @@ function VehicleHeroCard({
         ) : (
           <Icon className="size-20 text-primary/12" strokeWidth={1} />
         )}
+
+        {/* Upload spinner overlay */}
+        {isUploading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+            <div className="size-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+        )}
+
+        {/* Camera upload button */}
+        {!isUploading && (
+          <button
+            className={`absolute transition-all ${
+              photoUrl
+                ? "bottom-2.5 right-2.5 size-8 rounded-full bg-background/80 backdrop-blur-sm border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 shadow-sm"
+                : "inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100"
+            }`}
+            onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
+            aria-label={photoUrl ? `Change ${v.name} photo` : `Add photo for ${v.name}`}
+          >
+            {photoUrl ? (
+              <Camera className="size-3.5 text-foreground" />
+            ) : (
+              <span className="flex items-center gap-1.5 rounded-xl bg-background/85 backdrop-blur-sm border border-border px-3 py-2 text-xs font-semibold text-foreground shadow-sm">
+                <Camera className="size-3.5" /> Add photo
+              </span>
+            )}
+          </button>
+        )}
+
         {/* Delete button */}
         <button
           className="absolute top-3 right-3 size-7 rounded-full bg-background/70 hover:bg-destructive/10 flex items-center justify-center text-muted-foreground/40 hover:text-destructive transition-all opacity-0 group-hover:opacity-100"
@@ -270,6 +314,7 @@ function VehicleHeroCard({
         >
           <Trash2 className="size-3.5" />
         </button>
+
         {/* Fuel type badge */}
         <div className="absolute bottom-3 left-3">
           <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full capitalize font-medium ${photoUrl ? "bg-background/80 backdrop-blur-sm text-foreground" : "bg-primary/10 text-primary"}`}>
@@ -277,12 +322,21 @@ function VehicleHeroCard({
             {v.fuel_type}
           </span>
         </div>
+
         {/* Archived badge */}
         {v.status === "archived" && (
           <div className="absolute top-3 left-3">
             <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Archived</span>
           </div>
         )}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="sr-only"
+          onChange={handleFileChange}
+        />
       </div>
 
       {/* Info section */}

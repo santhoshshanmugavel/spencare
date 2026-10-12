@@ -19,6 +19,8 @@ import {
   getVehicle,
   getExistingImportGuids,
   searchTransactions,
+  updateVehiclePhoto,
+  removeVehiclePhoto,
   type CreateVehicleInput,
   type UpdateVehicleInput,
   type CreateFuelEntryInput,
@@ -539,6 +541,27 @@ export async function checkImportDuplicatesAction(
   } catch (e) {
     return { ok: false as const, error: { code: "query_failed", message: e instanceof Error ? e.message : "Failed to check duplicates." } };
   }
+}
+
+export async function updateVehiclePhotoAction(vehicleId: string, formData: FormData) {
+  const ctx = await getAuthContext();
+  if (!ctx) return { ok: false as const, error: { code: "unauthenticated", message: "Not signed in." } };
+  const file = formData.get("image");
+  if (!(file instanceof File)) {
+    return { ok: false as const, error: { code: "no_file", message: "Choose an image first." } };
+  }
+  const fileBytes = new Uint8Array(await file.arrayBuffer());
+  const result = await updateVehiclePhoto.execute(ctx, { vehicleId, fileBytes, declaredMimeType: file.type });
+  if (result.ok) revalidatePath("/vehicles");
+  return result;
+}
+
+export async function removeVehiclePhotoAction(vehicleId: string) {
+  const ctx = await getAuthContext();
+  if (!ctx) return { ok: false as const, error: { code: "unauthenticated", message: "Not signed in." } };
+  const result = await removeVehiclePhoto.execute(ctx, { vehicleId });
+  if (result.ok) revalidatePath("/vehicles");
+  return result;
 }
 
 export async function searchTransactionsForExpenseAction(
