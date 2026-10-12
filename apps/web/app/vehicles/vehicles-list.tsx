@@ -2,14 +2,16 @@
 
 import { useState, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Car, Plus, Trash2, Fuel, Zap, Truck, Bike, Gauge, Camera } from "lucide-react";
+import { Car, Plus, Trash2, Fuel, Zap, Truck, Bike, Gauge, ImagePlus, X } from "lucide-react";
 import type { VehicleRow } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createVehicleAction, deleteVehicleAction, updateVehiclePhotoAction } from "./actions";
+import { Loader } from "@/components/spencare/loader";
+import { toastConfirmed, toastError } from "@/lib/toast";
+import { createVehicleAction, deleteVehicleAction, updateVehiclePhotoAction, removeVehiclePhotoAction } from "./actions";
 
 // ── Vehicle type config ─────────────────────────────────────────────────────
 

@@ -105,6 +105,7 @@ export {
   type UpdatePlanImageOutput,
   type RemovePlanImageInput,
 } from "./commands/planImage.js";
+export { getPlanImageSignedUrl } from "@spencare/domain-infra";
 
 export {
   createGoalContributionPlan,
