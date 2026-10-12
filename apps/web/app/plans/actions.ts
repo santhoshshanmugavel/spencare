@@ -283,13 +283,19 @@ export async function updatePlanImageAction(planId: string, formData: FormData) 
   if (!file) return { ok: false as const, error: { code: "validation_error", message: "No file supplied." } };
   const fileBytes = new Uint8Array(await file.arrayBuffer());
   const result = await updatePlanImage.execute(ctx, { planId, fileBytes, declaredMimeType: file.type });
-  if (result.ok) revalidatePath("/plans");
+  if (result.ok) {
+    revalidatePath("/plans");
+    revalidatePath(`/plans/${planId}`);
+  }
   return result;
 }
 
 export async function removePlanImageAction(planId: string) {
   const ctx = await requireAuthContext();
   const result = await removePlanImage.execute(ctx, { planId });
-  if (result.ok) revalidatePath("/plans");
+  if (result.ok) {
+    revalidatePath("/plans");
+    revalidatePath(`/plans/${planId}`);
+  }
   return result;
 }
