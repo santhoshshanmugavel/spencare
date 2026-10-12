@@ -246,9 +246,8 @@ function VehicleHeroCard({
   onNavigate: () => void;
   onDelete: () => void;
 }) {
-  const Icon = getIcon(v.vehicle_type);
   const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl);
-  const [isUploading, startUpload] = useTransition();
+  const [isPendingPhoto, startPhotoTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -256,10 +255,28 @@ function VehicleHeroCard({
     if (!file) return;
     const formData = new FormData();
     formData.set("image", file);
-    startUpload(async () => {
+    startPhotoTransition(async () => {
       const result = await updateVehiclePhotoAction(v.id, formData);
-      if (result.ok) setPhotoUrl(result.value.signedUrl);
+      if (result.ok) {
+        setPhotoUrl(result.value.signedUrl);
+        toastConfirmed("Photo updated.");
+      } else {
+        toastError(result.error.message);
+      }
       if (inputRef.current) inputRef.current.value = "";
+    });
+  }
+
+  function handleRemovePhoto(e: React.MouseEvent) {
+    e.stopPropagation();
+    startPhotoTransition(async () => {
+      const result = await removeVehiclePhotoAction(v.id);
+      if (result.ok) {
+        setPhotoUrl(null);
+        toastConfirmed("Photo removed.");
+      } else {
+        toastError(result.error.message);
+      }
     });
   }
 
@@ -268,44 +285,47 @@ function VehicleHeroCard({
       className="rounded-2xl overflow-hidden bg-card border cursor-pointer hover:border-primary/30 hover:shadow-md transition-all group"
       onClick={onNavigate}
     >
-      {/* Hero section */}
-      <div className="relative h-48 bg-primary/8 flex items-center justify-center overflow-hidden">
+      {/* Hero image — mirrors GoalImageUploader */}
+      <div className="relative h-48 w-full overflow-hidden bg-primary/10 flex items-center justify-center">
         {photoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={photoUrl} alt={v.name} className="size-full object-cover" />
         ) : (
-          <Icon className="size-20 text-primary/12" strokeWidth={1} />
+          <span className="px-4 text-center text-base font-bold text-primary">{v.name}</span>
         )}
 
-        {/* Upload spinner overlay */}
-        {isUploading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-            <div className="size-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        {isPendingPhoto ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/70">
+            <Loader size={24} />
+          </div>
+        ) : (
+          <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1.5 p-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
+              aria-label={photoUrl ? `Replace ${v.name} photo` : `Add photo for ${v.name}`}
+            >
+              <ImagePlus className="size-3.5" aria-hidden="true" />
+              {photoUrl ? "Replace" : "Add image"}
+            </Button>
+            {photoUrl && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleRemovePhoto}
+                aria-label={`Remove ${v.name} photo`}
+              >
+                <X className="size-3.5" aria-hidden="true" />
+                Remove
+              </Button>
+            )}
           </div>
         )}
 
-        {/* Camera upload button */}
-        {!isUploading && (
-          <button
-            className={`absolute transition-all ${
-              photoUrl
-                ? "bottom-2.5 right-2.5 size-8 rounded-full bg-background/80 backdrop-blur-sm border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 shadow-sm"
-                : "inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100"
-            }`}
-            onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
-            aria-label={photoUrl ? `Change ${v.name} photo` : `Add photo for ${v.name}`}
-          >
-            {photoUrl ? (
-              <Camera className="size-3.5 text-foreground" />
-            ) : (
-              <span className="flex items-center gap-1.5 rounded-xl bg-background/85 backdrop-blur-sm border border-border px-3 py-2 text-xs font-semibold text-foreground shadow-sm">
-                <Camera className="size-3.5" /> Add photo
-              </span>
-            )}
-          </button>
-        )}
-
-        {/* Delete button */}
+        {/* Delete vehicle (top-right, hover-only) */}
         <button
           className="absolute top-3 right-3 size-7 rounded-full bg-background/70 hover:bg-destructive/10 flex items-center justify-center text-muted-foreground/40 hover:text-destructive transition-all opacity-0 group-hover:opacity-100"
           disabled={isPending}
@@ -315,17 +335,16 @@ function VehicleHeroCard({
           <Trash2 className="size-3.5" />
         </button>
 
-        {/* Fuel type badge */}
-        <div className="absolute bottom-3 left-3">
+        {/* Fuel badge (top-left) */}
+        <div className="absolute top-3 left-3">
           <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full capitalize font-medium ${photoUrl ? "bg-background/80 backdrop-blur-sm text-foreground" : "bg-primary/10 text-primary"}`}>
             <Fuel className="size-2.5" />
             {v.fuel_type}
           </span>
         </div>
 
-        {/* Archived badge */}
         {v.status === "archived" && (
-          <div className="absolute top-3 left-3">
+          <div className="absolute top-10 left-3">
             <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Archived</span>
           </div>
         )}
@@ -335,7 +354,9 @@ function VehicleHeroCard({
           type="file"
           accept="image/png,image/jpeg,image/webp"
           className="sr-only"
+          aria-label={`Upload photo for ${v.name}`}
           onChange={handleFileChange}
+          onClick={(e) => e.stopPropagation()}
         />
       </div>
 
