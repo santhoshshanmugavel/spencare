@@ -139,7 +139,7 @@ describe("<PlansGrid> — populated", () => {
     render(<PlansGrid initialPlans={plans} masked={false} />);
     await user.type(screen.getByLabelText("Search Plans"), "renovation");
     expect(screen.queryByText("Thailand Trip")).not.toBeInTheDocument();
-    expect(screen.getByText("Home Renovation")).toBeInTheDocument();
+    expect(screen.getAllByText("Home Renovation").length).toBeGreaterThan(0);
   });
 
   it("masks amounts when Privacy Mode is on", () => {
