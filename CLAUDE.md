@@ -550,3 +550,74 @@ configured in the development environment.
 - **No hardcoded secrets.** All secrets from environment; all pg_cron secrets from Supabase Vault.
 - **spencare.vercel.app** is hardcoded in 8 places (instrumentation, Telegram routes, message
   composer, daily summary migration). If the domain changes, update all 8 references.
+
+---
+
+## 24. UI/UX Design Quality Gate
+
+For every task that creates, updates, fixes, or refactors user-facing UI, follow
+`.claude/skills/spencare-product-design/SKILL.md`.
+
+Understand the user goal and relevant product requirements before implementing UI changes.
+Inspect existing components, design tokens (`apps/web/app/globals.css`), and interaction
+patterns. Make deliberate decisions about usability, visual hierarchy, accessibility, and
+responsive behavior.
+
+After implementation, inspect and critique the result, verify relevant interface states, and
+fix meaningful issues within the task's scope.
+
+Apply this rule consistently across web, mobile web, tablet, and mobile interfaces.
+Preserve existing architecture, business logic, data integrity, and working functionality.
+Do not redesign unrelated screens.
+
+Treat user comprehension, task success, trust, accessibility, and consistency as product
+requirements. The full design methodology lives in the skill file — do not duplicate it here.
+
+---
+
+## 25. Engineering Skill System
+
+Skills live in `.claude/skills/`. Invoke the appropriate skill with the `Skill` tool before
+starting work in that domain. Agents for independent reviews live in `.claude/agents/`.
+
+### Skill activation map
+
+| When you are about to… | Invoke skill |
+|------------------------|-------------|
+| Create or modify any user-facing UI | `spencare-product-design` |
+| Implement or change a financial calculation, transaction query, or dashboard metric | `spencare-financial-logic` |
+| Write or apply a database migration, change schema, or regenerate types | `spencare-database` |
+| Add or modify tests for any layer | `spencare-testing` |
+| Implement auth, API routes, server actions, credential handling, or sensitive data access | `spencare-security` |
+| Deploy to production, add env vars, or verify a deployment | `spencare-deployment` |
+
+### Independent review agents
+
+For consequential changes, spawn the appropriate agent for a second opinion before shipping:
+
+| Agent | When to use |
+|-------|------------|
+| `spencare-security-reviewer` | Auth flows, RLS changes, new API/webhook routes, service-role operations |
+| `spencare-code-reviewer` | Financial logic changes, significant new features, fixes to domain core |
+
+Spawn agents with: `Agent({ subagent_type: "spencare-security-reviewer", prompt: "..." })`
+
+### Implementation workflow
+
+Every meaningful feature follows: **Understand → Plan → Implement → Verify → Review → Refine → Report**
+
+1. **Understand** — read requirements, affected code, and relevant skills before touching files.
+2. **Plan** — identify affected layers, required tests, migration implications, and security surface.
+3. **Implement** — follow project conventions; preserve unrelated behavior; validate all inputs.
+4. **Verify** — run `pnpm -r typecheck`, `cd apps/web && pnpm lint`, `pnpm test`, `pnpm build`.
+5. **Review** — check financial correctness, regressions, edge cases, and UX states.
+6. **Refine** — fix verified defects; rerun affected checks.
+7. **Report** — state what changed, checks run and their results, and remaining risks.
+
+**Never claim a check passed unless it was actually run and succeeded.**
+
+### Existing built-in capabilities
+
+The `/code-review` skill provides general-purpose code review.
+The `/security-review` skill provides a general security review.
+The Spencare-specific agents above add domain knowledge layered on top of these.
