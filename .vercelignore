@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+.turbo/
+.next/
+dist/
+build/
+coverage/
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+.netlify/
+.claude/
+supabase/.branches/
+supabase/.temp/
