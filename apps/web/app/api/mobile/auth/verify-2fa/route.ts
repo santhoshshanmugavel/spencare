@@ -1,5 +1,4 @@
 import { createHash } from "crypto";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { mobileVerifyMfaSchema } from "@spencare/validation";
 import { checkRateLimit, RATE_LIMITS } from "@spencare/domain-application";
 import { consumeBackupCode, verifyTotpCode } from "@spencare/domain-core";
@@ -10,20 +9,6 @@ import {
   setBackupCodeHashes,
 } from "@spencare/domain-infra";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
-
-// mobile_mfa_challenges is a new table not yet in the generated types.
-interface MfaChallenge {
-  id: string;
-  user_id: string;
-  encrypted_session: string;
-  expires_at: string;
-  consumed_at: string | null;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mfaChallengesTable(client: SupabaseClient): any {
-  return (client as unknown as { from: (t: string) => unknown }).from("mobile_mfa_challenges");
-}
 
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
@@ -50,10 +35,11 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // Look up the challenge — must be unconsumed and unexpired.
-  const { data: challenge } = (await mfaChallengesTable(serviceClient)
+  const { data: challenge } = await serviceClient
+    .from("mobile_mfa_challenges")
     .select("id, user_id, encrypted_session, expires_at, consumed_at")
     .eq("token_hash", tokenHash)
-    .maybeSingle()) as { data: MfaChallenge | null };
+    .maybeSingle();
 
   if (
     !challenge ||
@@ -100,12 +86,13 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // Atomically consume the challenge (race-safe: guard is "consumed_at IS NULL").
-  const { data: consumed } = (await mfaChallengesTable(serviceClient)
+  const { data: consumed } = await serviceClient
+    .from("mobile_mfa_challenges")
     .update({ consumed_at: new Date().toISOString() })
     .eq("id", challenge.id)
     .is("consumed_at", null)
     .select("id")
-    .maybeSingle()) as { data: { id: string } | null };
+    .maybeSingle();
 
   if (!consumed) {
     // A concurrent request beat us to the consume — the client should retry.

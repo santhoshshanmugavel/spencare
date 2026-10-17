@@ -1,18 +1,9 @@
 import { createHash, randomBytes } from "crypto";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { mobileSignInSchema } from "@spencare/validation";
 import { checkRateLimit, RATE_LIMITS } from "@spencare/domain-application";
 import { encryptSecret } from "@spencare/domain-infra";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
-
-// mobile_mfa_challenges is a new table not yet in the generated types.
-// This typed helper avoids spreading `any` across the route body.
-function mfaChallengesTable(client: SupabaseClient) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (client as unknown as { from: (t: string) => any }).from(
-    "mobile_mfa_challenges",
-  ) as ReturnType<SupabaseClient["from"]>;
-}
 
 function clientIpKey(request: Request): string {
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -101,7 +92,7 @@ export async function POST(request: Request): Promise<Response> {
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
   const expiresAt = new Date(Date.now() + MFA_CHALLENGE_TTL_MS).toISOString();
 
-  const { error: insertError } = await mfaChallengesTable(serviceClient).insert({
+  const { error: insertError } = await serviceClient.from("mobile_mfa_challenges").insert({
     token_hash: tokenHash,
     user_id: user.id,
     encrypted_session: encryptedSession,
