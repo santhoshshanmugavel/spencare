@@ -103,7 +103,7 @@ export function sumByMerchant(
   const totals = new Map<string, number>();
   for (const t of filterToExternalTransactions(txns)) {
     if (t.type !== direction) continue;
-    const merchant = (t.description ?? "Unknown").trim().split(/\s+/)[0] ?? "Unknown";
+    const merchant = (t.description ?? "Unknown").trim().split(/\s+/)[0] || "Unknown";
     totals.set(merchant, (totals.get(merchant) ?? 0) + t.amount_minor);
   }
   const sorted = [...totals.entries()]

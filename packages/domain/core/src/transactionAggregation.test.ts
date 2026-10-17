@@ -195,6 +195,18 @@ describe("sumByMerchant", () => {
     const result = sumByMerchant(txns, "expense");
     expect(result[0]?.merchant).toBe("Unknown");
   });
+
+  it("uses 'Unknown' for empty string description", () => {
+    const txns = [txn({ type: "expense", description: "", amount_minor: 100 })];
+    const result = sumByMerchant(txns, "expense");
+    expect(result[0]?.merchant).toBe("Unknown");
+  });
+
+  it("uses 'Unknown' for whitespace-only description", () => {
+    const txns = [txn({ type: "expense", description: "   ", amount_minor: 100 })];
+    const result = sumByMerchant(txns, "expense");
+    expect(result[0]?.merchant).toBe("Unknown");
+  });
 });
 
 describe("countTransactions", () => {
