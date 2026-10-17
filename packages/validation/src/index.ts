@@ -10,6 +10,9 @@ export {
   totpVerifySchema,
   backupCodeSchema,
   avatarUploadSchema,
+  mobileSignInSchema,
+  mobileVerifyMfaSchema,
+  mobileRefreshSchema,
   type SignUpInput,
   type SignInInput,
   type ForgotPasswordInput,
@@ -19,6 +22,9 @@ export {
   type TotpVerifyInput,
   type BackupCodeInput,
   type AvatarUploadInput,
+  type MobileSignInInput,
+  type MobileVerifyMfaInput,
+  type MobileRefreshInput,
 } from "./auth.js";
 
 export {

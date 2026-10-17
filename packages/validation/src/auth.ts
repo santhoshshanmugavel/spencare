@@ -124,3 +124,23 @@ export const avatarUploadSchema = z.object({
   sizeBytes: z.number().int().positive().max(5 * 1024 * 1024, "Image must be under 5MB."),
 });
 export type AvatarUploadInput = z.infer<typeof avatarUploadSchema>;
+
+// Mobile REST API schemas (no captchaToken -- mobile clients go through
+// their own rate-limit + device-attestation paths, not CAPTCHA).
+
+export const mobileSignInSchema = z.object({
+  email: emailSchema,
+  password: z.string().min(1, "Enter your password."),
+});
+export type MobileSignInInput = z.infer<typeof mobileSignInSchema>;
+
+export const mobileVerifyMfaSchema = z.object({
+  challenge_token: z.string().regex(/^[0-9a-f]{64}$/, "Invalid challenge token."),
+  code: z.string().trim().min(1, "Enter your verification code."),
+});
+export type MobileVerifyMfaInput = z.infer<typeof mobileVerifyMfaSchema>;
+
+export const mobileRefreshSchema = z.object({
+  refresh_token: z.string().min(1, "Refresh token is required."),
+});
+export type MobileRefreshInput = z.infer<typeof mobileRefreshSchema>;
