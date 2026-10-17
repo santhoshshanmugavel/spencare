@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 
 export async function POST(request: Request): Promise<Response> {
   const authHeader = request.headers.get("authorization");
@@ -10,22 +11,22 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Missing authorization header." }, { status: 401 });
   }
 
-  // Use anon client seeded with the access token so signOut scopes to this session.
+  // Validate the token before touching any admin API.
   const anonClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
-
-  // Validate the token first; bail if it's already invalid / expired.
   const { data: userData, error: userError } = await anonClient.auth.getUser(accessToken);
   if (userError || !userData.user) {
-    // The client considers itself signed out; surface success so it clears local storage.
+    // Token already invalid — client should clear local state; return success.
     return Response.json({ success: true });
   }
 
-  // Set the session so signOut targets the correct token.
-  await anonClient.auth.setSession({ access_token: accessToken, refresh_token: "" });
-  await anonClient.auth.signOut({ scope: "local" });
+  // admin.signOut(jwt, scope) properly invalidates the session on the Auth server.
+  // scope:"local" revokes this specific session (identified by the access token)
+  // without affecting the user's other devices.
+  const serviceClient = createServiceRoleSupabaseClient();
+  await serviceClient.auth.admin.signOut(accessToken, "local");
 
   return Response.json({ success: true });
 }

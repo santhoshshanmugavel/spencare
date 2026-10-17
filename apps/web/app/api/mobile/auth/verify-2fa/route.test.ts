@@ -35,8 +35,12 @@ vi.mock("@spencare/domain-infra", () => ({
   setBackupCodeHashes: setBackupCodeHashesSpy,
 }));
 
+const { verifyTotpCodeSpy } = vi.hoisted(() => ({
+  verifyTotpCodeSpy: vi.fn(() => false), // default: TOTP fails
+}));
+
 vi.mock("@spencare/domain-core", () => ({
-  verifyTotpCode: vi.fn(() => false), // default: TOTP fails
+  verifyTotpCode: verifyTotpCodeSpy,
   consumeBackupCode: consumeBackupCodeSpy,
 }));
 
@@ -78,6 +82,7 @@ describe("POST /api/mobile/auth/verify-2fa", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     checkRateLimitSpy.mockResolvedValue(true);
+    verifyTotpCodeSpy.mockReturnValue(false); // default: TOTP fails
     getEncryptedTotpSecretSpy.mockResolvedValue(null);
     getBackupCodeHashesSpy.mockResolvedValue([]);
     consumeBackupCodeSpy.mockReturnValue({ matched: false, remainingHashes: [] });
@@ -171,6 +176,31 @@ describe("POST /api/mobile/auth/verify-2fa", () => {
     consumeBackupCodeSpy.mockReturnValue({ matched: false, remainingHashes: [] });
     const res = await POST(buildRequest({ challenge_token: VALID_TOKEN, code: VALID_CODE }));
     expect(res.status).toBe(401);
+  });
+
+  it("returns session tokens on valid TOTP code", async () => {
+    verifyTotpCodeSpy.mockReturnValueOnce(true);
+    getEncryptedTotpSecretSpy.mockResolvedValue(Buffer.from("encrypted-totp-secret"));
+
+    let callCount = 0;
+    serviceClientFromSpy.mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ data: CHALLENGE_ROW });
+        return Promise.resolve({ data: { id: "challenge-uuid" } });
+      }),
+    });
+
+    const res = await POST(buildRequest({ challenge_token: VALID_TOKEN, code: "123456" }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.access_token).toBe("at");
+    expect(json.refresh_token).toBe("rt");
+    expect(json.mfa_method).toBe("totp");
   });
 
   it("returns session tokens on valid backup code", async () => {

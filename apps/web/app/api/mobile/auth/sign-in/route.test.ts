@@ -116,7 +116,7 @@ describe("POST /api/mobile/auth/sign-in", () => {
     expect(json.user.id).toBe(MOCK_USER.id);
   });
 
-  it("returns challenge_token when MFA is required", async () => {
+  it("returns challenge_token when MFA is required — and NO session tokens", async () => {
     encryptSecretSpy.mockReturnValue(Buffer.from("encrypted"));
     const mockFrom = vi.fn().mockReturnValue({
       select: vi.fn().mockReturnThis(),
@@ -133,6 +133,10 @@ describe("POST /api/mobile/auth/sign-in", () => {
     expect(typeof json.challenge_token).toBe("string");
     expect(json.challenge_token).toHaveLength(64); // 32 random bytes as hex
     expect(json.expires_at).toBeDefined();
+    // CRITICAL security property: the Supabase session must NOT be in the response
+    // before MFA is verified — it is stored server-side encrypted until verify-2fa.
+    expect(json.access_token).toBeUndefined();
+    expect(json.refresh_token).toBeUndefined();
   });
 
   it("returns 500 if challenge insert fails", async () => {
