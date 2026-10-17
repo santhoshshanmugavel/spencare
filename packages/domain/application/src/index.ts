@@ -670,3 +670,7 @@ export {
 } from "./commands/vehiclePhoto.js";
 
 export { getVehiclePhotoSignedUrl } from "@spencare/domain-infra";
+
+
+// F07 — Financial Anomaly Investigator
+export { getAnomalyReport, type AnomalyQuery } from "./queries/anomalyDetection.js";

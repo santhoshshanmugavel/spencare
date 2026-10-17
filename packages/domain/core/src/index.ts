@@ -310,6 +310,27 @@ export {
   OAUTH_ACCESS_TOKEN_TTL_SECONDS,
 } from "./oauth.js";
 
+// F07 — Financial Anomaly Investigator
+export {
+  detectAnomalies,
+  detectLargeTransactions,
+  detectCategorySpikes,
+  detectMerchantSpikes,
+  detectDuplicateCandidates,
+  MIN_BASELINE_MONTHS,
+  MIN_BASELINE_EXPENSES_FOR_LARGE_TX,
+  LARGE_TX_HIGH_MULTIPLIER,
+  LARGE_TX_MEDIUM_MULTIPLIER,
+  SPIKE_HIGH_MULTIPLIER,
+  SPIKE_MEDIUM_MULTIPLIER,
+  DUPLICATE_WINDOW_DAYS,
+  type AnomalyType,
+  type AnomalySeverity,
+  type AnomalyFinding,
+  type AnomalyReport,
+  type AnomalyDetectionInput,
+} from "./anomalyDetection.js";
+
 export {
   computeReserveStatus,
   type ReserveStatus,
