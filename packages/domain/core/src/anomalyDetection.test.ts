@@ -248,6 +248,19 @@ describe("detectMerchantSpikes", () => {
     const current = [expense("c1", 500000, "2026-10-01", { description: "NewMerchant Order" })];
     expect(detectMerchantSpikes(baseInput({ baselineMonthCount: 2, baselineTransactions: baseline, currentTransactions: current }))).toHaveLength(0);
   });
+
+  it("maps empty description to 'Unknown' merchant key (not empty string)", () => {
+    // description="" produces split result [""], whose [0] is ""; using ?? instead of ||
+    // would pass "" through as the merchant key. This tests the || "Unknown" fallback.
+    const baseline = [
+      expense("b1", 10000, "2026-08-01", { description: "" }),
+      expense("b2", 10000, "2026-09-01", { description: "" }),
+    ];
+    const current = [expense("c1", 35000, "2026-10-01", { description: "" })];
+    const findings = detectMerchantSpikes(baseInput({ baselineMonthCount: 2, baselineTransactions: baseline, currentTransactions: current }));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.title).toBe("Merchant spike: Unknown");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -356,5 +369,35 @@ describe("detectAnomalies", () => {
     ];
     const report = detectAnomalies(baseInput({ currentTransactions: current }));
     expect(report.currentPeriodTransactionCount).toBe(1);
+  });
+
+  it("produces identical finding IDs on two identical runs (deterministic IDs)", () => {
+    // The trust-boundary architecture requires that the server can re-run detection
+    // and look up findings by the IDs the client received on initial page load.
+    // If IDs were random (UUID v4), every re-run would produce different IDs and
+    // the findingId lookup in explainAnomaly would always fail.
+    const baseline = Array.from({ length: 10 }, (_, i) =>
+      expense(`b${i}`, 10000, `2026-09-${String(i + 1).padStart(2, "0")}`),
+    );
+    const current = [
+      expense("c1", 35000, "2026-10-01"),
+      expense("c2", 35000, "2026-10-01", { category_id: "cat-rent" }),
+    ];
+    const input = baseInput({ baselineTransactions: baseline, currentTransactions: current });
+    const report1 = detectAnomalies(input);
+    const report2 = detectAnomalies(input);
+    expect(report1.findings.length).toBeGreaterThan(0);
+    expect(report1.findings.map((f) => f.id)).toEqual(report2.findings.map((f) => f.id));
+  });
+
+  it("large_transaction finding ID is stable across runs with the same transaction", () => {
+    const baseline = Array.from({ length: 10 }, (_, i) =>
+      expense(`b${i}`, 10000, `2026-09-${String(i + 1).padStart(2, "0")}`),
+    );
+    const current = [expense("tx-unique-42", 35000, "2026-10-01")];
+    const run1 = detectAnomalies(baseInput({ baselineTransactions: baseline, currentTransactions: current }));
+    const run2 = detectAnomalies(baseInput({ baselineTransactions: baseline, currentTransactions: current }));
+    expect(run1.findings[0]!.id).toBe(run2.findings[0]!.id);
+    expect(run1.findings[0]!.id).toContain("tx-unique-42");
   });
 });

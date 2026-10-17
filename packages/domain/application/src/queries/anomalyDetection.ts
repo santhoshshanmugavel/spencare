@@ -8,6 +8,7 @@
 
 import {
   detectAnomalies,
+  lastDayOfMonth,
   MIN_BASELINE_MONTHS,
   type AnomalyReport,
 } from "@spencare/domain-core";
@@ -38,12 +39,6 @@ function baselineWindowStart(currentStart: string, months: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** Last day of the month whose first day is given as YYYY-MM-01 */
-function lastDayOf(monthStart: string): string {
-  const [year, month] = monthStart.split("-").map(Number);
-  const d = new Date(Date.UTC(year!, month!, 0)); // day 0 of next month = last day of this month
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}
 
 async function fetchTransactions(
   ctx: AuthContext,
@@ -78,14 +73,13 @@ export async function getAnomalyReport(
 ): Promise<AnomalyReport> {
   const baselineMonths = Math.max(1, query.baselineMonths ?? MIN_BASELINE_MONTHS);
   const baselineStart = baselineWindowStart(query.currentPeriod.start, baselineMonths);
-  const baselineEnd = lastDayOf(
-    // One day before currentPeriod.start
-    (() => {
-      const [year, month] = query.currentPeriod.start.split("-").map(Number);
-      const d = new Date(Date.UTC(year!, month! - 1, 0)); // last day of prior month
-      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
-    })(),
-  );
+  // End of the month immediately before currentPeriod.start
+  const baselineEnd = (() => {
+    const [year, month] = query.currentPeriod.start.split("-").map(Number);
+    const d = new Date(Date.UTC(year!, month! - 1, 0)); // last day of prior month
+    const priorMonthStart = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+    return lastDayOfMonth(priorMonthStart);
+  })();
 
   const [currentRows, baselineRows, categoryRows] = await Promise.all([
     fetchTransactions(ctx, query.currentPeriod.start, query.currentPeriod.end, query.accountIds),
@@ -113,6 +107,12 @@ export async function getAnomalyReport(
     transfer_pair_id: row.transfer_pair_id,
   });
 
+  // Only include transactions whose currency matches the query currency.
+  // Without this filter, a user with multi-currency accounts would have INR
+  // and USD amounts compared as if they were the same unit, producing
+  // meaningless anomaly scores.
+  const inCurrency = (row: { currency: string }) => row.currency === query.currency;
+
   const categoryLabels = new Map<string | null, string>(
     categoryRows.map((c) => [c.id, c.name] as [string, string]),
   );
@@ -123,8 +123,8 @@ export async function getAnomalyReport(
     currentPeriod: query.currentPeriod,
     baselinePeriod: { start: baselineStart, end: baselineEnd },
     baselineMonthCount: baselineMonths,
-    currentTransactions: currentRows.map(toAgg),
-    baselineTransactions: baselineRows.map(toAgg),
+    currentTransactions: currentRows.filter(inCurrency).map(toAgg),
+    baselineTransactions: baselineRows.filter(inCurrency).map(toAgg),
     categoryLabels,
   });
 }

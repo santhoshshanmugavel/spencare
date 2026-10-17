@@ -106,8 +106,16 @@ export const DUPLICATE_WINDOW_DAYS = 2;
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function generateId(): string {
-  return crypto.randomUUID();
+/**
+ * Derives a stable, deterministic finding ID from the finding's identifying
+ * fields so that re-running detection on the same data always produces the
+ * same IDs. This is required by the trust-boundary architecture: explainAnomaly
+ * re-runs detection server-side and looks up findings by the IDs the client
+ * received from the initial page load. Non-deterministic IDs (e.g. UUID v4)
+ * would make every lookup fail.
+ */
+function stableId(...parts: Array<string | null>): string {
+  return parts.map((p) => (p ?? "null")).join(":");
 }
 
 function percentile(sortedAsc: number[], p: number): number {
@@ -121,7 +129,7 @@ function percentile(sortedAsc: number[], p: number): number {
 
 /** First-word merchant heuristic — consistent with transactionAggregation.ts sumByMerchant */
 function merchantKey(description: string | null): string {
-  return (description ?? "Unknown").trim().split(/\s+/)[0] ?? "Unknown";
+  return (description ?? "Unknown").trim().split(/\s+/)[0] || "Unknown";
 }
 
 function daysBetween(a: string, b: string): number {
@@ -175,7 +183,7 @@ export function detectLargeTransactions(input: AnomalyDetectionInput): AnomalyFi
 
     const baselineDisplay = Math.round(p90 / 100).toLocaleString();
     findings.push({
-      id: generateId(),
+      id: stableId("lx", tx.id),
       type: "large_transaction",
       severity,
       title: `Large transaction: ${tx.description ?? "Unnamed"}`,
@@ -247,7 +255,7 @@ export function detectCategorySpikes(input: AnomalyDetectionInput): AnomalyFindi
       (categoryId === null ? "Uncategorized" : `Category: ${categoryId}`);
 
     findings.push({
-      id: generateId(),
+      id: stableId("cs", categoryId),
       type: "category_spike",
       severity,
       title: `Spending spike: ${label}`,
@@ -314,7 +322,7 @@ export function detectMerchantSpikes(input: AnomalyDetectionInput): AnomalyFindi
     if (!severity) continue;
 
     findings.push({
-      id: generateId(),
+      id: stableId("ms", merchant),
       type: "merchant_spike",
       severity,
       title: `Merchant spike: ${merchant}`,
@@ -374,7 +382,7 @@ export function detectDuplicateCandidates(input: AnomalyDetectionInput): Anomaly
       flagged.add(a.id);
       flagged.add(b.id);
       findings.push({
-        id: generateId(),
+        id: stableId("dc", ...[a.id, b.id].sort()),
         type: "duplicate_candidate",
         severity: "medium",
         title: `Possible duplicate: ${a.description}`,
@@ -430,6 +438,9 @@ export function detectAnomalies(input: AnomalyDetectionInput): AnomalyReport {
   }
   limitations.push(
     "Anomaly detection identifies patterns that warrant investigation. Findings do not imply fraud or error.",
+  );
+  limitations.push(
+    "The current period reflects transactions available at the time of detection. If the period is not yet complete, comparisons are based on a partial month, which may produce findings earlier or later than a full-month comparison would.",
   );
   limitations.push(
     "Merchant grouping uses the first word of the transaction description as a heuristic. Transactions from the same merchant may appear under different keys if their descriptions vary.",
