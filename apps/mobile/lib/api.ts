@@ -2,7 +2,19 @@
 // All auth state (access token) is supplied by the caller via the options arg;
 // this module has no global mutable state.
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "";
+const API_BASE = process.env.EXPO_PUBLIC_API_URL;
+
+if (!API_BASE) {
+  // Fail loudly at module load so the developer sees this immediately.
+  // In production, Metro will tree-shake the dead branch and this never fires
+  // because EXPO_PUBLIC_API_URL is always set in the production build.
+  throw new Error(
+    "[Spencare] EXPO_PUBLIC_API_URL is not set.\n" +
+      "Create apps/mobile/.env.local and add:\n" +
+      "  EXPO_PUBLIC_API_URL=http://localhost:3000   (iOS Simulator)\n" +
+      "  EXPO_PUBLIC_API_URL=http://10.0.2.2:3000   (Android Emulator)",
+  );
+}
 
 export type ApiError = { error: string | Record<string, unknown> };
 
@@ -44,7 +56,7 @@ async function post<T>(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${API_BASE as string}${path}`, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
