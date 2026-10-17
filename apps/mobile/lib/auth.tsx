@@ -16,6 +16,7 @@ const KEYS = {
   REFRESH_TOKEN: "spencare.refresh_token",
   EXPIRES_AT: "spencare.expires_at",
   USER_ID: "spencare.user_id",
+  USER_EMAIL: "spencare.user_email",
 } as const;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ async function persistSession(s: AuthSession): Promise<void> {
     SecureStore.setItemAsync(KEYS.REFRESH_TOKEN, s.refreshToken),
     SecureStore.setItemAsync(KEYS.EXPIRES_AT, String(s.expiresAt)),
     SecureStore.setItemAsync(KEYS.USER_ID, s.user.id),
+    SecureStore.setItemAsync(KEYS.USER_EMAIL, s.user.email ?? ""),
   ]);
 }
 
@@ -62,18 +64,19 @@ async function clearSession(): Promise<void> {
 }
 
 async function restoreSession(): Promise<AuthSession | null> {
-  const [at, rt, exp, uid] = await Promise.all([
+  const [at, rt, exp, uid, email] = await Promise.all([
     SecureStore.getItemAsync(KEYS.ACCESS_TOKEN),
     SecureStore.getItemAsync(KEYS.REFRESH_TOKEN),
     SecureStore.getItemAsync(KEYS.EXPIRES_AT),
     SecureStore.getItemAsync(KEYS.USER_ID),
+    SecureStore.getItemAsync(KEYS.USER_EMAIL),
   ]);
   if (!at || !rt || !exp || !uid) return null;
   return {
     accessToken: at,
     refreshToken: rt,
     expiresAt: Number(exp),
-    user: { id: uid },
+    user: { id: uid, email: email || undefined },
   };
 }
 
@@ -84,7 +87,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const [isLoading, setIsLoading] = useState(true);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const scheduleRefresh = useCallback((expiresAt: number, refreshToken: string) => {
+  // Passing `user` explicitly prevents a stale-closure bug: when the timer fires
+  // (up to ~1 hour later), session state from the useCallback closure would be
+  // stale. The user identity does not change during a session, so passing it as
+  // an argument is safe.
+  const scheduleRefresh = useCallback((expiresAt: number, refreshToken: string, user: AuthUser) => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     const msUntilExpiry = expiresAt * 1000 - Date.now();
     // Refresh 2 minutes before expiry, or immediately if already close.
@@ -96,18 +103,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           accessToken: refreshed.access_token,
           refreshToken: refreshed.refresh_token,
           expiresAt: refreshed.expires_at,
-          user: session?.user ?? { id: "" },
+          user,
         };
         await persistSession(next);
         setSession(next);
-        scheduleRefresh(next.expiresAt, next.refreshToken);
+        scheduleRefresh(next.expiresAt, next.refreshToken, user);
       } catch {
         // Refresh failed — session is expired; require re-login.
         await clearSession();
         setSession(null);
       }
     }, delay);
-  }, [session]);
+  }, []); // no session dependency — user is passed explicitly, never captured from closure
 
   // Restore persisted session on mount.
   useEffect(() => {
@@ -126,10 +133,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
             };
             await persistSession(next);
             setSession(next);
-            scheduleRefresh(next.expiresAt, next.refreshToken);
+            scheduleRefresh(next.expiresAt, next.refreshToken, restored.user);
           } else {
             setSession(restored);
-            scheduleRefresh(restored.expiresAt, restored.refreshToken);
+            scheduleRefresh(restored.expiresAt, restored.refreshToken, restored.user);
           }
         }
       } catch {
@@ -152,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     ): Promise<{ requiresMfa: true; challengeToken: string } | { requiresMfa: false }> => {
       const result = await api.signIn(email, password);
       if (result.requires_2fa) {
+        // Challenge token is not an authenticated session — do NOT persist it.
         return { requiresMfa: true, challengeToken: result.challenge_token };
       }
       const s: AuthSession = {
@@ -162,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       };
       await persistSession(s);
       setSession(s);
-      scheduleRefresh(s.expiresAt, s.refreshToken);
+      scheduleRefresh(s.expiresAt, s.refreshToken, s.user);
       return { requiresMfa: false };
     },
     [scheduleRefresh],
@@ -170,6 +178,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
 
   const verifyMfa = useCallback(
     async (challengeToken: string, code: string): Promise<void> => {
+      // The real Supabase session is only released here, after MFA succeeds.
+      // A challenge token is never stored as an authenticated session.
       const result = await api.verifyMfa(challengeToken, code);
       const s: AuthSession = {
         accessToken: result.access_token,
@@ -179,7 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       };
       await persistSession(s);
       setSession(s);
-      scheduleRefresh(s.expiresAt, s.refreshToken);
+      scheduleRefresh(s.expiresAt, s.refreshToken, s.user);
     },
     [scheduleRefresh],
   );
@@ -190,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       try {
         await api.signOut(session.accessToken);
       } catch {
-        // Best-effort — clear local state regardless.
+        // Best-effort server revocation — clear local state regardless.
       }
     }
     await clearSession();

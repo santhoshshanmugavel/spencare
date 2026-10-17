@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -13,17 +12,38 @@ import {
 import { router } from "expo-router";
 import { useAuth } from "@/lib/auth";
 
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export default function SignInScreen(): React.JSX.Element {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSignIn(): Promise<void> {
-    if (!email.trim() || !password) return;
+    setError(null);
+
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setError("Email is required.");
+      return;
+    }
+    if (!isValidEmail(trimmedEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (!password) {
+      setError("Password is required.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const result = await signIn(email.trim().toLowerCase(), password);
+      const result = await signIn(trimmedEmail, password);
       if (result.requiresMfa) {
         router.replace({
           pathname: "/(auth)/verify-mfa",
@@ -33,8 +53,15 @@ export default function SignInScreen(): React.JSX.Element {
         router.replace("/(protected)/home");
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Sign in failed.";
-      Alert.alert("Sign in failed", message);
+      // Never surface raw server error messages; use a generic message instead.
+      const raw = err instanceof Error ? err.message : "";
+      if (raw.toLowerCase().includes("network") || raw.toLowerCase().includes("fetch")) {
+        setError("Unable to connect. Check your network and try again.");
+      } else if (raw.toLowerCase().includes("too many")) {
+        setError("Too many attempts. Please wait and try again.");
+      } else {
+        setError("Invalid email or password.");
+      }
     } finally {
       setLoading(false);
     }
@@ -46,29 +73,77 @@ export default function SignInScreen(): React.JSX.Element {
       style={styles.container}
     >
       <View style={styles.form}>
-        <Text style={styles.title}>Spencare</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          secureTextEntry
-          textContentType="password"
-          value={password}
-          onChangeText={setPassword}
-          onSubmitEditing={handleSignIn}
-        />
+        <Text style={styles.brand}>Spencare</Text>
+        <Text style={styles.tagline}>Personal finance, clearly.</Text>
+
+        {error ? (
+          <View style={styles.errorBox} accessibilityRole="alert">
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
+        <View>
+          <Text style={styles.label} nativeID="emailLabel">
+            Email
+          </Text>
+          <TextInput
+            style={styles.input}
+            placeholder="you@example.com"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            accessibilityLabel="Email address"
+            accessibilityLabelledBy="emailLabel"
+            value={email}
+            onChangeText={(v) => {
+              setEmail(v);
+              if (error) setError(null);
+            }}
+            editable={!loading}
+            returnKeyType="next"
+          />
+        </View>
+
+        <View>
+          <Text style={styles.label} nativeID="passwordLabel">
+            Password
+          </Text>
+          <View style={styles.passwordRow}>
+            <TextInput
+              style={[styles.input, styles.passwordInput]}
+              placeholder="Password"
+              secureTextEntry={!showPassword}
+              textContentType="password"
+              accessibilityLabel="Password"
+              accessibilityLabelledBy="passwordLabel"
+              value={password}
+              onChangeText={(v) => {
+                setPassword(v);
+                if (error) setError(null);
+              }}
+              onSubmitEditing={handleSignIn}
+              editable={!loading}
+              returnKeyType="done"
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword((v) => !v)}
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              accessibilityRole="button"
+            >
+              <Text style={styles.eyeButtonText}>{showPassword ? "Hide" : "Show"}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleSignIn}
           disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel="Sign in"
+          accessibilityState={{ disabled: loading, busy: loading }}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
@@ -89,7 +164,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 12,
   },
-  title: { fontSize: 28, fontWeight: "700", marginBottom: 8, textAlign: "center" },
+  brand: {
+    fontSize: 32,
+    fontWeight: "700",
+    textAlign: "center",
+    color: "#1e293b",
+    marginBottom: 2,
+  },
+  tagline: {
+    fontSize: 14,
+    textAlign: "center",
+    color: "#64748b",
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#374151",
+    marginBottom: 4,
+  },
   input: {
     height: 48,
     borderWidth: 1,
@@ -98,6 +191,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 16,
     backgroundColor: "#f8fafc",
+    color: "#1e293b",
+  },
+  passwordRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  passwordInput: {
+    flex: 1,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    borderRightWidth: 0,
+  },
+  eyeButton: {
+    height: 48,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  eyeButtonText: {
+    fontSize: 13,
+    color: "#2563eb",
+    fontWeight: "500",
+  },
+  errorBox: {
+    backgroundColor: "#fef2f2",
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+  errorText: {
+    color: "#b91c1c",
+    fontSize: 14,
   },
   button: {
     height: 48,
