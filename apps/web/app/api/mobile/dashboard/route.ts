@@ -1,0 +1,63 @@
+import { createClient } from "@supabase/supabase-js";
+import { getDashboardSummary } from "@spencare/domain-application";
+import { getProfile } from "@spencare/domain-infra";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
+
+function extractBearerToken(request: Request): string | null {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.toLowerCase().startsWith("bearer ")) return null;
+  return authHeader.slice(7).trim() || null;
+}
+
+export async function GET(request: Request): Promise<Response> {
+  const accessToken = extractBearerToken(request);
+  if (!accessToken) {
+    return Response.json({ error: "Missing authorization header." }, { status: 401 });
+  }
+
+  // Validate the token and get the user identity.
+  const anonClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
+  const { data: userData, error: userError } = await anonClient.auth.getUser(accessToken);
+  if (userError || !userData.user) {
+    return Response.json({ error: "Invalid or expired session." }, { status: 401 });
+  }
+
+  const userId = userData.user.id;
+  const email = userData.user.email ?? "";
+
+  // User-scoped client: all queries run under this user's RLS context.
+  const userClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+      auth: { autoRefreshToken: false, persistSession: false },
+    },
+  );
+
+  const serviceClient = createServiceRoleSupabaseClient();
+
+  const ctx = { userId, email, supabase: userClient, serviceRoleSupabase: serviceClient };
+
+  try {
+    const [summary, profile] = await Promise.all([
+      getDashboardSummary(ctx),
+      getProfile(userClient, userId),
+    ]);
+
+    return Response.json({
+      safeToSpend: summary.safeToSpend,
+      accounts: summary.accounts,
+      goals: summary.goals,
+      upcomingBills: summary.upcomingBills,
+      cashFlow: summary.cashFlow,
+      netWorth: summary.netWorth,
+      privacyMode: profile?.privacy_mode_enabled ?? false,
+    });
+  } catch {
+    return Response.json({ error: "Failed to load dashboard data." }, { status: 500 });
+  }
+}
