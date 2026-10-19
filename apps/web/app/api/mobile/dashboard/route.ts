@@ -52,7 +52,17 @@ export async function GET(request: Request): Promise<Response> {
 
     return Response.json({
       safeToSpend: summary.safeToSpend,
-      accounts: summary.accounts,
+      accounts: summary.accounts.map((a) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        currency: a.currency,
+        balance_minor: a.balance_minor,
+        market_value_minor: a.market_value_minor ?? null,
+        credit_limit_minor: a.credit_limit_minor ?? null,
+        credit_used_minor: a.credit_used_minor ?? null,
+        is_archived: a.is_archived,
+      })),
       goals: summary.goals,
       upcomingBills: summary.upcomingBills.map((b) => ({
         id: b.id,
@@ -60,13 +70,14 @@ export async function GET(request: Request): Promise<Response> {
         expected_amount_minor: b.expected_amount_minor,
         status: b.status,
         definition: {
-          name: b.bill_definitions?.merchant_pattern ?? "",
+          name: b.bill_definitions?.merchant_pattern || "Unknown bill",
           currency,
         },
       })),
       cashFlow: summary.cashFlow,
       netWorth: summary.netWorth,
       privacyMode: profile?.privacy_mode_enabled ?? false,
+      preferredCurrency: currency,
     });
   } catch {
     return Response.json({ error: "Failed to load dashboard data." }, { status: 500 });

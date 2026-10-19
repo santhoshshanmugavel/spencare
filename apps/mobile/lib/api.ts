@@ -45,6 +45,7 @@ export interface AccountJSON {
   type: "bank" | "cash" | "credit_card" | "investment" | "epfo";
   currency: string;
   balance_minor: number;
+  market_value_minor: number | null;
   credit_limit_minor: number | null;
   credit_used_minor: number | null;
   is_archived: boolean;
@@ -87,6 +88,7 @@ export interface DashboardResponse {
   cashFlow: CashFlowJSON;
   netWorth: NetWorthJSON;
   privacyMode: boolean;
+  preferredCurrency: string;
 }
 
 export interface SignInNoMfaResponse {

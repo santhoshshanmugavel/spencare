@@ -104,7 +104,11 @@ function AccountsCard({
             <Text style={styles.rowSub}>{ACCOUNT_TYPE_LABELS[a.type] ?? a.type}</Text>
           </View>
           <Text style={styles.rowAmount}>
-            {formatMinor(a.balance_minor, a.currency, privacyMode)}
+            {a.type === "investment"
+              ? a.market_value_minor !== null
+                ? formatMinor(a.market_value_minor, a.currency, privacyMode)
+                : "—"
+              : formatMinor(a.balance_minor, a.currency, privacyMode)}
           </Text>
         </View>
       ))}
@@ -114,12 +118,13 @@ function AccountsCard({
 
 function CashFlowCard({
   cashFlow,
+  currency,
   privacyMode,
 }: {
   cashFlow: DashboardResponse["cashFlow"];
+  currency: string;
   privacyMode: boolean;
 }): React.JSX.Element {
-  const currency = "INR";
   return (
     <Card>
       <View style={styles.cashFlowRow}>
@@ -214,20 +219,26 @@ function BillsCard({
   return (
     <Card>
       {bills.map((b, i) => {
+        // Timezone-safe: normalise both sides to UTC midnight using local date
+        // components so the day boundary matches what the user sees on their
+        // clock regardless of UTC offset direction.
         const due = new Date(b.expected_date + "T00:00:00Z");
-        const today = new Date();
-        const daysUntil = Math.ceil((due.getTime() - today.getTime()) / 86400000);
+        const now = new Date();
+        const todayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+        const daysUntil = Math.round((due.getTime() - todayUTC.getTime()) / 86400000);
         const dueSoon = daysUntil <= 3;
         return (
           <View key={b.id} style={[styles.row, i < bills.length - 1 && styles.rowBorder]}>
             <View>
-              <Text style={styles.rowLabel}>{b.definition?.name ?? "Bill"}</Text>
+              <Text style={styles.rowLabel}>{b.definition?.name || "Bill"}</Text>
               <Text style={[styles.rowSub, dueSoon && styles.warning]}>
                 {daysUntil <= 0 ? "Due today" : daysUntil === 1 ? "Due tomorrow" : `Due in ${daysUntil} days`}
               </Text>
             </View>
             <Text style={[styles.rowAmount, dueSoon && styles.warning]}>
-              {formatMinor(b.expected_amount_minor ?? 0, b.definition?.currency ?? "INR", privacyMode)}
+              {b.expected_amount_minor !== null
+                ? formatMinor(b.expected_amount_minor, b.definition?.currency ?? "INR", privacyMode)
+                : "—"}
             </Text>
           </View>
         );
@@ -315,7 +326,7 @@ export default function HomeScreen(): React.JSX.Element {
 
       {/* This month */}
       <SectionLabel label="This Month" />
-      <CashFlowCard cashFlow={data.cashFlow} privacyMode={privacyMode} />
+      <CashFlowCard cashFlow={data.cashFlow} currency={data.preferredCurrency} privacyMode={privacyMode} />
 
       {/* Accounts */}
       <SectionLabel label="Accounts" />
