@@ -9,21 +9,14 @@ describe("<CashFlowTabs>", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("renders all tabs as real links, Bills is removed", () => {
+  it("renders all tabs as real links, Bills and Investigate are removed", () => {
     render(<CashFlowTabs active="transactions" />);
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/cash-flow");
     expect(screen.getByRole("link", { name: "Transactions" })).toHaveAttribute("href", "/cash-flow/transactions");
     expect(screen.getByRole("link", { name: "Budgets" })).toHaveAttribute("href", "/cash-flow/budgets");
     expect(screen.getByRole("link", { name: "Upcoming" })).toHaveAttribute("href", "/cash-flow/upcoming");
-    expect(screen.getByRole("link", { name: "Investigate" })).toHaveAttribute("href", "/cash-flow/investigate");
     expect(screen.queryByRole("link", { name: "Bills" })).toBeNull();
-  });
-
-  it("renders Investigate tab as active when active=investigate", () => {
-    render(<CashFlowTabs active="investigate" />);
-    const investigate = screen.getByRole("link", { name: "Investigate" });
-    const overview = screen.getByRole("link", { name: "Overview" });
-    expect(investigate.className).not.toBe(overview.className);
+    expect(screen.queryByRole("link", { name: "Investigate" })).toBeNull();
   });
 
   it("marks the active tab distinctly from the others", () => {
