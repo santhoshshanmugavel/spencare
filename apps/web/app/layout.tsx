@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Google_Sans_Flex, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
+import { Analytics } from "@vercel/analytics/next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { ClarityLoader } from "@/components/clarity-loader";
@@ -83,6 +84,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Toaster />
           </TooltipProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
