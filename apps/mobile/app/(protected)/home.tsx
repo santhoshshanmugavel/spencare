@@ -214,7 +214,7 @@ function BillsCard({
   return (
     <Card>
       {bills.map((b, i) => {
-        const due = new Date(b.due_date);
+        const due = new Date(b.expected_date + "T00:00:00Z");
         const today = new Date();
         const daysUntil = Math.ceil((due.getTime() - today.getTime()) / 86400000);
         const dueSoon = daysUntil <= 3;
@@ -227,7 +227,7 @@ function BillsCard({
               </Text>
             </View>
             <Text style={[styles.rowAmount, dueSoon && styles.warning]}>
-              {formatMinor(b.expected_amount_minor, b.definition?.currency ?? "INR", privacyMode)}
+              {formatMinor(b.expected_amount_minor ?? 0, b.definition?.currency ?? "INR", privacyMode)}
             </Text>
           </View>
         );

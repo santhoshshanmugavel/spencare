@@ -48,11 +48,22 @@ export async function GET(request: Request): Promise<Response> {
       getProfile(userClient, userId),
     ]);
 
+    const currency = profile?.preferred_currency ?? "INR";
+
     return Response.json({
       safeToSpend: summary.safeToSpend,
       accounts: summary.accounts,
       goals: summary.goals,
-      upcomingBills: summary.upcomingBills,
+      upcomingBills: summary.upcomingBills.map((b) => ({
+        id: b.id,
+        expected_date: b.expected_date,
+        expected_amount_minor: b.expected_amount_minor,
+        status: b.status,
+        definition: {
+          name: b.bill_definitions?.merchant_pattern ?? "",
+          currency,
+        },
+      })),
       cashFlow: summary.cashFlow,
       netWorth: summary.netWorth,
       privacyMode: profile?.privacy_mode_enabled ?? false,

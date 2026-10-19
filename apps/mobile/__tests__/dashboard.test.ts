@@ -48,7 +48,7 @@ const buildDashboard = (overrides: Partial<DashboardResponse> = {}): DashboardRe
     { id: "g2", name: "Laptop", target_amount_minor: 150000, saved_amount_minor: 150000, target_date: null, status: "completed" },
   ],
   upcomingBills: [
-    { id: "b1", expected_amount_minor: 50000, due_date: new Date(Date.now() + 2 * 86400000).toISOString(), status: "open", definition: { name: "Electricity", currency: "INR" } },
+    { id: "b1", expected_amount_minor: 50000, expected_date: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10), status: "open", definition: { name: "Electricity", currency: "INR" } },
   ],
   cashFlow: { incomeMinor: 500000, expenseMinor: 300000, netMinor: 200000 },
   netWorth: {

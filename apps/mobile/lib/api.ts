@@ -61,8 +61,8 @@ export interface GoalJSON {
 
 export interface BillJSON {
   id: string;
-  expected_amount_minor: number;
-  due_date: string;
+  expected_amount_minor: number | null;
+  expected_date: string;
   status: string;
   definition?: { name: string; currency: string };
 }
