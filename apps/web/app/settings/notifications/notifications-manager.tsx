@@ -475,12 +475,6 @@ const ALERT_CATEGORIES = [
     eventTypePrefix: "COMMITMENT",
   },
   {
-    key: "loan",
-    label: "Loan reminders",
-    description: "Upcoming and overdue loan payment reminders",
-    eventTypePrefix: "LOAN",
-  },
-  {
     key: "bill",
     label: "Bill reminders",
     description: "Upcoming and overdue bill payment reminders",
