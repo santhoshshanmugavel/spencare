@@ -89,12 +89,14 @@ function GoalCard({
   goal,
   privacyMode,
   onContribute,
+  onWithdraw,
   onEdit,
   onArchive,
 }: {
   goal: GoalDetailJSON;
   privacyMode: boolean;
   onContribute: (g: GoalDetailJSON) => void;
+  onWithdraw: (g: GoalDetailJSON) => void;
   onEdit: (g: GoalDetailJSON) => void;
   onArchive: (g: GoalDetailJSON) => void;
 }) {
@@ -109,6 +111,9 @@ function GoalCard({
     const actions: { text: string; style?: "destructive" | "cancel" | "default"; onPress?: () => void }[] = [];
     if (!isArchived && !isCompleted) {
       actions.push({ text: "Add contribution", onPress: () => onContribute(goal) });
+      if (goal.saved_amount_minor > 0) {
+        actions.push({ text: "Withdraw funds", onPress: () => onWithdraw(goal) });
+      }
       actions.push({ text: "Edit goal", onPress: () => onEdit(goal) });
     }
     if (!isArchived) {
@@ -639,6 +644,132 @@ function ContributeModal({
   );
 }
 
+// ── WithdrawModal ─────────────────────────────────────────────────────────────
+
+function WithdrawModal({
+  visible,
+  goal,
+  onClose,
+  onSaved,
+  accounts,
+  accessToken,
+}: {
+  visible: boolean;
+  goal: GoalDetailJSON;
+  onClose: () => void;
+  onSaved: (updatedGoal: GoalDetailJSON | null) => void;
+  accounts: AccountJSON[];
+  accessToken: string;
+}) {
+  const [amountText, setAmountText] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const eligibleAccounts = accounts.filter(isGoalFundingEligible);
+
+  useEffect(() => {
+    if (visible) {
+      setAmountText("");
+      setSelectedAccountId(
+        eligibleAccounts.find((a) => a.id === goal.funding_account_id)?.id ??
+        (eligibleAccounts.length > 0 ? eligibleAccounts[0].id : null)
+      );
+      setError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, goal.funding_account_id]);
+
+  async function handleSave() {
+    setError(null);
+    const amountMinor = majorToMinor(amountText);
+    if (amountMinor <= 0) { setError("Enter a withdrawal amount greater than zero."); return; }
+    if (amountMinor > goal.saved_amount_minor) {
+      setError("Withdrawal cannot exceed the saved amount.");
+      return;
+    }
+    if (!selectedAccountId) { setError("Select an account."); return; }
+
+    setSaving(true);
+    try {
+      const res = await api.withdrawGoal(
+        {
+          goal_id: goal.id,
+          account_id: selectedAccountId,
+          amount_minor: amountMinor,
+        },
+        accessToken,
+      );
+      onSaved(res.goal);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to record withdrawal.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={styles.modalWrapper} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose} style={styles.modalCancelBtn}>
+            <Text style={styles.modalCancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Withdraw</Text>
+          <TouchableOpacity onPress={handleSave} style={styles.modalSaveBtn} disabled={saving}>
+            <Text style={[styles.modalSaveText, saving && styles.dimmed]}>
+              {saving ? "Saving…" : "Save"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+          <View style={styles.contributeGoalInfo}>
+            <Text style={styles.contributeGoalName}>{goal.name}</Text>
+            <Text style={styles.contributeGoalRemaining}>
+              Saved: {formatMoney(goal.saved_amount_minor)}
+            </Text>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>Amount to withdraw (₹)</Text>
+            <TextInput
+              style={styles.formInput}
+              placeholder="0.00"
+              keyboardType="decimal-pad"
+              value={amountText}
+              onChangeText={setAmountText}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>To account</Text>
+            {eligibleAccounts.length === 0 ? (
+              <Text style={styles.emptyPicker}>No eligible accounts.</Text>
+            ) : (
+              eligibleAccounts.map((a) => (
+                <TouchableOpacity
+                  key={a.id}
+                  style={[styles.pickerRow, selectedAccountId === a.id && styles.pickerRowSelected]}
+                  onPress={() => setSelectedAccountId(a.id)}
+                >
+                  <Text style={[styles.pickerRowText, selectedAccountId === a.id && styles.pickerRowTextSelected]}>
+                    {a.name}
+                  </Text>
+                  {selectedAccountId === a.id && <Text style={styles.checkmark}>✓</Text>}
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+
+          {error && <Text style={styles.formError}>{error}</Text>}
+          <View style={styles.bottomPad} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 // ── GoalsScreen ───────────────────────────────────────────────────────────────
 
 export default function GoalsScreen() {
@@ -652,6 +783,7 @@ export default function GoalsScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingGoal, setEditingGoal] = useState<GoalDetailJSON | null>(null);
   const [contributingGoal, setContributingGoal] = useState<GoalDetailJSON | null>(null);
+  const [withdrawingGoal, setWithdrawingGoal] = useState<GoalDetailJSON | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(async (silent = false) => {
@@ -762,6 +894,7 @@ export default function GoalsScreen() {
               goal={item}
               privacyMode={privacyMode}
               onContribute={(g) => setContributingGoal(g)}
+              onWithdraw={(g) => setWithdrawingGoal(g)}
               onEdit={(g) => setEditingGoal(g)}
               onArchive={handleArchive}
             />
@@ -816,6 +949,24 @@ export default function GoalsScreen() {
           onClose={() => setContributingGoal(null)}
           onSaved={(updatedGoal) => {
             setContributingGoal(null);
+            if (updatedGoal) {
+              setGoals((prev) => prev.map((g) => (g.id === updatedGoal.id ? updatedGoal : g)));
+            } else {
+              load(true);
+            }
+          }}
+          accounts={accounts}
+          accessToken={session?.accessToken ?? ""}
+        />
+      )}
+
+      {withdrawingGoal && (
+        <WithdrawModal
+          visible={true}
+          goal={withdrawingGoal}
+          onClose={() => setWithdrawingGoal(null)}
+          onSaved={(updatedGoal) => {
+            setWithdrawingGoal(null);
             if (updatedGoal) {
               setGoals((prev) => prev.map((g) => (g.id === updatedGoal.id ? updatedGoal : g)));
             } else {

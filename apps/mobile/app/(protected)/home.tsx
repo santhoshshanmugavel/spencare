@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { api, type DashboardResponse, type MoneyJSON } from "@/lib/api";
+import { api, type BudgetWithUsageJSON, type DashboardResponse, type MoneyJSON } from "@/lib/api";
 import { useTheme, radius, spacing, typography, type Theme } from "@/lib/theme";
 
 // ── Money formatting ─────────────────────────────────────────────────────────
@@ -314,6 +314,94 @@ function makeGoalStyles(t: Theme) {
   });
 }
 
+function BudgetsCard({
+  budgets,
+  currency,
+  privacyMode,
+  t,
+}: {
+  budgets: BudgetWithUsageJSON[];
+  currency: string;
+  privacyMode: boolean;
+  t: Theme;
+}): React.JSX.Element {
+  const styles = useMemo(() => makeBudgetStyles(t), [t]);
+  const top = [...budgets]
+    .sort((a, b) => b.percentUsed - a.percentUsed)
+    .slice(0, 3);
+  if (top.length === 0) {
+    return (
+      <Card t={t}>
+        <Text style={styles.emptyText}>No budgets set up</Text>
+      </Card>
+    );
+  }
+  return (
+    <Card t={t}>
+      {top.map((b, i) => {
+        const pct = Math.min(b.percentUsed / 100, 1);
+        const barColor = b.percentUsed >= 100 ? t.destructive : b.percentUsed >= 80 ? t.warning : t.income;
+        return (
+          <View key={b.id} style={[styles.budgetItem, i < top.length - 1 && styles.budgetBorder]}>
+            <View style={styles.budgetHeader}>
+              <Text style={styles.budgetName} numberOfLines={1}>
+                {b.categoryName ?? b.categoryId}
+              </Text>
+              <Text style={[styles.budgetPct, { color: barColor }]}>
+                {privacyMode ? "••%" : `${Math.round(b.percentUsed)}%`}
+              </Text>
+            </View>
+            <View style={styles.progressBg}>
+              <View style={[styles.progressFill, { width: `${pct * 100}%` as `${number}%`, backgroundColor: barColor }]} />
+            </View>
+            <Text style={styles.budgetAmounts}>
+              {privacyMode
+                ? "•••• / ••••"
+                : `${formatMinor(b.spentMinor, currency, false)} / ${formatMinor(b.limitMinor, currency, false)}`}
+            </Text>
+          </View>
+        );
+      })}
+    </Card>
+  );
+}
+
+function makeBudgetStyles(t: Theme) {
+  return StyleSheet.create({
+    budgetItem: { paddingVertical: spacing.sm },
+    budgetBorder: { borderBottomWidth: 1, borderBottomColor: t.separator },
+    budgetHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: spacing.xs,
+    },
+    budgetName: {
+      fontSize: typography.size.md,
+      fontWeight: typography.weight.medium,
+      color: t.foreground,
+      flex: 1,
+      marginRight: spacing.sm,
+    },
+    budgetPct: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+    progressBg: {
+      height: 6,
+      backgroundColor: t.separator,
+      borderRadius: radius.pill,
+      overflow: "hidden",
+      marginBottom: spacing.xs,
+    },
+    progressFill: { height: "100%", borderRadius: radius.pill },
+    budgetAmounts: { fontSize: typography.size.xs, color: t.foregroundSubtle },
+    emptyText: {
+      fontSize: typography.size.base,
+      color: t.foregroundSubtle,
+      textAlign: "center",
+      paddingVertical: spacing.sm,
+    },
+  });
+}
+
 function BillsCard({
   bills,
   privacyMode,
@@ -389,7 +477,7 @@ function makeRowStyles(t: Theme) {
 type State =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "success"; data: DashboardResponse };
+  | { status: "success"; data: DashboardResponse; budgets: BudgetWithUsageJSON[] };
 
 export default function HomeScreen(): React.JSX.Element {
   const { session } = useAuth();
@@ -407,8 +495,11 @@ export default function HomeScreen(): React.JSX.Element {
       if (mode === "full") setState({ status: "loading" });
       if (mode === "refresh") setRefreshing(true);
       try {
-        const data = await api.getDashboard(session.accessToken);
-        setState({ status: "success", data });
+        const [data, budgetsRes] = await Promise.all([
+          api.getDashboard(session.accessToken),
+          api.getBudgets(session.accessToken).catch(() => ({ budgets: [] as BudgetWithUsageJSON[] })),
+        ]);
+        setState({ status: "success", data, budgets: budgetsRes.budgets });
         hasLoadedRef.current = true;
       } catch (e) {
         // Silent refreshes on focus never surface an error — stale data is
@@ -459,7 +550,7 @@ export default function HomeScreen(): React.JSX.Element {
     );
   }
 
-  const { data } = state;
+  const { data, budgets } = state;
   const { privacyMode } = data;
   const now = new Date();
   const hour = now.getHours();
@@ -493,6 +584,14 @@ export default function HomeScreen(): React.JSX.Element {
         <>
           <SectionLabel label="Goals" t={t} />
           <GoalsCard goals={data.goals} privacyMode={privacyMode} t={t} />
+        </>
+      )}
+
+      {/* Budgets */}
+      {budgets.length > 0 && (
+        <>
+          <SectionLabel label="Budgets" t={t} />
+          <BudgetsCard budgets={budgets} currency={data.preferredCurrency} privacyMode={privacyMode} t={t} />
         </>
       )}
 

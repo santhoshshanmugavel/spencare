@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   listBudgetsWithUsage,
+  listCategories,
   createBudget,
   updateBudget,
   deleteBudget,
@@ -64,8 +65,16 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const budgets = await listBudgetsWithUsage(ctx, periodStart);
-    return Response.json({ budgets });
+    const [budgets, categories] = await Promise.all([
+      listBudgetsWithUsage(ctx, periodStart),
+      listCategories(ctx),
+    ]);
+    const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+    const enriched = budgets.map((b) => ({
+      ...b,
+      categoryName: categoryMap.get(b.categoryId) ?? b.categoryId,
+    }));
+    return Response.json({ budgets: enriched });
   } catch {
     return Response.json({ error: "Failed to load budgets." }, { status: 500 });
   }

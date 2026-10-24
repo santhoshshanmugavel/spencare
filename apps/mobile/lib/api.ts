@@ -171,6 +171,7 @@ export interface CategoryJSON {
   id: string;
   name: string;
   icon: string | null;
+  is_system: boolean;
 }
 
 export interface CategoriesResponse {
@@ -266,6 +267,7 @@ export type BudgetStatus = "under" | "near_limit" | "exceeded";
 export interface BudgetWithUsageJSON {
   id: string;
   categoryId: string;
+  categoryName?: string;
   periodStart: string;
   periodEnd: string;
   isRecurring: boolean;
@@ -393,6 +395,68 @@ async function del<T>(path: string, body: unknown, accessToken: string): Promise
   return data as T;
 }
 
+// ── Bills types ───────────────────────────────────────────────────────────────
+
+export interface BillPredictionJSON {
+  id: string;
+  definition_id: string;
+  expected_date: string;
+  expected_amount_minor: number | null;
+  status: "open" | "overdue" | "matched" | "skipped";
+  paid_at: string | null;
+  actual_amount_minor: number | null;
+  name: string;
+  recurrence_interval: string;
+  currency: string;
+  category_id: string | null;
+}
+
+export interface BillsResponse {
+  bills: BillPredictionJSON[];
+}
+
+export interface MarkBillPaidBody {
+  action: "mark_paid";
+  prediction_id: string;
+  account_id: string;
+  category_id: string;
+  amount_minor: number;
+  occurred_at: string;
+  merchant?: string;
+  description?: string;
+}
+
+export interface CreateBillBody {
+  merchant_pattern: string;
+  recurrence_interval: "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "irregular";
+  expected_amount_minor?: number | null;
+  currency?: string;
+  category_id?: string | null;
+}
+
+// ── Spensa AI types ───────────────────────────────────────────────────────────
+
+export interface SpensaMessageBody {
+  conversationId: string | null;
+  content: string;
+}
+
+// ── Profile types ─────────────────────────────────────────────────────────────
+
+export interface ProfileJSON {
+  display_name: string | null;
+  preferred_currency: string;
+  timezone: string | null;
+  privacy_mode_enabled: boolean;
+  onboarding_completed: boolean;
+}
+
+export interface UpdateProfileBody {
+  displayName?: string;
+  preferredCurrency?: string;
+  timezone?: string;
+}
+
 export const api = {
   getDashboard: (accessToken: string) =>
     get<DashboardResponse>("/api/mobile/dashboard", accessToken),
@@ -471,6 +535,27 @@ export const api = {
   getCategories: (accessToken: string) =>
     get<CategoriesResponse>("/api/mobile/categories", accessToken),
 
+  createCategory: (body: { name: string; icon?: string }, accessToken: string) =>
+    post<{ category: CategoryJSON }>("/api/mobile/categories", body, accessToken),
+
+  updateCategory: (body: { categoryId: string; name?: string; icon?: string | null }, accessToken: string) =>
+    patch<{ category: CategoryJSON }>("/api/mobile/categories", body, accessToken),
+
+  deleteCategory: (categoryId: string, reassignToCategoryId: string, accessToken: string) =>
+    del<void>("/api/mobile/categories", { categoryId, reassignToCategoryId }, accessToken),
+
+  updateBill: (
+    body: {
+      bill_id: string;
+      merchant_pattern?: string;
+      expected_amount_minor?: number | null;
+      recurrence_interval?: string;
+      category_id?: string | null;
+    },
+    accessToken: string,
+  ) =>
+    patch<{ bill: unknown }>("/api/mobile/bills", { action: "update", ...body }, accessToken),
+
   // Privacy mode
   getPrivacyMode: (accessToken: string) =>
     get<PrivacyModeResponse>("/api/mobile/profile/privacy-mode", accessToken),
@@ -493,6 +578,9 @@ export const api = {
   addContribution: (body: AddContributionBody, accessToken: string) =>
     post<ContributionResponse>("/api/mobile/goals/contributions", body, accessToken),
 
+  withdrawGoal: (body: AddContributionBody, accessToken: string) =>
+    post<ContributionResponse>("/api/mobile/goals/withdrawals", body, accessToken),
+
   // Budgets
   getBudgets: (accessToken: string, periodStart?: string) => {
     const qs = periodStart ? `?period_start=${periodStart}` : "";
@@ -507,4 +595,38 @@ export const api = {
 
   deleteBudget: (budgetId: string, accessToken: string) =>
     del<void>("/api/mobile/budgets", { budget_id: budgetId }, accessToken),
+
+  // Bills
+  getBills: (accessToken: string, status?: "upcoming" | "paid" | "all") => {
+    const qs = status ? `?status=${status}` : "";
+    return get<BillsResponse>(`/api/mobile/bills${qs}`, accessToken);
+  },
+
+  createBill: (body: CreateBillBody, accessToken: string) =>
+    post<{ bill: unknown }>("/api/mobile/bills", body, accessToken),
+
+  markBillPaid: (body: MarkBillPaidBody, accessToken: string) =>
+    patch<{ success: boolean; transaction?: unknown }>("/api/mobile/bills", body, accessToken),
+
+  deleteBill: (billId: string, accessToken: string) =>
+    del<void>("/api/mobile/bills", { bill_id: billId }, accessToken),
+
+  // Spensa AI — returns a fetch Response with SSE stream
+  spensaChat: (body: SpensaMessageBody, accessToken: string): Promise<Response> => {
+    return fetch(`${API_BASE as string}/api/mobile/spensa`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+  },
+
+  // Profile
+  getProfile: (accessToken: string) =>
+    get<{ profile: ProfileJSON }>("/api/mobile/profile/me", accessToken),
+
+  updateProfile: (body: UpdateProfileBody, accessToken: string) =>
+    patch<{ profile: ProfileJSON }>("/api/mobile/profile/me", body, accessToken),
 };

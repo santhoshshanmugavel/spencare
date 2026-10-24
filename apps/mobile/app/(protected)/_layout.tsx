@@ -70,6 +70,20 @@ export default function ProtectedLayout(): React.JSX.Element {
         }}
       />
       <Tabs.Screen
+        name="upcoming"
+        options={{
+          title: "Upcoming",
+          tabBarIcon: ({ color }) => <TabIcon symbol="📅" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="spensa"
+        options={{
+          title: "Spensa",
+          tabBarIcon: ({ color }) => <TabIcon symbol="✦" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",

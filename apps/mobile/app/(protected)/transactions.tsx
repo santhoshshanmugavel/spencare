@@ -846,6 +846,7 @@ export default function TransactionsScreen() {
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   function clearFilters() {
     setFilterAccountId(null);
@@ -945,7 +946,18 @@ export default function TransactionsScreen() {
     );
   }
 
-  const sections = buildSections(transactions);
+  const filteredTransactions = searchQuery.trim()
+    ? transactions.filter((tx) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          tx.merchant?.toLowerCase().includes(q) ||
+          tx.item_name?.toLowerCase().includes(q) ||
+          tx.description?.toLowerCase().includes(q) ||
+          tx.category_name?.toLowerCase().includes(q)
+        );
+      })
+    : transactions;
+  const sections = buildSections(filteredTransactions);
   const items = flatten(sections);
   const currentFilters: ActiveFilters = {
     accountId: filterAccountId,
@@ -961,6 +973,25 @@ export default function TransactionsScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.screenTitle}>Transactions</Text>
+
+      {/* Search bar */}
+      <View style={styles.searchBar}>
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search merchant, category…"
+          placeholderTextColor="#9CA3AF"
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          accessibilityLabel="Search transactions"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.searchClear} accessibilityLabel="Clear search">
+            <Text style={styles.searchClearText}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Filter bar */}
       <View style={styles.filterBar}>
@@ -1115,6 +1146,27 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: "#F5F5F5",
   },
+  // Search bar
+  searchBar: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    paddingHorizontal: 12,
+    height: 40,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#737373",
+    height: 40,
+  },
+  searchClear: { padding: 4 },
+  searchClearText: { fontSize: 12, color: "#999" },
   // Filter bar
   filterBar: { backgroundColor: "#F5F5F5", paddingVertical: 6, paddingBottom: 8 },
   filterBarContent: { paddingHorizontal: 16, gap: 8, flexDirection: "row", alignItems: "center" },
