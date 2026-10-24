@@ -3,7 +3,6 @@ import {
   listAccounts,
   listCategories,
   listCommitments,
-  listAllLoans,
   getUpcomingProjection,
   getUpcomingBills,
   getPlanContextForUpcomingSources,
@@ -46,13 +45,12 @@ export default async function UpcomingPage() {
   const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   const windowEnd = new Date(Date.now() + 395 * 86_400_000).toISOString().slice(0, 10);
 
-  const [accounts, categories, profile, projection, commitments, loans, bills, planContext, _displayProfile] = await Promise.all([
+  const [accounts, categories, profile, projection, commitments, bills, planContext, _displayProfile] = await Promise.all([
     listAccounts(ctx),
     listCategories(ctx),
     getProfile(ctx),
     getUpcomingProjection(ctx, { startDate: currentMonthStart, endDate: windowEnd }),
     listCommitments(ctx),
-    listAllLoans(ctx),
     getUpcomingBills(ctx),
     getPlanContextForUpcomingSources(ctx),
     getProfileForDisplay(ctx).catch(() => null),
@@ -84,7 +82,6 @@ export default async function UpcomingPage() {
         <UpcomingDashboard
           events={projection.events}
           commitments={commitments}
-          loans={loans}
           bills={bills}
           accounts={accounts}
           categories={categories}

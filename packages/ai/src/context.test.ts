@@ -35,7 +35,6 @@ async function setupMocks(privacyModeEnabled: boolean) {
     cardPaymentReservedTotal: Money.zero("INR"),
     upcomingBillsTotal: Money.zero("INR"),
     commitmentReservedTotal: Money.zero("INR"),
-    loanReservedTotal: Money.zero("INR"),
     ownedSpendableTotal: Money.fromMinorUnits(500000n, "INR"),
     creditAvailableTotal: Money.zero("INR"),
   } as never);

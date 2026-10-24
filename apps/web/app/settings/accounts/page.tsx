@@ -1,11 +1,10 @@
-import { getProfile, listAccounts, listGoals, listCardPaymentSources, listCategories, listUpcoming, listAllLoans, getCreditCardBillingStatus, type AuthContext, getProfileForDisplay,
+import { getProfile, listAccounts, listGoals, listCardPaymentSources, listCategories, listUpcoming, getCreditCardBillingStatus, type AuthContext, getProfileForDisplay,
 } from "@spencare/domain-application";
 import type {
   AccountReserveBreakdown,
   CommitmentReserveItem,
   CreditCardBillingStatusView,
   GoalReserveItem,
-  LoanReserveItem,
 } from "./account-details-sheet";
 import { deriveCardPaymentReserveState } from "@spencare/domain-infra";
 import { AppShell } from "@/components/spencare/app-shell";
@@ -31,13 +30,12 @@ export default async function AccountsSettingsPage() {
     supabase,
     serviceRoleSupabase: createServiceRoleSupabaseClient(),
   };
-  const [accounts, profile, paymentSources, goals, commitmentOccurrences, loans, categories] = await Promise.all([
+  const [accounts, profile, paymentSources, goals, commitmentOccurrences, categories] = await Promise.all([
     listAccounts(ctx),
     getProfile(ctx),
     listCardPaymentSources(ctx),
     listGoals(ctx),
     listUpcoming(ctx, { limit: 200 }),
-    listAllLoans(ctx),
     listCategories(ctx),
   ]);
   const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
@@ -106,15 +104,6 @@ export default async function AccountsSettingsPage() {
     }
   }
 
-  // Per bank/cash account: sum of installment_amount_minor for active loans with that reserve_account_id.
-  const loanReservePerAccount: Record<string, number> = {};
-  for (const loan of loans) {
-    if (loan.status === "active" && loan.reserve_account_id) {
-      loanReservePerAccount[loan.reserve_account_id] =
-        (loanReservePerAccount[loan.reserve_account_id] ?? 0) + loan.installment_amount_minor;
-    }
-  }
-
   // Per-account itemized breakdowns. Built from the SAME source lists
   // the aggregates were derived from so the items always reconcile
   // exactly to the aggregate on the bank-detail sheet (no second
@@ -125,7 +114,7 @@ export default async function AccountsSettingsPage() {
   function bucket(accountId: string): AccountReserveBreakdown {
     const existing = reserveBreakdownByAccount.get(accountId);
     if (existing) return existing;
-    const next: AccountReserveBreakdown = { goals: [], commitments: [], loans: [] };
+    const next: AccountReserveBreakdown = { goals: [], commitments: [] };
     reserveBreakdownByAccount.set(accountId, next);
     return next;
   }
@@ -184,23 +173,9 @@ export default async function AccountsSettingsPage() {
     bucket(accountId).commitments.push(...items);
   }
 
-  for (const loan of loans) {
-    if (loan.status !== "active" || !loan.reserve_account_id) continue;
-    const item: LoanReserveItem = {
-      id: loan.id,
-      name: loan.name,
-      reservedMinor: loan.installment_amount_minor,
-      nextInstallmentAmountMinor: loan.installment_amount_minor,
-      nextPaymentDate: loan.next_payment_date,
-      frequency: loan.repayment_frequency,
-      outstandingMinor: loan.outstanding_minor,
-    };
-    bucket(loan.reserve_account_id).loans.push(item);
-  }
   // Deterministic order so the sheet never re-sorts between refreshes.
   for (const bd of reserveBreakdownByAccount.values()) {
     bd.goals.sort((a, b) => b.reservedMinor - a.reservedMinor);
-    bd.loans.sort((a, b) => (a.nextPaymentDate ?? "").localeCompare(b.nextPaymentDate ?? ""));
   }
   const reserveBreakdownByAccountRecord: Record<string, AccountReserveBreakdown> = {};
   for (const [k, v] of reserveBreakdownByAccount) reserveBreakdownByAccountRecord[k] = v;
@@ -226,7 +201,6 @@ export default async function AccountsSettingsPage() {
           goalReservePerAccount={goalReservePerAccount}
           commitmentReservePerAccount={commitmentReservePerAccount}
           cardReserveDetails={cardReserveState.perCard}
-          loanReservePerAccount={loanReservePerAccount}
           paymentAccountNameByCardId={paymentAccountNameByCardId}
           paymentSources={paymentSources}
           billingStatusByCardId={billingStatusByCardId}

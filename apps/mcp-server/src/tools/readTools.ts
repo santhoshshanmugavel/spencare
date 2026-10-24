@@ -34,10 +34,9 @@ import {
   listMcpSessions,
   getSecurityStatus,
   getOnboardingStatusQuery,
-  // Planned commitments and loans
+  // Planned commitments
   listCommitments,
   listUpcoming,
-  listAllLoans,
   // Credit card billing
   getCreditCardBillingStatus,
   // Financial Plans (Gate 11)
@@ -84,7 +83,6 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
               budgetRemainingMinor: result.budgetRemaining ? Number(result.budgetRemaining.amountMinorUnits) : null,
               upcomingBillsMinor: Number(result.upcomingBillsTotal.amountMinorUnits),
               commitmentReservedMinor: Number(result.commitmentReservedTotal.amountMinorUnits),
-              loanReservedMinor: Number(result.loanReservedTotal.amountMinorUnits),
             },
             accounts: [],
           },
@@ -123,7 +121,6 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
                 budgetRemainingMinor: summary.safeToSpend.budgetRemaining ? Number(summary.safeToSpend.budgetRemaining.amountMinorUnits) : null,
                 upcomingBillsMinor: Number(summary.safeToSpend.upcomingBillsTotal.amountMinorUnits),
                 commitmentReservedMinor: Number(summary.safeToSpend.commitmentReservedTotal.amountMinorUnits),
-                loanReservedMinor: Number(summary.safeToSpend.loanReservedTotal.amountMinorUnits),
               },
               accounts: [],
             },
@@ -541,17 +538,15 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
 
   server.registerTool(
     "getUpcomingCommitments",
-    { description: "List upcoming planned commitment occurrences, loans, and predictions. Use this to answer 'what's coming up?' or to understand the user's near-term financial obligations.", inputSchema: { limitDays: z.number().optional() } },
+    { description: "List upcoming planned commitment occurrences and predictions. Use this to answer 'what's coming up?' or to understand the user's near-term financial obligations.", inputSchema: { limitDays: z.number().optional() } },
     async (rawInput: { limitDays?: number }) =>
       runScopedTool(ctx, "getUpcomingCommitments", "read", async () => {
         const limitDays = rawInput.limitDays ?? 90;
         const dueBefore = new Date(Date.now() + limitDays * 86400000).toISOString().slice(0, 10);
-        const [occurrences, loans, privacyModeEnabled] = await Promise.all([
+        const [occurrences, privacyModeEnabled] = await Promise.all([
           listUpcoming(ctx, { limit: 50, dueBefore }),
-          listAllLoans(ctx),
           isPrivacyModeEnabled(ctx),
         ]);
-        const activeLoans = loans.filter((l) => l.status === "active" && l.next_payment_date != null);
         return {
           commitmentOccurrences: occurrences.map((occ) => ({
             id: occ.id,
@@ -563,36 +558,7 @@ export function registerReadTools(server: McpServer, ctx: McpAuthContext): void 
             shortfall: privacyModeEnabled ? { private: true } : { amountMinor: Math.max(0, occ.amount_minor - occ.reserved_minor), currency: "INR" },
             status: occ.status,
           })),
-          loanInstallments: activeLoans.map((l) => ({
-            loanId: l.id,
-            name: l.name,
-            lenderName: l.lender_name,
-            nextPaymentDate: l.next_payment_date,
-            installmentAmount: privacyModeEnabled ? { private: true } : { amountMinor: l.installment_amount_minor, currency: l.currency },
-          })),
         };
-      }),
-  );
-
-  server.registerTool(
-    "listLoans",
-    { description: "List the user's active loans: personal, home, car, education, business, or other.", inputSchema: {} },
-    async () =>
-      runScopedTool(ctx, "listLoans", "read", async () => {
-        const [loans, privacyModeEnabled] = await Promise.all([listAllLoans(ctx), isPrivacyModeEnabled(ctx)]);
-        return loans.map((l) => ({
-          id: l.id,
-          name: l.name,
-          loanType: l.loan_type,
-          lenderName: l.lender_name,
-          status: l.status,
-          nextPaymentDate: l.next_payment_date,
-          installmentAmount: privacyModeEnabled ? { private: true } : { amountMinor: l.installment_amount_minor, currency: l.currency },
-          outstandingAmount: l.outstanding_minor != null && !privacyModeEnabled ? { amountMinor: l.outstanding_minor, currency: l.currency } : null,
-          interestRatePct: l.interest_rate_pct,
-          repaymentFrequency: l.repayment_frequency,
-          endDate: l.end_date,
-        }));
       }),
   );
 

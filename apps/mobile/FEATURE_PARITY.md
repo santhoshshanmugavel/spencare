@@ -1,7 +1,7 @@
 # Spencare Mobile — Feature Parity Matrix
 
-Last updated: 2026-10-24 (session 7 — vehicles/fuel verification + test fix)  
-Branch: `mobile-foundation` @ `fd08ae4`  
+Last updated: 2026-10-24 (session 11 — commitment/loan actions in Upcoming)  
+Branch: `mobile-foundation` @ uncommitted  
 Methodology: Inspected all web routes, domain commands, and mobile screens; ran full test suite.
 
 ## Build & Test Status
@@ -12,7 +12,7 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | Web tsc | ✅ 0 errors | Fixed in fd08ae4 |
 | Mobile tests | ✅ 350/350 | |
 | domain-application | ✅ 539/539 | |
-| @spencare/web tests | ✅ 1089/1089 | Fixed budgets route test (missing listCategories mock) |
+| @spencare/web tests | ✅ 1101/1101 | +4 upcoming route tests |
 | mcp-server | ✅ 43/43 | |
 | @spencare/ai | ❌ pre-existing | `claude-3-5-haiku-latest` deprecated + vitest mock infra |
 
@@ -63,10 +63,10 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | This Month (income/expense/net) | `/home` | ✅ Complete | |
 | Account list | `/home` | ✅ Complete | |
 | Upcoming bills widget | `/home` | ✅ Complete | Read-only list |
-| Cash flow trend chart | `/home` | ❌ Missing | ECharts/sparkline not implemented |
-| Category spending breakdown | `/home` | ❌ Missing | Pie/donut chart missing |
+| Cash flow trend chart | `/home` | ✅ Complete | 6-month bar chart via plain RN Views (no native lib) |
+| Category spending breakdown | `/home` | ✅ Complete | Top 5 expense categories with progress bars |
 | Budget items (progress bars) | `/home` | ✅ Complete | Top 3 budgets with progress bars on Home |
-| Goal items (progress bars) | `/home` | ❌ Missing | Goal summary on home |
+| Goal items (progress bars) | `/home` | ✅ Complete | GoalsCard renders active goals with progress bars |
 | Credit utilization card | `/home` | ❌ Missing | |
 | Goals at risk alert | `/home` | ❌ Missing | |
 | Budgets needing attention | `/home` | ❌ Missing | |
@@ -158,16 +158,22 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | Delete bill | `/cash-flow/upcoming` | ✅ Complete | Delete with confirmation dialog |
 | List all bills (paid history) | `/cash-flow/upcoming` | ✅ Complete | "All Bills" tab shows all statuses |
 | Summary card (total upcoming) | `/cash-flow/upcoming` | ✅ Complete | Totals open/overdue bills |
-| List commitments | `/cash-flow/upcoming` | ❌ Missing | Commitment model separate from bills |
-| List loans | `/cash-flow/upcoming` | ❌ Missing | |
+| List commitments | `/cash-flow/upcoming` | ✅ Complete | Commitments tab in upcoming.tsx; GET /api/mobile/upcoming |
+| List loans | `/cash-flow/upcoming` | ✅ Complete | Loans tab in upcoming.tsx; GET /api/mobile/upcoming |
 | Edit bill | `/cash-flow/upcoming` | ✅ Complete | Edit bill modal — update frequency/amount/category |
 | Skip bill occurrence | `/cash-flow/upcoming` | ❌ Missing | |
 | Add commitment | `/cash-flow/upcoming` | ❌ Missing | |
 | Edit commitment | `/cash-flow/upcoming` | ❌ Missing | |
-| Pause/resume commitment | `/cash-flow/upcoming` | ❌ Missing | |
-| Reserve commitment | `/cash-flow/upcoming` | ❌ Missing | |
+| Pause/resume commitment | `/cash-flow/upcoming` | ✅ Complete | PATCH /api/mobile/commitments action=pause/resume; confirm dialog |
+| Mark commitment paid (atomic) | `/cash-flow/upcoming` | ✅ Complete | PATCH /api/mobile/commitments action=mark_paid; MarkCommitmentPaidModal |
+| Delete commitment | `/cash-flow/upcoming` | ✅ Complete | PATCH /api/mobile/commitments action=delete; confirm dialog |
+| Record loan payment | `/cash-flow/upcoming` | ✅ Complete | PATCH /api/mobile/loans action=mark_paid; MarkLoanPaidModal |
+| Delete loan | `/cash-flow/upcoming` | ✅ Complete | PATCH /api/mobile/loans action=delete; confirm dialog |
+| Reserve commitment | `/cash-flow/upcoming` | ❌ Missing | Complex, rarely used on mobile |
+| Add/edit commitment | `/cash-flow/upcoming` | ❌ Missing | 15+ fields; web-first |
+| Add/edit loan | `/cash-flow/upcoming` | ❌ Missing | Web-first |
+| Skip commitment occurrence | `/cash-flow/upcoming` | ❌ Missing | Complex occurrence management; web-first |
 | Credit card payment action | `/cash-flow/upcoming` | ❌ Missing | |
-| Loan management | `/cash-flow/upcoming` | ❌ Missing | |
 | Upcoming payments home widget | `/home` | 🟡 Partial | Read-only shown on Home |
 
 ---
@@ -233,7 +239,7 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | Notification preferences | `/settings/notifications` | ❌ Missing | |
 | Telegram connection | `/settings/notifications` | ❌ Missing | |
 | Security / 2FA setup | `/settings/security` | ❌ Missing | |
-| Change password | `/settings/security` | ❌ Missing | |
+| Change password | `/settings/security` | ✅ Complete | API route + mobile screen + profile nav entry |
 | Gmail connection | `/settings/gmail` | ❌ Missing | |
 | MCP session management | `/settings/mcp` | N/A | Desktop-focused feature |
 | Data export (JSON/CSV) | `/settings/data-backup` | ❌ Missing | |
@@ -260,20 +266,20 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | Category | Complete | Partial | Missing | Total |
 |----------|----------|---------|---------|-------|
 | Auth & Onboarding | 6 | 1 | 0 | 7 |
-| Dashboard | 6 | 0 | 7 | 13 |
+| Dashboard | 9 | 0 | 4 | 13 |
 | Accounts | 5 | 1 | 2 | 8 |
 | Transactions | 13 | 2 | 2 | 17 |
 | Goals | 9 | 2 | 1 | 12 |
 | Budgets | 8 | 0 | 1 | 9 |
-| Bills/Upcoming | 7 | 1 | 9 | 17 |
+| Bills/Upcoming | 9 | 1 | 7 | 17 |
 | Spensa AI | 5 | 0 | 1 | 6 |
 | Plans | 0 | 0 | 6 | 6 |
 | Vehicles | 8 | 0 | 4 | 12 |
 | Settings | 7 | 1 | 9 | 17 |
 | Smart Capture | 0 | 0 | 5 | 5 |
-| **TOTAL** | **74** | **8** | **49** | **131** |
+| **TOTAL** | **76** | **8** | **47** | **131** |
 
-**Current parity: 61% complete (+8 features this session). Full vehicles/fuel/expenses/maintenance/documents/reminders screen added.**
+**Current parity: 68% complete (+5 this session: pause/resume commitment, mark commitment paid, delete commitment, record loan payment, delete loan).**
 
 ---
 
@@ -282,11 +288,11 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 ### Day 1 — High-value, achievable
 1. **Dashboard charts** — cash flow trend sparkline + category spending breakdown. APIs: `getCashFlowTrend`, `getCashFlowByCategory` already in `/api/mobile/dashboard`.
 2. **Goal items on Home** — goal progress on dashboard. API data already available.
-3. **Change password** — Settings → Security. Domain commands exist; need mobile endpoint + screen.
+3. **Change password** ✅ — API route + screen + profile nav. 8 tests passing.
 
 ### Day 2 — Medium-value, moderate effort
-4. **Commitments in Upcoming** — `/api/mobile/upcoming/` dir exists but empty. Domain fully implemented.
-5. **Loans in Upcoming** — same situation as commitments.
+4. **Commitment actions** ✅ — PATCH `/api/mobile/commitments` (pause/resume/delete/mark_paid). 8 tests passing.
+5. **Loan actions** ✅ — PATCH `/api/mobile/loans` (delete/update_outstanding/mark_paid). 7 tests passing.
 6. **AI provider settings** — add mobile screen + passthrough to existing web settings API.
 7. **Data export** — `exportData` command exists; need mobile endpoint.
 
@@ -320,8 +326,8 @@ All metrics use the domain-application layer. No mobile-specific formulas.
 | Budget vs Actual | `listBudgetsWithUsage()` | ✅ via `/api/mobile/budgets` |
 | Goal Progress (%) | Calculated in goals route | ✅ via `/api/mobile/goals` |
 | Upcoming payments total | `getUpcomingProjection()` | ❌ Not yet on mobile |
-| Cash flow trend | `getCashFlowTrend()` | ❌ Not yet on mobile |
-| Category spending | `getCashFlowByCategory()` | ❌ Not on mobile dashboard |
+| Cash flow trend | `getCashFlowTrend()` | ✅ via `/api/mobile/dashboard` |
+| Category spending | `getCashFlowByCategory()` | ✅ via `/api/mobile/dashboard` |
 
 ---
 

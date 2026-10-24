@@ -59,7 +59,6 @@ function resolveBillDueDateFor(year: number, month: number, billDueDay: number):
   return resolveRecurringDay({ year, month, paymentDayRule: billDueDay });
 }
 import { listCommitments, listUpcoming } from "./plannedCommitments.js";
-import { listAllLoans } from "./loans.js";
 import { listGoalContributionPlans } from "./goalContributionPlans.js";
 import { listGoals } from "./goals.js";
 import { listAccounts } from "./accounts.js";
@@ -70,7 +69,7 @@ import {
   listEpfoContributionProfiles,
   type EpfoContributionProfileRow,
 } from "@spencare/domain-infra";
-import type { PlannedCommitmentRow, GoalRow, LoanRow, GoalContributionPlanRow } from "@spencare/domain-infra";
+import type { PlannedCommitmentRow, GoalRow, GoalContributionPlanRow } from "@spencare/domain-infra";
 import type { AuthContext } from "../types.js";
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -79,7 +78,6 @@ export type UpcomingEventKind =
   | "commitment_payment"
   | "commitment_preparation"
   | "goal_contribution"
-  | "loan"
   | "credit_card_statement"
   | "credit_card_payment"
   | "epfo_contribution";
@@ -142,8 +140,6 @@ export interface UpcomingProjection {
   preparationMinor: number;
   /** Goal contribution amounts in the window (not spending). */
   goalContributionMinor: number;
-  /** Loan installments in the window. */
-  loanInstallmentMinor: number;
   /** Sum of credit_used_minor for cards with payment due events in the window. */
   creditCardPaymentDueMinor: number;
   /** Sum of expected EPFO contributions in the window (projections, not spending). */
@@ -324,10 +320,9 @@ export async function getUpcomingProjection(
   })();
 
   // Fetch all required data in parallel
-  const [commitments, persistedOccurrences, loans, goalPlans, goals, accounts] = await Promise.all([
+  const [commitments, persistedOccurrences, goalPlans, goals, accounts] = await Promise.all([
     listCommitments(ctx),
     listUpcoming(ctx, { limit: 500, dueBefore: endDate }),
-    listAllLoans(ctx),
     listGoalContributionPlans(ctx),
     listGoals(ctx),
     listAccounts(ctx),
@@ -604,33 +599,6 @@ export async function getUpcomingProjection(
     }
   }
 
-  // ── Loan events ───────────────────────────────────────────────────────────
-
-  for (const loan of loans) {
-    if (loan.status !== "active" || !loan.next_payment_date) continue;
-    if (loan.next_payment_date < startDate || loan.next_payment_date > endDate) continue;
-
-    allEvents.push({
-      id: `loan:${loan.id}:${loan.next_payment_date}`,
-      kind: "loan",
-      date: loan.next_payment_date,
-      title: loan.name,
-      subtitle: "Loan installment",
-      amountMinor: loan.installment_amount_minor,
-      currency: loan.currency ?? CURRENCY,
-      sourceId: loan.id,
-      projected: false,
-      reserveStatus: computeReserveStatus({
-        amountMinor: loan.installment_amount_minor,
-        reservedMinor: 0,
-        hasReserveAccount: !!loan.reserve_account_id,
-        occurrenceStatus: "upcoming",
-        dueDate: loan.next_payment_date,
-        today: todayLocal,
-      }),
-    });
-  }
-
   // ── Credit card bill events ───────────────────────────────────────────────
   //
   // Single-date billing model (Slice B): for each active credit card with
@@ -782,15 +750,14 @@ export async function getUpcomingProjection(
   allEvents.sort((a, b) => {
     const dc = a.date.localeCompare(b.date);
     if (dc !== 0) return dc;
-    // Within same date: preparation first (reminder before obligation), then payments/loans/CC, then goals
+    // Within same date: preparation first (reminder before obligation), then payments/CC, then goals
     const kindOrder: Record<UpcomingEventKind, number> = {
       commitment_preparation: 0,
       commitment_payment: 1,
-      loan: 2,
-      credit_card_payment: 3,
-      goal_contribution: 4,
-      epfo_contribution: 5,
-      credit_card_statement: 6,
+      credit_card_payment: 2,
+      goal_contribution: 3,
+      epfo_contribution: 4,
+      credit_card_statement: 5,
     };
     return kindOrder[a.kind] - kindOrder[b.kind];
   });
@@ -804,9 +771,6 @@ export async function getUpcomingProjection(
   const goalContributionMinor = allEvents
     .filter((e) => e.kind === "goal_contribution")
     .reduce((s, e) => s + e.amountMinor, 0);
-  const loanInstallmentMinor = allEvents
-    .filter((e) => e.kind === "loan")
-    .reduce((s, e) => s + e.amountMinor, 0);
   const epfoContributionMinor = allEvents
     .filter((e) => e.kind === "epfo_contribution")
     .reduce((s, e) => s + e.amountMinor, 0);
@@ -816,7 +780,6 @@ export async function getUpcomingProjection(
     paymentDueMinor,
     preparationMinor,
     goalContributionMinor,
-    loanInstallmentMinor,
     creditCardPaymentDueMinor,
     epfoContributionMinor,
     currency: CURRENCY,

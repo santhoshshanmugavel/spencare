@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   checkCommitmentReminder,
-  checkLoanReminder,
   checkBillReminder,
   checkCreditCardBillingReminder,
   checkPlanItemReminder,
@@ -109,53 +108,6 @@ describe("checkCommitmentReminder", () => {
       expect.anything(),
       expect.objectContaining({ eventType: expect.stringContaining("COMMITMENT") }),
     );
-  });
-});
-
-// ============================================================
-// checkLoanReminder - timezone-safe todayIso
-// ============================================================
-describe("checkLoanReminder", () => {
-  it("fires LOAN_1_DAY when todayIso is exactly 1 day before dueDate", async () => {
-    await checkLoanReminder({
-      ...makeBase(),
-      loanId: "loan1",
-      loanName: "Home Loan",
-      dueDateIso: "2026-09-21",
-      installmentMinor: 500000,
-      currency: "INR",
-      todayIso: "2026-09-20",
-    });
-    const calls = vi.mocked(deliverNotification).mock.calls;
-    expect(calls.map((c) => c[1].eventType)).toContain("LOAN_1_DAY");
-  });
-
-  it("fires LOAN_DUE_TODAY when todayIso equals dueDate", async () => {
-    await checkLoanReminder({
-      ...makeBase(),
-      loanId: "loan1",
-      loanName: "Car Loan",
-      dueDateIso: "2026-09-20",
-      installmentMinor: 200000,
-      currency: "INR",
-      todayIso: "2026-09-20",
-    });
-    const calls = vi.mocked(deliverNotification).mock.calls;
-    expect(calls.map((c) => c[1].eventType)).toContain("LOAN_DUE_TODAY");
-  });
-
-  it("fires LOAN_OVERDUE 1 day past due", async () => {
-    await checkLoanReminder({
-      ...makeBase(),
-      loanId: "loan1",
-      loanName: "Personal Loan",
-      dueDateIso: "2026-09-19",
-      installmentMinor: 100000,
-      currency: "INR",
-      todayIso: "2026-09-20",
-    });
-    const calls = vi.mocked(deliverNotification).mock.calls;
-    expect(calls.map((c) => c[1].eventType)).toContain("LOAN_OVERDUE");
   });
 });
 

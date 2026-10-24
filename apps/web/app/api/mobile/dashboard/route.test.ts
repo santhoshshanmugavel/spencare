@@ -6,6 +6,9 @@ vi.mock("@supabase/supabase-js", () => ({
 }));
 vi.mock("@spencare/domain-application", () => ({
   getDashboardSummary: vi.fn(),
+  getCashFlowTrend: vi.fn(),
+  getCashFlowByCategory: vi.fn(),
+  listCategories: vi.fn(),
 }));
 vi.mock("@spencare/domain-infra", () => ({
   getProfile: vi.fn(),
@@ -15,7 +18,7 @@ vi.mock("@/lib/supabase/service", () => ({
 }));
 
 const { createClient } = await import("@supabase/supabase-js");
-const { getDashboardSummary } = await import("@spencare/domain-application");
+const { getDashboardSummary, getCashFlowTrend, getCashFlowByCategory, listCategories } = await import("@spencare/domain-application");
 const { getProfile } = await import("@spencare/domain-infra");
 
 function makeRequest(token?: string): Request {
@@ -38,7 +41,6 @@ const mockSummaryBase = {
     cardPaymentReservedTotal: makeMoneyJSON(0),
     upcomingBillsTotal: makeMoneyJSON(0),
     commitmentReservedTotal: makeMoneyJSON(0),
-    loanReservedTotal: makeMoneyJSON(0),
     ownedSpendableTotal: makeMoneyJSON(500000),
     creditAvailableTotal: makeMoneyJSON(0),
   },
@@ -80,6 +82,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key";
+  vi.mocked(getCashFlowTrend).mockResolvedValue([]);
+  vi.mocked(getCashFlowByCategory).mockResolvedValue([]);
+  vi.mocked(listCategories).mockResolvedValue([]);
 });
 
 describe("GET /api/mobile/dashboard", () => {

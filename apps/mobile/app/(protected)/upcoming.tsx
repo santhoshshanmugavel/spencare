@@ -15,7 +15,13 @@ import {
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "../../lib/auth";
-import { api, type BillPredictionJSON, type AccountJSON, type CategoryJSON } from "../../lib/api";
+import {
+  api,
+  type BillPredictionJSON,
+  type AccountJSON,
+  type CategoryJSON,
+  type CommitmentJSON,
+} from "../../lib/api";
 import { useTheme, typography } from "../../lib/theme";
 
 // ── Money helpers ─────────────────────────────────────────────────────────────
@@ -594,6 +600,194 @@ function BillRow({ bill, privacyMode, onPay, onEdit, onDelete }: BillRowProps) {
   );
 }
 
+// ── Mark Commitment Paid Modal ────────────────────────────────────────────────
+
+interface MarkCommitmentPaidModalProps {
+  commitment: CommitmentJSON;
+  accounts: AccountJSON[];
+  categories: CategoryJSON[];
+  onClose: () => void;
+  onPaid: () => void;
+  accessToken: string;
+}
+
+function MarkCommitmentPaidModal({ commitment, accounts, categories, onClose, onPaid, accessToken }: MarkCommitmentPaidModalProps) {
+  const t = useTheme();
+  const spendableAccounts = accounts.filter((a) => !a.is_archived && (a.type === "bank" || a.type === "cash" || a.type === "credit_card"));
+  const [selectedAccountId, setSelectedAccountId] = useState(spendableAccounts[0]?.id ?? "");
+  const [selectedCategoryId, setSelectedCategoryId] = useState(commitment.category_id ?? categories[0]?.id ?? "");
+  const [amountStr, setAmountStr] = useState(String(commitment.amount_minor / 100));
+  const [date, setDate] = useState(todayIso());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handlePay() {
+    const amountMinor = majorToMinor(amountStr);
+    if (amountMinor <= 0) { setError("Enter a valid amount."); return; }
+    if (!selectedAccountId) { setError("Select an account."); return; }
+    if (!selectedCategoryId) { setError("Select a category."); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { setError("Enter a valid date (YYYY-MM-DD)."); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      await api.markCommitmentPaid({ commitment_id: commitment.id, account_id: selectedAccountId, category_id: selectedCategoryId, amount_minor: amountMinor, occurred_at: date }, accessToken);
+      onPaid();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to mark as paid.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const s = StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+    sheet: { backgroundColor: t.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
+    title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.foreground, marginBottom: 4 },
+    subtitle: { fontSize: typography.size.sm, color: t.foregroundMuted, marginBottom: 20 },
+    label: { fontSize: typography.size.sm, color: t.foregroundMuted, marginBottom: 6, fontWeight: typography.weight.medium },
+    input: { borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, fontSize: typography.size.md, color: t.foreground, backgroundColor: t.background, marginBottom: 14 },
+    scrollPicker: { maxHeight: 120, borderWidth: 1, borderColor: t.border, borderRadius: 10, marginBottom: 14 },
+    pickerItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: t.border },
+    pickerItemSelected: { backgroundColor: t.primary + "20" },
+    pickerItemText: { fontSize: typography.size.sm, color: t.foreground },
+    pickerItemTextSelected: { color: t.primary, fontWeight: typography.weight.medium },
+    error: { color: "#EF4444", fontSize: typography.size.sm, marginBottom: 12 },
+    btn: { backgroundColor: t.primary, borderRadius: 12, padding: 14, alignItems: "center" },
+    btnText: { color: "#fff", fontWeight: typography.weight.semibold, fontSize: typography.size.md },
+    cancelBtn: { padding: 14, alignItems: "center", marginTop: 8 },
+    cancelText: { color: t.foregroundMuted, fontSize: typography.size.md },
+  });
+
+  return (
+    <Modal transparent animationType="slide" visible onRequestClose={onClose}>
+      <View style={s.overlay}>
+        <ScrollView style={s.sheet} keyboardShouldPersistTaps="handled">
+          <Text style={s.title}>Mark Paid: {commitment.name}</Text>
+          <Text style={s.subtitle}>{recurrenceLabel(commitment.payment_frequency)}</Text>
+
+          <Text style={s.label}>Amount</Text>
+          <TextInput style={s.input} value={amountStr} onChangeText={setAmountStr} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={t.foregroundMuted} />
+
+          <Text style={s.label}>Date Paid</Text>
+          <TextInput style={s.input} value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" placeholderTextColor={t.foregroundMuted} />
+
+          <Text style={s.label}>Account</Text>
+          <ScrollView style={s.scrollPicker} showsVerticalScrollIndicator={false}>
+            {spendableAccounts.map((a) => (
+              <TouchableOpacity key={a.id} style={[s.pickerItem, a.id === selectedAccountId && s.pickerItemSelected]} onPress={() => setSelectedAccountId(a.id)}>
+                <Text style={[s.pickerItemText, a.id === selectedAccountId && s.pickerItemTextSelected]}>{a.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <Text style={s.label}>Category</Text>
+          <ScrollView style={s.scrollPicker} showsVerticalScrollIndicator={false}>
+            {categories.map((c) => (
+              <TouchableOpacity key={c.id} style={[s.pickerItem, c.id === selectedCategoryId && s.pickerItemSelected]} onPress={() => setSelectedCategoryId(c.id)}>
+                <Text style={[s.pickerItemText, c.id === selectedCategoryId && s.pickerItemTextSelected]}>{c.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {error ? <Text style={s.error}>{error}</Text> : null}
+          <TouchableOpacity style={s.btn} onPress={handlePay} disabled={saving}>
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Mark as Paid</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
+            <Text style={s.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+// ── Commitment Row ────────────────────────────────────────────────────────────
+
+interface CommitmentRowProps {
+  item: CommitmentJSON;
+  privacyMode: boolean;
+  onPause: (item: CommitmentJSON) => void;
+  onResume: (item: CommitmentJSON) => void;
+  onDelete: (item: CommitmentJSON) => void;
+  onMarkPaid: (item: CommitmentJSON) => void;
+}
+
+function CommitmentRow({ item, privacyMode, onPause, onResume, onDelete, onMarkPaid }: CommitmentRowProps) {
+  const t = useTheme();
+  const days = item.next_payment_date ? daysUntil(item.next_payment_date) : null;
+  const isOverdue = days !== null && days < 0;
+  const isPaused = item.status === "paused";
+
+  const s = StyleSheet.create({
+    row: {
+      backgroundColor: t.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+    name: { fontSize: 15, fontWeight: "600" as const, color: t.foreground, flex: 1 },
+    amount: { fontSize: 15, fontWeight: "600" as const, color: t.foreground },
+    amountMasked: { color: t.foregroundMuted },
+    meta: { flexDirection: "row", gap: 8, marginTop: 6, flexWrap: "wrap" as const },
+    badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: t.backgroundSubtle },
+    badgeText: { fontSize: 11, color: t.foregroundMuted },
+    badgeOverdue: { backgroundColor: "#EF444420" },
+    badgeOverdueText: { color: "#EF4444" },
+    badgePaused: { backgroundColor: "#F59E0B20" },
+    badgePausedText: { color: "#F59E0B" },
+    actions: { flexDirection: "row", gap: 8, marginTop: 12 },
+    actionBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: t.border, alignItems: "center" },
+    actionBtnPrimary: { backgroundColor: t.primary, borderColor: t.primary },
+    actionBtnDanger: { borderColor: "#EF4444" },
+    actionBtnText: { fontSize: typography.size.xs, color: t.foregroundMuted, fontWeight: typography.weight.medium },
+    actionBtnTextPrimary: { color: "#fff" },
+    actionBtnTextDanger: { color: "#EF4444" },
+  });
+
+  return (
+    <View style={s.row}>
+      <View style={s.rowTop}>
+        <Text style={s.name}>{item.name}</Text>
+        <Text style={[s.amount, privacyMode && s.amountMasked]}>
+          {privacyMode ? "••••" : formatMoney(item.amount_minor, item.currency)}
+        </Text>
+      </View>
+      <View style={s.meta}>
+        <View style={s.badge}>
+          <Text style={s.badgeText}>{recurrenceLabel(item.payment_frequency)}</Text>
+        </View>
+        {item.next_payment_date && (
+          <View style={[s.badge, isOverdue && s.badgeOverdue]}>
+            <Text style={[s.badgeText, isOverdue && s.badgeOverdueText]}>
+              {isOverdue ? `Overdue ${formatDisplayDate(item.next_payment_date)}` : `Due ${formatDisplayDate(item.next_payment_date)}`}
+            </Text>
+          </View>
+        )}
+        {isPaused && (
+          <View style={[s.badge, s.badgePaused]}>
+            <Text style={[s.badgeText, s.badgePausedText]}>Paused</Text>
+          </View>
+        )}
+      </View>
+      <View style={s.actions}>
+        <TouchableOpacity style={[s.actionBtn, s.actionBtnPrimary]} onPress={() => onMarkPaid(item)}>
+          <Text style={[s.actionBtnText, s.actionBtnTextPrimary]}>Pay</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.actionBtn} onPress={() => isPaused ? onResume(item) : onPause(item)}>
+          <Text style={s.actionBtnText}>{isPaused ? "Resume" : "Pause"}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.actionBtn, s.actionBtnDanger]} onPress={() => onDelete(item)}>
+          <Text style={[s.actionBtnText, s.actionBtnTextDanger]}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function UpcomingScreen() {
@@ -604,27 +798,32 @@ export default function UpcomingScreen() {
   const [bills, setBills] = useState<BillPredictionJSON[]>([]);
   const [accounts, setAccounts] = useState<AccountJSON[]>([]);
   const [categories, setCategories] = useState<CategoryJSON[]>([]);
+  const [commitments, setCommitments] = useState<CommitmentJSON[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"upcoming" | "all">("upcoming");
+  const [activeTab, setActiveTab] = useState<"upcoming" | "all" | "commitments">("upcoming");
   const [showAddModal, setShowAddModal] = useState(false);
   const [payingBill, setPayingBill] = useState<BillPredictionJSON | null>(null);
   const [editingBill, setEditingBill] = useState<BillPredictionJSON | null>(null);
   const [privacyMode, setPrivacyMode] = useState(false);
+  const [payingCommitment, setPayingCommitment] = useState<CommitmentJSON | null>(null);
 
   async function loadData(tab = activeTab) {
     try {
-      const [billsRes, accountsRes, categoriesRes, pmRes] = await Promise.all([
-        api.getBills(accessToken, tab),
+      const billsStatus = (tab === "upcoming" || tab === "all") ? tab : "upcoming";
+      const [billsRes, accountsRes, categoriesRes, pmRes, upcomingRes] = await Promise.all([
+        api.getBills(accessToken, billsStatus),
         api.getAccounts(accessToken),
         api.getCategories(accessToken),
         api.getPrivacyMode(accessToken),
+        api.getUpcoming(accessToken),
       ]);
       setBills(billsRes.bills);
       setAccounts(accountsRes.accounts);
       setCategories(categoriesRes.categories);
       setPrivacyMode(pmRes.enabled);
+      setCommitments(upcomingRes.commitments);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load bills.");
@@ -644,11 +843,13 @@ export default function UpcomingScreen() {
     setRefreshing(false);
   }
 
-  async function handleTabChange(tab: "upcoming" | "all") {
+  async function handleTabChange(tab: "upcoming" | "all" | "commitments") {
     setActiveTab(tab);
-    setLoading(true);
-    await loadData(tab);
-    setLoading(false);
+    if (tab === "upcoming" || tab === "all") {
+      setLoading(true);
+      await loadData(tab);
+      setLoading(false);
+    }
   }
 
   function handleDeleteBill(bill: BillPredictionJSON) {
@@ -671,6 +872,58 @@ export default function UpcomingScreen() {
         },
       ],
     );
+  }
+
+  function handlePauseCommitment(item: CommitmentJSON) {
+    Alert.alert("Pause Commitment", `Pause "${item.name}"?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Pause",
+        onPress: async () => {
+          try {
+            await api.pauseCommitment(item.id, accessToken);
+            await loadData();
+          } catch (err) {
+            Alert.alert("Error", err instanceof Error ? err.message : "Failed to pause.");
+          }
+        },
+      },
+    ]);
+  }
+
+  function handleResumeCommitment(item: CommitmentJSON) {
+    Alert.alert("Resume Commitment", `Resume "${item.name}"?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Resume",
+        onPress: async () => {
+          try {
+            await api.resumeCommitment(item.id, accessToken);
+            await loadData();
+          } catch (err) {
+            Alert.alert("Error", err instanceof Error ? err.message : "Failed to resume.");
+          }
+        },
+      },
+    ]);
+  }
+
+  function handleDeleteCommitment(item: CommitmentJSON) {
+    Alert.alert("Delete Commitment", `Delete "${item.name}"? This removes all future occurrences.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.deleteCommitment(item.id, accessToken);
+            await loadData();
+          } catch (err) {
+            Alert.alert("Error", err instanceof Error ? err.message : "Failed to delete.");
+          }
+        },
+      },
+    ]);
   }
 
   // ── Total upcoming ─────────────────────────────────────────────────────────
@@ -765,19 +1018,19 @@ export default function UpcomingScreen() {
       )}
 
       {/* Tabs */}
-      <View style={s.tabRow}>
-        {(["upcoming", "all"] as const).map((tab) => (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabRow}>
+        {(["upcoming", "all", "commitments"] as const).map((tab) => (
           <Pressable
             key={tab}
             style={[s.tab, activeTab === tab && s.tabActive]}
             onPress={() => handleTabChange(tab)}
           >
             <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>
-              {tab === "upcoming" ? "Upcoming" : "All Bills"}
+              {tab === "upcoming" ? "Upcoming" : tab === "all" ? "All Bills" : "Commitments"}
             </Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Error */}
       {error && (
@@ -791,6 +1044,31 @@ export default function UpcomingScreen() {
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator color={t.primary} size="large" />
         </View>
+      ) : activeTab === "commitments" ? (
+        commitments.length === 0 ? (
+          <View style={s.emptyBox}>
+            <Text style={s.emptyIcon}>🔁</Text>
+            <Text style={s.emptyTitle}>No commitments</Text>
+            <Text style={s.emptyText}>Add recurring commitments in the web app to track them here.</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={commitments}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <CommitmentRow
+                item={item}
+                privacyMode={privacyMode}
+                onPause={handlePauseCommitment}
+                onResume={handleResumeCommitment}
+                onDelete={handleDeleteCommitment}
+                onMarkPaid={setPayingCommitment}
+              />
+            )}
+            contentContainerStyle={s.list}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={t.primary} />}
+          />
+        )
       ) : bills.length === 0 ? (
         <View style={s.emptyBox}>
           <Text style={s.emptyIcon}>📅</Text>
@@ -860,6 +1138,22 @@ export default function UpcomingScreen() {
           }}
         />
       )}
+
+      {/* Mark Commitment Paid Modal */}
+      {payingCommitment && (
+        <MarkCommitmentPaidModal
+          commitment={payingCommitment}
+          accounts={accounts}
+          categories={categories}
+          accessToken={accessToken}
+          onClose={() => setPayingCommitment(null)}
+          onPaid={() => {
+            setPayingCommitment(null);
+            loadData();
+          }}
+        />
+      )}
+
     </View>
   );
 }

@@ -1,7 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
-import { getDashboardSummary } from "@spencare/domain-application";
+import {
+  getDashboardSummary,
+  getCashFlowTrend,
+  getCashFlowByCategory,
+  listCategories,
+} from "@spencare/domain-application";
+import { lastDayOfMonth } from "@spencare/domain-core";
 import { getProfile } from "@spencare/domain-infra";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
+
+function currentMonthStart(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
 
 function extractBearerToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization");
@@ -43,12 +54,19 @@ export async function GET(request: Request): Promise<Response> {
   const ctx = { userId, email, supabase: userClient, serviceRoleSupabase: serviceClient };
 
   try {
-    const [summary, profile] = await Promise.all([
+    const periodStart = currentMonthStart();
+    const periodEnd = lastDayOfMonth(periodStart);
+
+    const [summary, profile, cashFlowTrend, topCategories, categories] = await Promise.all([
       getDashboardSummary(ctx),
       getProfile(userClient, userId),
+      getCashFlowTrend(ctx, 6, periodStart),
+      getCashFlowByCategory(ctx, { periodStart, periodEnd }, "expense"),
+      listCategories(ctx),
     ]);
 
     const currency = profile?.preferred_currency ?? "INR";
+    const categoryNameMap = new Map(categories.map((c) => [c.id, c.name]));
 
     return Response.json({
       safeToSpend: summary.safeToSpend,
@@ -76,6 +94,18 @@ export async function GET(request: Request): Promise<Response> {
       })),
       cashFlow: summary.cashFlow,
       netWorth: summary.netWorth,
+      cashFlowTrend: cashFlowTrend.map((p) => ({
+        periodStart: p.periodStart,
+        incomeMinor: p.totals.incomeMinor,
+        expenseMinor: p.totals.expenseMinor,
+        netMinor: p.totals.netMinor,
+      })),
+      topCategories: topCategories.slice(0, 5).map((c) => ({
+        categoryId: c.categoryId,
+        categoryName: c.categoryId ? (categoryNameMap.get(c.categoryId) ?? "Uncategorized") : "Uncategorized",
+        amountMinor: c.amountMinor,
+        percent: c.percent,
+      })),
       privacyMode: profile?.privacy_mode_enabled ?? false,
       preferredCurrency: currency,
     });

@@ -223,15 +223,6 @@ function composePrivateMessage(eventType: NotificationEventType): NotificationMe
     case "COMMITMENT_PREPARATION":
       return { title: "Commitment preparation reminder", body: "Time to set aside funds for an upcoming commitment." };
 
-    // ---- Loans ----
-    case "LOAN_7_DAYS":
-    case "LOAN_3_DAYS":
-    case "LOAN_1_DAY":
-    case "LOAN_DUE_TODAY":
-      return { title: "Loan payment reminder", body: "A loan installment is coming up." };
-    case "LOAN_OVERDUE":
-      return { title: "Loan payment overdue", body: "A loan installment is overdue." };
-
     // ---- Credit card billing ----
     case "CC_STATEMENT_7_DAYS":
     case "CC_STATEMENT_TODAY":
@@ -643,43 +634,6 @@ function composeCore(
       return {
         title: `Time to set aside money for ${commitmentName}`,
         body: `${fmt(savingAmountMinor, currency)} is planned for ${commitmentName} today. Payment is due ${payLabel}.`,
-      };
-    }
-
-    // ---- Loan payment reminders ----
-    case "LOAN_7_DAYS": {
-      const { loanName, installmentMinor } = c as { loanName: string; installmentMinor: number };
-      return {
-        title: `${loanName} payment due in 7 days`,
-        body: `${fmt(installmentMinor, currency)} installment is due next week.`,
-      };
-    }
-    case "LOAN_3_DAYS": {
-      const { loanName, installmentMinor } = c as { loanName: string; installmentMinor: number };
-      return {
-        title: `${loanName} payment due in 3 days`,
-        body: `${fmt(installmentMinor, currency)} installment is due in 3 days.`,
-      };
-    }
-    case "LOAN_1_DAY": {
-      const { loanName, installmentMinor } = c as { loanName: string; installmentMinor: number };
-      return {
-        title: `${loanName} payment due tomorrow`,
-        body: `Your ${loanName} installment of ${fmt(installmentMinor, currency)} is due tomorrow.`,
-      };
-    }
-    case "LOAN_DUE_TODAY": {
-      const { loanName, installmentMinor } = c as { loanName: string; installmentMinor: number };
-      return {
-        title: `${loanName} payment due today`,
-        body: `Your ${loanName} installment of ${fmt(installmentMinor, currency)} is due today.`,
-      };
-    }
-    case "LOAN_OVERDUE": {
-      const { loanName, daysPast } = c as { loanName: string; daysPast: number };
-      return {
-        title: `${loanName} payment overdue`,
-        body: `${loanName} installment was due ${daysPast} day${daysPast === 1 ? "" : "s"} ago. Record the payment when done.`,
       };
     }
 

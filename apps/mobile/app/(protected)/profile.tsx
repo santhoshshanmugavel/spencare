@@ -211,6 +211,21 @@ export default function ProfileScreen(): React.JSX.Element {
           </View>
         </View>
 
+        {/* Security */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Security</Text>
+
+          <TouchableOpacity
+            style={styles.navRow}
+            onPress={() => router.push("/settings/change-password" as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Change password"
+          >
+            <Text style={styles.navRowText}>Change password</Text>
+            <Text style={styles.navRowChevron}>›</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Data */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Data</Text>

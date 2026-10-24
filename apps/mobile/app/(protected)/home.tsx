@@ -9,7 +9,14 @@ import {
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { api, type BudgetWithUsageJSON, type DashboardResponse, type MoneyJSON } from "@/lib/api";
+import {
+  api,
+  type BudgetWithUsageJSON,
+  type CashFlowTrendPoint,
+  type CategorySpendSlice,
+  type DashboardResponse,
+  type MoneyJSON,
+} from "@/lib/api";
 import { useTheme, radius, spacing, typography, type Theme } from "@/lib/theme";
 
 // ── Money formatting ─────────────────────────────────────────────────────────
@@ -402,6 +409,132 @@ function makeBudgetStyles(t: Theme) {
   });
 }
 
+// ── Cash Flow Trend (6-month bar chart, no native lib needed) ─────────────────
+
+function CashFlowTrendCard({
+  trend,
+  currency,
+  privacyMode,
+  t,
+}: {
+  trend: CashFlowTrendPoint[];
+  currency: string;
+  privacyMode: boolean;
+  t: Theme;
+}): React.JSX.Element | null {
+  const styles = useMemo(() => makeTrendStyles(t), [t]);
+  if (trend.length === 0) return null;
+
+  // Scale all bars relative to the maximum absolute value across the period
+  const maxVal = trend.reduce((m, p) => Math.max(m, p.incomeMinor, p.expenseMinor), 1);
+
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const label = (periodStart: string): string => {
+    const m = parseInt(periodStart.slice(5, 7), 10) - 1;
+    return MONTHS[m] ?? periodStart.slice(5, 7);
+  };
+
+  return (
+    <Card t={t}>
+      <View style={styles.trendRow}>
+        {trend.map((p) => {
+          const incPct = (p.incomeMinor / maxVal) * 100;
+          const expPct = (p.expenseMinor / maxVal) * 100;
+          return (
+            <View key={p.periodStart} style={styles.trendCol}>
+              <View style={styles.barsWrap}>
+                <View style={styles.bar}>
+                  <View style={[styles.barFill, styles.barIncome, { height: `${incPct}%` as `${number}%` }]} />
+                </View>
+                <View style={styles.bar}>
+                  <View style={[styles.barFill, styles.barExpense, { height: `${expPct}%` as `${number}%` }]} />
+                </View>
+              </View>
+              <Text style={styles.trendLabel}>{label(p.periodStart)}</Text>
+            </View>
+          );
+        })}
+      </View>
+      {!privacyMode && (
+        <View style={styles.legendRow}>
+          <View style={[styles.legendDot, { backgroundColor: t.income }]} />
+          <Text style={styles.legendText}>Income</Text>
+          <View style={[styles.legendDot, { backgroundColor: t.destructive, marginLeft: 12 }]} />
+          <Text style={styles.legendText}>Expenses</Text>
+        </View>
+      )}
+      {privacyMode && <Text style={styles.legendText}>••••</Text>}
+    </Card>
+  );
+}
+
+function makeTrendStyles(t: Theme) {
+  return StyleSheet.create({
+    trendRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", height: 80 },
+    trendCol: { flex: 1, alignItems: "center" },
+    barsWrap: { flexDirection: "row", alignItems: "flex-end", height: 64, gap: 2 },
+    bar: { width: 8, height: 64, justifyContent: "flex-end", overflow: "hidden", borderRadius: 2 },
+    barFill: { width: "100%", borderRadius: 2 },
+    barIncome: { backgroundColor: t.income },
+    barExpense: { backgroundColor: t.destructive },
+    trendLabel: { fontSize: 9, color: t.foregroundSubtle, marginTop: 4, textAlign: "center" },
+    legendRow: { flexDirection: "row", alignItems: "center", marginTop: spacing.sm },
+    legendDot: { width: 8, height: 8, borderRadius: 4 },
+    legendText: { fontSize: typography.size.xs, color: t.foregroundSubtle, marginLeft: 4 },
+  });
+}
+
+// ── Category spending breakdown ───────────────────────────────────────────────
+
+function CategoryBreakdownCard({
+  categories,
+  currency,
+  privacyMode,
+  t,
+}: {
+  categories: CategorySpendSlice[];
+  currency: string;
+  privacyMode: boolean;
+  t: Theme;
+}): React.JSX.Element | null {
+  const styles = useMemo(() => makeCatStyles(t), [t]);
+  if (categories.length === 0) return null;
+  return (
+    <Card t={t}>
+      {categories.map((c, i) => (
+        <View key={c.categoryId ?? "uncategorized"} style={[styles.row, i < categories.length - 1 && styles.rowBorder]}>
+          <View style={styles.nameWrap}>
+            <Text style={styles.name} numberOfLines={1}>{c.categoryName}</Text>
+            <View style={styles.progressBg}>
+              <View style={[styles.progressFill, { width: `${Math.round(c.percent)}%` as `${number}%` }]} />
+            </View>
+          </View>
+          <Text style={styles.amount}>
+            {privacyMode ? "••••" : formatMinor(c.amountMinor, currency, false)}
+          </Text>
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+function makeCatStyles(t: Theme) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: spacing.sm,
+    },
+    rowBorder: { borderBottomWidth: 1, borderBottomColor: t.separator },
+    nameWrap: { flex: 1, marginRight: spacing.md },
+    name: { fontSize: typography.size.sm, color: t.foreground, marginBottom: 4 },
+    progressBg: { height: 4, backgroundColor: t.separator, borderRadius: radius.pill, overflow: "hidden" },
+    progressFill: { height: "100%", backgroundColor: t.primary, borderRadius: radius.pill },
+    amount: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: t.foreground },
+  });
+}
+
 function BillsCard({
   bills,
   privacyMode,
@@ -574,6 +707,22 @@ export default function HomeScreen(): React.JSX.Element {
       {/* This month */}
       <SectionLabel label="This Month" t={t} />
       <CashFlowCard cashFlow={data.cashFlow} currency={data.preferredCurrency} privacyMode={privacyMode} t={t} />
+
+      {/* 6-month cash flow trend */}
+      {data.cashFlowTrend.length > 0 && (
+        <>
+          <SectionLabel label="Cash Flow Trend" t={t} />
+          <CashFlowTrendCard trend={data.cashFlowTrend} currency={data.preferredCurrency} privacyMode={privacyMode} t={t} />
+        </>
+      )}
+
+      {/* Top spending categories this month */}
+      {data.topCategories.length > 0 && (
+        <>
+          <SectionLabel label="Top Spending" t={t} />
+          <CategoryBreakdownCard categories={data.topCategories} currency={data.preferredCurrency} privacyMode={privacyMode} t={t} />
+        </>
+      )}
 
       {/* Accounts */}
       <SectionLabel label="Accounts" t={t} />

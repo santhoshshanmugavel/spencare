@@ -34,7 +34,6 @@ export interface SafeToSpendJSON {
   cardPaymentReservedTotal: MoneyJSON;
   upcomingBillsTotal: MoneyJSON;
   commitmentReservedTotal: MoneyJSON;
-  loanReservedTotal: MoneyJSON;
   ownedSpendableTotal: MoneyJSON;
   creditAvailableTotal: MoneyJSON;
 }
@@ -80,6 +79,20 @@ export interface NetWorthJSON {
   totalLiabilities: MoneyJSON;
 }
 
+export interface CashFlowTrendPoint {
+  periodStart: string;
+  incomeMinor: number;
+  expenseMinor: number;
+  netMinor: number;
+}
+
+export interface CategorySpendSlice {
+  categoryId: string | null;
+  categoryName: string;
+  amountMinor: number;
+  percent: number;
+}
+
 export interface DashboardResponse {
   safeToSpend: SafeToSpendJSON;
   accounts: AccountJSON[];
@@ -87,6 +100,8 @@ export interface DashboardResponse {
   upcomingBills: BillJSON[];
   cashFlow: CashFlowJSON;
   netWorth: NetWorthJSON;
+  cashFlowTrend: CashFlowTrendPoint[];
+  topCategories: CategorySpendSlice[];
   privacyMode: boolean;
   preferredCurrency: string;
 }
@@ -435,6 +450,24 @@ export interface CreateBillBody {
   category_id?: string | null;
 }
 
+// ── Commitments & Loans types ─────────────────────────────────────────────────
+
+export interface CommitmentJSON {
+  id: string;
+  name: string;
+  amount_minor: number;
+  currency: string;
+  payment_frequency: string;
+  next_payment_date: string | null;
+  status: string;
+  category_id: string | null;
+  auto_pay_enabled: boolean;
+}
+
+export interface UpcomingDataResponse {
+  commitments: CommitmentJSON[];
+}
+
 // ── Spensa AI types ───────────────────────────────────────────────────────────
 
 export interface SpensaMessageBody {
@@ -663,6 +696,9 @@ export const api = {
   forgotPassword: (email: string) =>
     post<{ ok: boolean }>("/api/mobile/auth/forgot-password", { email }),
 
+  changePassword: (currentPassword: string, newPassword: string, accessToken: string) =>
+    post<{ ok: boolean }>("/api/mobile/auth/change-password", { currentPassword, newPassword }, accessToken),
+
   // Onboarding
   getOnboardingStatus: (accessToken: string) =>
     get<OnboardingStatusResponse>("/api/mobile/onboarding", accessToken),
@@ -876,6 +912,29 @@ export const api = {
 
   deleteVehicle: (vehicleId: string, accessToken: string) =>
     del<void>(`/api/mobile/vehicles/${vehicleId}`, undefined, accessToken),
+
+  // Commitments & Loans
+  getUpcoming: (accessToken: string) =>
+    get<UpcomingDataResponse>("/api/mobile/upcoming", accessToken),
+
+  pauseCommitment: (commitmentId: string, accessToken: string) =>
+    patch<{ ok: boolean }>("/api/mobile/commitments", { action: "pause", commitment_id: commitmentId }, accessToken),
+
+  resumeCommitment: (commitmentId: string, accessToken: string) =>
+    patch<{ ok: boolean }>("/api/mobile/commitments", { action: "resume", commitment_id: commitmentId }, accessToken),
+
+  deleteCommitment: (commitmentId: string, accessToken: string) =>
+    patch<{ ok: boolean }>("/api/mobile/commitments", { action: "delete", commitment_id: commitmentId }, accessToken),
+
+  markCommitmentPaid: (
+    body: { commitment_id: string; account_id: string; category_id: string; amount_minor: number; occurred_at: string },
+    accessToken: string,
+  ) =>
+    patch<{ ok: boolean; transactionId: string; nextOccurrenceDate: string | null }>(
+      "/api/mobile/commitments",
+      { action: "mark_paid", ...body },
+      accessToken,
+    ),
 
   // Profile
   getProfile: (accessToken: string) =>

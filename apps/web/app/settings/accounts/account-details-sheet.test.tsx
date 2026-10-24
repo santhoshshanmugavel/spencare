@@ -30,7 +30,6 @@ function baseProps() {
     masked: false,
     goalReserveMinor: 0,
     commitmentReserveMinor: 0,
-    loanReserveMinor: 0,
     cardReserveMinor: 0,
     cardReserveDetails: [],
   };
@@ -152,14 +151,12 @@ describe("<AccountDetailsSheet> — bank reserve breakdown", () => {
         {...bankProps}
         goalReserveMinor={0}
         commitmentReserveMinor={0}
-        loanReserveMinor={0}
       />,
     );
-    // Three aggregate rows, each labelled "None" when zero.
+    // Two aggregate rows, each labelled "None" when zero.
     expect(screen.getByText("Reserved for goals")).toBeInTheDocument();
     expect(screen.getByText("Reserved for commitments")).toBeInTheDocument();
-    expect(screen.getByText("Reserved for loans")).toBeInTheDocument();
-    expect(screen.getAllByText("None").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText("None").length).toBeGreaterThanOrEqual(2);
   });
 
   it("exposes a chevron toggle on an aggregate row with items; collapsed by default (items hidden)", () => {
@@ -169,11 +166,9 @@ describe("<AccountDetailsSheet> — bank reserve breakdown", () => {
         {...bankProps}
         goalReserveMinor={2000000}
         commitmentReserveMinor={0}
-        loanReserveMinor={0}
         reserveBreakdown={{
           goals: [{ id: "g1", name: "Emergency Fund", reservedMinor: 2000000, targetMinor: 5000000, targetDate: "2026-12-31" }],
           commitments: [],
-          loans: [],
         }}
       />,
     );
@@ -190,14 +185,12 @@ describe("<AccountDetailsSheet> — bank reserve breakdown", () => {
         {...bankProps}
         goalReserveMinor={2000000}
         commitmentReserveMinor={0}
-        loanReserveMinor={0}
         reserveBreakdown={{
           goals: [
             { id: "g1", name: "Emergency Fund", reservedMinor: 1500000, targetMinor: 5000000, targetDate: null },
             { id: "g2", name: "New Laptop", reservedMinor: 500000, targetMinor: 8000000, targetDate: null },
           ],
           commitments: [],
-          loans: [],
         }}
       />,
     );
@@ -221,7 +214,6 @@ describe("<AccountDetailsSheet> — bank reserve breakdown", () => {
         {...bankProps}
         goalReserveMinor={0}
         commitmentReserveMinor={14900}
-        loanReserveMinor={0}
         reserveBreakdown={{
           goals: [],
           commitments: [
@@ -236,7 +228,6 @@ describe("<AccountDetailsSheet> — bank reserve breakdown", () => {
               nextOccurrenceReservedMinor: 14900, // fully protected
             },
           ],
-          loans: [],
         }}
       />,
     );
@@ -252,7 +243,6 @@ describe("<AccountDetailsSheet> — bank reserve breakdown", () => {
         {...bankProps}
         goalReserveMinor={0}
         commitmentReserveMinor={0}
-        loanReserveMinor={0}
       />,
     );
     expect(

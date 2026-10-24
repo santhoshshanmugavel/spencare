@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, CreditCard, Landmark, ArrowRight } from "lucide-react";
+import { CalendarClock, CreditCard, ArrowRight } from "lucide-react";
 import { Money as DomainMoney } from "@spencare/domain-core";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ function DateChip({ isoDate }: { isoDate: string }) {
 
 export interface UpcomingWidgetItem {
   id: string;
-  kind: "commitment" | "loan";
+  kind: "commitment";
   name: string;
   amountMinor: number;
   currency: string;
@@ -81,11 +81,7 @@ export function UpcomingWidget({ items, masked, totalThisMonthMinor }: UpcomingW
             className="flex items-center justify-between px-4 py-3 border-t border-border/50 first:border-t-0"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              {item.kind === "commitment" ? (
-                <CreditCard className="size-4 shrink-0 text-muted-foreground" />
-              ) : (
-                <Landmark className="size-4 shrink-0 text-muted-foreground" />
-              )}
+              <CreditCard className="size-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{item.name}</p>
                 <DateChip isoDate={item.dueDate} />

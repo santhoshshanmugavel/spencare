@@ -38,10 +38,6 @@ import {
   proposePauseCommitmentSchema,
   proposeResumeCommitmentSchema,
   proposeDeleteCommitmentSchema,
-  proposeCreateLoanSchema,
-  proposeUpdateLoanSchema,
-  proposeDeleteLoanSchema,
-  proposeMarkLoanPaidSchema,
   confirmCommandSchema,
   cancelCommandSchema,
   createFinancialPlanSchema,
@@ -1006,89 +1002,6 @@ export function registerWriteTools(server: McpServer, ctx: McpAuthContext): void
         return proposeCommand(ctx, "mcp", "markOccurrencePaid", input as unknown as Record<string, unknown>, {
           summary: "Mark this commitment occurrence as paid.",
           fields: [{ label: "Action", value: "Mark as paid" }],
-        });
-      }),
-  );
-
-  // ── Loan write tools ─────────────────────────────────────────────────────
-
-  server.registerTool(
-    "proposeCreateLoan",
-    {
-      description: "Propose adding a new loan so Spencare can track installment payments. This is tracking only — no money is moved. Returns a proposal the user must confirm via confirmPendingAction.",
-      inputSchema: proposeCreateLoanSchema.shape,
-    },
-    async (rawInput: unknown) =>
-      runScopedTool(ctx, "proposeCreateLoan", "write", async () => {
-        const input = proposeCreateLoanSchema.parse(rawInput);
-        const privacyMode = await isPrivacyModeEnabled(ctx);
-        const principalText = describeAmountForProvider(input.principalMinor, input.currency ?? "INR", privacyMode);
-        const installText = describeAmountForProvider(input.installmentAmountMinor, input.currency ?? "INR", privacyMode);
-        return proposeCommand(ctx, "mcp", "createLoan", input as unknown as Record<string, unknown>, {
-          summary: `Add loan "${input.name}" — principal ${principalText}, installment ${installText} ${input.repaymentFrequency}.`,
-          fields: [
-            { label: "Name", value: input.name },
-            { label: "Type", value: input.loanType ?? "personal" },
-            { label: "Principal", value: principalText },
-            { label: "Installment", value: installText },
-            { label: "Frequency", value: input.repaymentFrequency },
-          ],
-        });
-      }),
-  );
-
-  server.registerTool(
-    "proposeUpdateLoan",
-    {
-      description: "Propose updating a loan's details. Returns a proposal the user must confirm via confirmPendingAction.",
-      inputSchema: { loanId: z.string().uuid(), ...proposeUpdateLoanSchema.shape },
-    },
-    async (rawInput: unknown) =>
-      runScopedTool(ctx, "proposeUpdateLoan", "write", async () => {
-        const { loanId, ...rest } = rawInput as { loanId: string; [k: string]: unknown };
-        const input = proposeUpdateLoanSchema.parse(rest);
-        return proposeCommand(ctx, "mcp", "updateLoan", { loanId, ...input } as Record<string, unknown>, {
-          summary: "Update loan details.",
-          fields: [{ label: "Loan ID", value: loanId }],
-        });
-      }),
-  );
-
-  server.registerTool(
-    "proposeDeleteLoan",
-    {
-      description: "Propose deleting a loan record. Returns a proposal the user must confirm via confirmPendingAction.",
-      inputSchema: proposeDeleteLoanSchema.shape,
-    },
-    async (rawInput: unknown) =>
-      runScopedTool(ctx, "proposeDeleteLoan", "write", async () => {
-        const { loanId } = proposeDeleteLoanSchema.parse(rawInput);
-        return proposeCommand(ctx, "mcp", "deleteLoan", { loanId }, {
-          summary: "Delete this loan record. This cannot be undone.",
-          fields: [{ label: "Action", value: "Delete loan" }],
-        });
-      }),
-  );
-
-  server.registerTool(
-    "proposeMarkLoanPaid",
-    {
-      description:
-        "Propose recording a loan installment payment. Creates an expense transaction from the payment account and advances the loan's next payment date. Returns a proposal the user must confirm via confirmPendingAction.",
-      inputSchema: proposeMarkLoanPaidSchema.shape,
-    },
-    async (rawInput: unknown) =>
-      runScopedTool(ctx, "proposeMarkLoanPaid", "write", async () => {
-        const input = proposeMarkLoanPaidSchema.parse(rawInput);
-        const privacyMode = await isPrivacyModeEnabled(ctx);
-        const amountText = describeAmountForProvider(input.amountMinor, "INR", privacyMode);
-        return proposeCommand(ctx, "mcp", "markLoanPaid", input as unknown as Record<string, unknown>, {
-          summary: `Record loan installment payment of ${amountText} on ${input.paidDate}.`,
-          fields: [
-            { label: "Amount", value: amountText },
-            { label: "Date", value: input.paidDate },
-            { label: "Loan ID", value: input.loanId },
-          ],
         });
       }),
   );

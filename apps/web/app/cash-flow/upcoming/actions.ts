@@ -14,9 +14,6 @@ import {
   createTransaction,
   transfer,
   predictNextOccurrence,
-  addLoan,
-  editLoan,
-  removeLoan,
   getCreditCardBillingStatus,
   matchCreditCardPayment,
   forceMarkCreditCardObligationPaid,
@@ -30,12 +27,8 @@ import {
   reserveCommitmentSchema,
   skipOccurrenceSchema,
   markCommitmentPaidSchema,
-  createLoanSchema,
-  updateLoanSchema,
   type CreateCommitmentInput,
   type UpdateCommitmentInput,
-  type CreateLoanInput,
-  type UpdateLoanInput,
 } from "@spencare/validation";
 import { projectOccurrenceDates, type PaymentFrequency } from "@spencare/domain-core";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -362,134 +355,6 @@ export async function markOccurrencePaidNoTransactionAction(occurrenceId: string
     return { ok: true as const };
   } catch (e) {
     return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to mark paid." } };
-  }
-}
-
-// ── Loans ─────────────────────────────────────────────────────────────────────
-
-export async function createLoanAction(input: CreateLoanInput) {
-  const parse = createLoanSchema.safeParse(input);
-  if (!parse.success) return { ok: false as const, error: { message: parse.error.issues[0]?.message ?? "Invalid input." } };
-
-  const ctx = await requireAuthContext();
-  try {
-    const data = parse.data;
-    const loan = await addLoan(ctx, {
-      name: data.name,
-      lenderName: data.lenderName ?? null,
-      loanType: data.loanType as import("@spencare/domain-application").LoanRow["loan_type"],
-      principalMinor: data.principalMinor,
-      interestRatePct: data.interestRatePct ?? null,
-      currency: data.currency,
-      startDate: data.startDate ?? null,
-      endDate: data.endDate ?? null,
-      repaymentFrequency: data.repaymentFrequency as import("@spencare/domain-application").LoanRow["repayment_frequency"],
-      installmentAmountMinor: data.installmentAmountMinor,
-      nextPaymentDate: data.nextPaymentDate ?? null,
-      paymentAccountId: data.paymentAccountId ?? null,
-      reserveAccountId: data.reserveAccountId ?? null,
-      outstandingMinor: data.outstandingMinor ?? null,
-      notes: data.notes ?? null,
-    });
-    revalidateAll();
-    return { ok: true as const, data: loan };
-  } catch (e) {
-    return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to create loan." } };
-  }
-}
-
-export async function updateLoanAction(loanId: string, input: UpdateLoanInput) {
-  const parse = updateLoanSchema.safeParse(input);
-  if (!parse.success) return { ok: false as const, error: { message: parse.error.issues[0]?.message ?? "Invalid input." } };
-
-  const ctx = await requireAuthContext();
-  try {
-    const data = parse.data;
-    const loan = await editLoan(ctx, loanId, {
-      ...(data.name !== undefined ? { name: data.name } : {}),
-      ...(data.lenderName !== undefined ? { lenderName: data.lenderName } : {}),
-      ...(data.loanType !== undefined ? { loanType: data.loanType as import("@spencare/domain-application").LoanRow["loan_type"] } : {}),
-      ...(data.interestRatePct !== undefined ? { interestRatePct: data.interestRatePct } : {}),
-      ...(data.endDate !== undefined ? { endDate: data.endDate ?? null } : {}),
-      ...(data.repaymentFrequency !== undefined ? { repaymentFrequency: data.repaymentFrequency as import("@spencare/domain-application").LoanRow["repayment_frequency"] } : {}),
-      ...(data.installmentAmountMinor !== undefined ? { installmentAmountMinor: data.installmentAmountMinor } : {}),
-      ...(data.nextPaymentDate !== undefined ? { nextPaymentDate: data.nextPaymentDate ?? null } : {}),
-      ...(data.paymentAccountId !== undefined ? { paymentAccountId: data.paymentAccountId } : {}),
-      ...(data.reserveAccountId !== undefined ? { reserveAccountId: data.reserveAccountId } : {}),
-      ...(data.outstandingMinor !== undefined ? { outstandingMinor: data.outstandingMinor } : {}),
-      ...(data.notes !== undefined ? { notes: data.notes } : {}),
-    });
-    revalidateAll();
-    return { ok: true as const, data: loan };
-  } catch (e) {
-    return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to update loan." } };
-  }
-}
-
-export async function deleteLoanAction(loanId: string) {
-  const ctx = await requireAuthContext();
-  try {
-    await removeLoan(ctx, loanId);
-    revalidateAll();
-    return { ok: true as const };
-  } catch (e) {
-    return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to delete loan." } };
-  }
-}
-
-export async function markLoanPaidAction(input: {
-  loanId: string;
-  paymentAccountId: string;
-  paidAmountMinor: number;
-  paidDate: string;
-  categoryId: string | null;
-  outstandingMinor: number | null;
-}) {
-  if (!input.paymentAccountId) return { ok: false as const, error: { message: "Payment account is required." } };
-  if (!input.categoryId) return { ok: false as const, error: { message: "Category is required." } };
-  const ctx = await requireAuthContext();
-  try {
-    const { data: loan, error: loanError } = await ctx.supabase
-      .from("loans")
-      .select("id, name, repayment_frequency, next_payment_date")
-      .eq("id", input.loanId)
-      .eq("user_id", ctx.userId)
-      .is("deleted_at", null)
-      .single();
-    if (loanError || !loan) return { ok: false as const, error: { message: "Loan not found." } };
-
-    // Create expense transaction for the installment
-    const txnResult = await createTransaction.execute(ctx, {
-      kind: "expense",
-      accountId: input.paymentAccountId,
-      categoryId: input.categoryId,
-      amountMinor: input.paidAmountMinor,
-      itemName: loan.name,
-      merchant: undefined,
-      description: undefined,
-      occurredAt: input.paidDate,
-    });
-    if (!txnResult.ok) throw new Error(txnResult.error.message);
-
-    // Advance next_payment_date
-    const nextDate = loan.next_payment_date
-      ? (predictNextOccurrence(loan.next_payment_date, loan.repayment_frequency as RecurrenceInterval) ?? null)
-      : null;
-
-    await ctx.supabase
-      .from("loans")
-      .update({
-        ...(nextDate !== undefined ? { next_payment_date: nextDate } : {}),
-        ...(input.outstandingMinor !== null ? { outstanding_minor: input.outstandingMinor } : {}),
-      })
-      .eq("id", input.loanId)
-      .eq("user_id", ctx.userId);
-
-    revalidateAll();
-    revalidatePath("/cash-flow/transactions");
-    return { ok: true as const, nextPaymentDate: nextDate };
-  } catch (e) {
-    return { ok: false as const, error: { message: e instanceof Error ? e.message : "Failed to record loan payment." } };
   }
 }
 

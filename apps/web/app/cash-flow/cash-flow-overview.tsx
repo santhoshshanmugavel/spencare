@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, CalendarClock, CreditCard, Landmark, PiggyBank, Search, Sparkles, Target } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, CalendarClock, CreditCard, PiggyBank, Search, Sparkles, Target } from "lucide-react";
 import { Money as DomainMoney, ACCOUNT_TYPE_LABELS, filterByCapability, getSpendableMinor, getTransactionDisplay } from "@spencare/domain-core";
 import type {
   AccountRow,
@@ -17,7 +17,6 @@ import type {
   BillPredictionWithDefinition,
   BillDefinitionRow,
   PlannedCommitmentRow,
-  LoanRow,
 } from "@spencare/domain-application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,9 +45,7 @@ import { BillNowSheet } from "./bills/bill-now-sheet";
 import { EditBillSheet } from "./bills/edit-bill-sheet";
 import { getBillAction } from "./bills/actions";
 import { CommitmentActions } from "./upcoming/commitment-actions";
-import { LoanActions } from "./upcoming/loan-actions";
 import { CommitmentSheet } from "./upcoming/commitment-sheet";
-import { LoanSheet } from "./upcoming/loan-sheet";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { toastError } from "@/lib/toast";
 
@@ -131,7 +128,6 @@ export function CashFlowOverview({
   budgetUsages,
   bills = [],
   commitments = [],
-  loans = [],
 }: {
   periodStart: string;
   accounts: AccountRow[];
@@ -147,7 +143,6 @@ export function CashFlowOverview({
   budgetUsages: BudgetWithUsage[];
   bills?: BillPredictionWithDefinition[];
   commitments?: PlannedCommitmentRow[];
-  loans?: LoanRow[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -161,13 +156,10 @@ export function CashFlowOverview({
   const [payingBill, setPayingBill] = useState<BillPredictionWithDefinition | null>(null);
   const [editingBill, setEditingBill] = useState<BillDefinitionRow | null>(null);
   const [commitmentSheetOpen, setCommitmentSheetOpen] = useState(false);
-  const [loanSheetOpen, setLoanSheetOpen] = useState(false);
-  const [editingLoan, setEditingLoan] = useState<LoanRow | undefined>(undefined);
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const commitmentById = new Map(commitments.map((c) => [c.id, c]));
-  const loanById = new Map(loans.map((l) => [l.id, l]));
   // Bank/Cash/Credit Card are filterable here (Investment still excluded
   // -- no per-account decomposition the architecture supports for it).
   // Deliberately uses `expenseSource`, not `safeToSpendEligible` -- Phase
@@ -506,7 +498,7 @@ export function CashFlowOverview({
                 <>
                   {upcomingGroups.map((group) => {
                     const groupTotal = group.items
-                      .filter((e) => e.kind === "commitment_payment" || e.kind === "loan" || e.kind === "goal_contribution")
+                      .filter((e) => e.kind === "commitment_payment" || e.kind === "goal_contribution")
                       .reduce((sum, e) => sum + e.amountMinor, 0);
                     const groupTotalMoney = DomainMoney.fromMinorUnits(BigInt(groupTotal), CURRENCY as never);
                     return (
@@ -571,31 +563,6 @@ export function CashFlowOverview({
                                 );
                               }
 
-                              if (e.kind === "loan") {
-                                const loan = loanById.get(e.sourceId);
-                                return (
-                                  <ListRow
-                                    key={e.id}
-                                    icon={<Landmark className="size-4 text-muted-foreground" />}
-                                    title={e.title}
-                                    subtitle={e.subtitle ?? undefined}
-                                    trailing={
-                                      <div className="flex items-center gap-1">
-                                        <Money value={DomainMoney.fromMinorUnits(BigInt(e.amountMinor), e.currency as never)} masked={masked} size="numeric" />
-                                        {loan ? (
-                                          <LoanActions
-                                            loan={loan}
-                                            accounts={accounts}
-                                            categories={categories}
-                                            onChanged={handleMutated}
-                                            onEdit={(l) => { setEditingLoan(l); setLoanSheetOpen(true); }}
-                                          />
-                                        ) : null}
-                                      </div>
-                                    }
-                                  />
-                                );
-                              }
 
                               if (e.kind === "goal_contribution") {
                                 return (
@@ -917,13 +884,6 @@ export function CashFlowOverview({
         categories={categories}
       />
 
-      <LoanSheet
-        open={loanSheetOpen}
-        onOpenChange={(v) => { setLoanSheetOpen(v); if (!v) setEditingLoan(undefined); }}
-        onSaved={() => { setLoanSheetOpen(false); setEditingLoan(undefined); handleMutated(); }}
-        accounts={accounts}
-        existing={editingLoan}
-      />
 
     </div>
   );

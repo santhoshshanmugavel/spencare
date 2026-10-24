@@ -457,20 +457,10 @@ export {
   type CreatePlannedCommitmentPatch,
   type UpdatePlannedCommitmentPatch,
 } from "./queries/plannedCommitments.js";
-export {
-  listAllLoans,
-  addLoan,
-  editLoan,
-  removeLoan,
-  getLoanById,
-  type LoanRow,
-} from "./queries/loans.js";
 export type {
   CommitmentStatus,
   CommitmentTenureType,
   CommitmentOccurrenceStatus,
-  LoanType,
-  LoanStatus,
 } from "@spencare/domain-infra";
 export {
   createFinancialPlan,

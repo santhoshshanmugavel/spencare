@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   AccountRow,
   CategoryRow,
-  LoanRow,
   PlannedCommitmentRow,
   UpcomingEvent,
 } from "@spencare/domain-application";
@@ -17,7 +16,6 @@ import { UpcomingDashboard } from "./upcoming-dashboard";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/toast", () => ({ toastConfirmed: vi.fn(), toastError: vi.fn() }));
 vi.mock("./actions", () => ({
-  deleteLoanAction: vi.fn().mockResolvedValue({ ok: true }),
   deleteCommitmentAction: vi.fn().mockResolvedValue({ ok: true }),
   pauseCommitmentAction: vi.fn().mockResolvedValue({ ok: true }),
   resumeCommitmentAction: vi.fn().mockResolvedValue({ ok: true }),
@@ -127,7 +125,6 @@ function makePersistedPaymentEvent(commitment: PlannedCommitmentRow, date: strin
 const emptyProps = {
   events: [] as UpcomingEvent[],
   commitments: [] as PlannedCommitmentRow[],
-  loans: [] as LoanRow[],
   accounts: [bankAccount],
   categories: [entertainmentCategory],
   masked: false,

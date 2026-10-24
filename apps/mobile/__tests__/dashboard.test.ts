@@ -35,7 +35,6 @@ const buildDashboard = (overrides: Partial<DashboardResponse> = {}): DashboardRe
     cardPaymentReservedTotal: money(0),
     upcomingBillsTotal: money(30000),
     commitmentReservedTotal: money(0),
-    loanReservedTotal: money(0),
     ownedSpendableTotal: money(100000),
     creditAvailableTotal: money(0),
   },
@@ -56,6 +55,8 @@ const buildDashboard = (overrides: Partial<DashboardResponse> = {}): DashboardRe
     totalAssets: money(100000),
     totalLiabilities: money(50000),
   },
+  cashFlowTrend: [],
+  topCategories: [],
   privacyMode: false,
   preferredCurrency: "INR",
   ...overrides,
@@ -456,7 +457,6 @@ describe("Safe-to-Spend — goals_only state", () => {
         cardPaymentReservedTotal: money(0),
         upcomingBillsTotal: money(259900),
         commitmentReservedTotal: money(0),
-        loanReservedTotal: money(0),
         ownedSpendableTotal: money(10500000),
         creditAvailableTotal: money(0),
       },
@@ -491,7 +491,7 @@ describe("Safe-to-Spend — goals_only state", () => {
 //
 // Full formula: amount = availableBalance - goalReservedTotal
 //   - cardPaymentReservedTotal - upcomingBillsTotal
-//   - commitmentReservedTotal - loanReservedTotal
+//   - commitmentReservedTotal
 
 describe("Safe-to-Spend — full deduction formula", () => {
   it("all deduction fields contribute to reducing the STS amount", () => {
@@ -500,8 +500,7 @@ describe("Safe-to-Spend — full deduction formula", () => {
     const card = 200000;
     const bills = 300000;
     const commitments = 400000;
-    const loans = 100000;
-    const expected = available - goals - card - bills - commitments - loans;
+    const expected = available - goals - card - bills - commitments;
     const sts = {
       amount: money(expected),
       availableBalance: money(available),
@@ -509,15 +508,13 @@ describe("Safe-to-Spend — full deduction formula", () => {
       cardPaymentReservedTotal: money(card),
       upcomingBillsTotal: money(bills),
       commitmentReservedTotal: money(commitments),
-      loanReservedTotal: money(loans),
     };
     const computed =
       parseInt(sts.availableBalance.amountMinorUnits, 10) -
       parseInt(sts.goalReservedTotal.amountMinorUnits, 10) -
       parseInt(sts.cardPaymentReservedTotal.amountMinorUnits, 10) -
       parseInt(sts.upcomingBillsTotal.amountMinorUnits, 10) -
-      parseInt(sts.commitmentReservedTotal.amountMinorUnits, 10) -
-      parseInt(sts.loanReservedTotal.amountMinorUnits, 10);
+      parseInt(sts.commitmentReservedTotal.amountMinorUnits, 10);
     expect(parseInt(sts.amount.amountMinorUnits, 10)).toBe(computed);
   });
 

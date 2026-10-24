@@ -440,58 +440,6 @@ export async function checkCreditUtilization(input: CreditRuleInput, _stats?: No
   }, _stats);
 }
 
-interface LoanRuleInput extends UserTarget {
-  serviceRoleSupabase: TypedSupabaseClient;
-  loanId: string;
-  loanName: string;
-  dueDateIso: string;
-  installmentMinor: number;
-  currency?: string;
-  todayIso: string;
-}
-
-export async function checkLoanReminder(input: LoanRuleInput, _stats?: NotificationRunStats): Promise<void> {
-  const { serviceRoleSupabase, userId, userEmail, loanId, loanName, dueDateIso, installmentMinor } = input;
-  const currency = input.currency ?? "INR";
-  const today = new Date(input.todayIso + "T00:00:00Z");
-  const dueDate = new Date(dueDateIso + "T00:00:00Z");
-  const daysUntilDue = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000);
-
-  let eventType: DeliverNotificationInput["eventType"] | null = null;
-  let dedupeKey = "";
-
-  if (daysUntilDue === 7) {
-    eventType = "LOAN_7_DAYS";
-    dedupeKey = `loan_7d_${loanId}_${dueDateIso}`;
-  } else if (daysUntilDue === 3) {
-    eventType = "LOAN_3_DAYS";
-    dedupeKey = `loan_3d_${loanId}_${dueDateIso}`;
-  } else if (daysUntilDue === 1) {
-    eventType = "LOAN_1_DAY";
-    dedupeKey = `loan_1d_${loanId}_${dueDateIso}`;
-  } else if (daysUntilDue === 0) {
-    eventType = "LOAN_DUE_TODAY";
-    dedupeKey = `loan_due_${loanId}_${dueDateIso}`;
-  } else if (daysUntilDue < 0 && daysUntilDue >= -7) {
-    eventType = "LOAN_OVERDUE";
-    dedupeKey = `loan_overdue_${loanId}_${dueDateIso}`;
-  }
-
-  if (!eventType) return;
-
-  await deliverNotification(serviceRoleSupabase, {
-    userId, userEmail,
-    eventType,
-    financialContext: { loanName, installmentMinor, currency, daysPast: Math.abs(daysUntilDue) },
-    category: "loan",
-    severity: daysUntilDue <= 0 ? "warning" : "info",
-    entityType: "loan",
-    entityId: loanId,
-    actionUrl: "/cash-flow/upcoming",
-    dedupeKey,
-  }, _stats);
-}
-
 interface CreditCardBillingRuleInput extends UserTarget {
   serviceRoleSupabase: TypedSupabaseClient;
   accountId: string;
