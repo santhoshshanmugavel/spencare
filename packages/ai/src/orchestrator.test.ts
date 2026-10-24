@@ -50,6 +50,7 @@ vi.mock("@spencare/domain-infra", () => ({
   getPendingConfirmation: vi.fn(),
   getActiveEncryptedCredential: vi.fn(),
   decryptSecret: vi.fn(),
+  getCategorySpending: vi.fn(),
 }));
 
 const ctx = { userId: "u1", email: "a@b.com", supabase: {} as never, serviceRoleSupabase: {} as never };

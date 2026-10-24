@@ -51,7 +51,7 @@ interface SettingsNavItem {
   key: SettingsNavKey;
   label: string;
   href: string;
-  icon: ReactNode;
+  icon: JSX.Element;
 }
 
 const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
