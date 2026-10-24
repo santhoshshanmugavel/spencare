@@ -1,8 +1,28 @@
 # Spencare Mobile — Feature Parity Matrix
 
-Last updated: 2026-10-24 (session 5)  
-Branch: `mobile-foundation`  
+Last updated: 2026-10-24 (session 6 — CRITICAL RELEASE DIRECTIVE audit)  
+Branch: `mobile-foundation` @ `bcba950`  
 Methodology: Inspected all web routes, domain commands, and mobile screens.
+
+## Build & Test Status
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Mobile tsc | ✅ 0 errors | |
+| Web tsc | ⚠️ 2 pre-existing errors | `settings-nav.tsx` ReactNode — not a mobile regression |
+| Mobile tests | ✅ 350/350 | |
+| domain-application | ✅ 539/539 | |
+| mcp-server | ✅ 43/43 | |
+| @spencare/ai | ❌ 38 failing | Pre-existing: `claude-3-5-haiku-latest` deprecated + vitest mock infra |
+
+## Release Blockers
+
+| # | Issue | Status |
+|---|-------|--------|
+| 1 | TS2353 categoryId in transactions route | ✅ Fixed (bcba950) |
+| 2 | settings-nav.tsx ReactNode errors (web) | ⚠️ Pre-existing — fix before merge |
+| 3 | @spencare/ai test failures | ⚠️ Pre-existing — fix before merge |
+| 4 | mobile-foundation 2 commits behind main | Must rebase before PR |
 
 ---
 
@@ -249,29 +269,34 @@ Methodology: Inspected all web routes, domain commands, and mobile screens.
 
 ---
 
-## Implementation Priority (this session)
+## 2-Day Execution Plan (to production readiness)
 
-### P1 — Bills/Upcoming (Priority 8 per mandate)
-- Mobile API: `/api/mobile/bills/route.ts`
-- Mobile screen: `apps/mobile/app/(protected)/upcoming.tsx`
-- Add "Upcoming" tab to navigation
+### Day 1 — High-value, achievable
+1. **Dashboard charts** — cash flow trend sparkline + category spending breakdown. APIs: `getCashFlowTrend`, `getCashFlowByCategory` already in `/api/mobile/dashboard`.
+2. **Goal items on Home** — goal progress on dashboard. API data already available.
+3. **Change password** — Settings → Security. Domain commands exist; need mobile endpoint + screen.
 
-### P2 — Spensa AI (Priority 9)
-- Mobile API proxy: `/api/mobile/spensa/route.ts`
-- Mobile screen: `apps/mobile/app/(protected)/spensa.tsx`
-- Add "AI" tab to navigation
+### Day 2 — Medium-value, moderate effort
+4. **Commitments in Upcoming** — `/api/mobile/upcoming/` dir exists but empty. Domain fully implemented.
+5. **Loans in Upcoming** — same situation as commitments.
+6. **AI provider settings** — add mobile screen + passthrough to existing web settings API.
+7. **Data export** — `exportData` command exists; need mobile endpoint.
 
-### P3 — Settings Depth
-- Profile editing (name, currency)
-- Categories management screen
-- AI provider settings
+### Stretch (post Day 2)
+- Plans (Financial Life Plans) — 2–3 days
+- Vehicles/Fuel — 1 day read-only + fuel log; 3–4 days full parity
+- Notification preferences on mobile
+- Smart Transaction Capture — post-launch, Android only
 
-### P4 — Dashboard Enhancements
-- Category spending chart
-- Budget/goal summary cards on Home
+## Smart Transaction Capture — Platform Constraints
 
-### P5 — Remaining
-- Plans, Vehicles, Smart Transaction Capture
+**iOS:** Fully blocked. iOS sandboxing provides no read access to SMS or other apps' notifications. N/A.
+
+**Android options:**
+- `READ_SMS` — high Play Store scrutiny; requires policy justification
+- `BIND_NOTIFICATION_LISTENER_SERVICE` — requires user grants in Special App Access; lower scrutiny
+
+**Recommendation:** Post-launch. Implement as Android-only if pursued. Web Gmail ingestion is the cross-platform equivalent and is already live.
 
 ---
 
