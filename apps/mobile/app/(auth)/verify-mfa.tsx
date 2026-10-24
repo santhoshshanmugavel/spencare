@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -10,7 +10,8 @@ import {
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useAuth } from "@/lib/auth";
+import { useAuth, checkOnboarding } from "@/lib/auth";
+import { useTheme, radius, spacing, typography, type Theme } from "@/lib/theme";
 
 // Maps server error messages to user-safe display text.
 function classifyError(raw: string): { message: string; fatal: boolean } {
@@ -40,6 +41,9 @@ function classifyError(raw: string): { message: string; fatal: boolean } {
 export default function VerifyMfaScreen(): React.JSX.Element {
   const { verifyMfa } = useAuth();
   const { challengeToken } = useLocalSearchParams<{ challengeToken: string }>();
+  const t = useTheme();
+  const styles = useMemo(() => makeStyles(t), [t]);
+
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,8 +70,9 @@ export default function VerifyMfaScreen(): React.JSX.Element {
     setError(null);
     setLoading(true);
     try {
-      await verifyMfa(challengeToken, code.trim());
-      router.replace("/(protected)/home");
+      const { accessToken } = await verifyMfa(challengeToken, code.trim());
+      const dest = await checkOnboarding(accessToken);
+      router.replace(dest === "incomplete" ? "/onboarding" : "/(protected)/home");
     } catch (err: unknown) {
       const raw = err instanceof Error ? err.message : "";
       const { message, fatal } = classifyError(raw);
@@ -107,6 +112,7 @@ export default function VerifyMfaScreen(): React.JSX.Element {
               <TextInput
                 style={styles.input}
                 placeholder="123456 or XXXX-XXXX"
+                placeholderTextColor={t.foregroundSubtle}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="default"
@@ -133,7 +139,7 @@ export default function VerifyMfaScreen(): React.JSX.Element {
               accessibilityState={{ disabled: loading || !code.trim(), busy: loading }}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={t.primaryForeground} />
               ) : (
                 <Text style={styles.buttonText}>Verify</Text>
               )}
@@ -156,58 +162,74 @@ export default function VerifyMfaScreen(): React.JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  form: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    gap: 12,
-  },
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 4, color: "#1e293b" },
-  subtitle: { fontSize: 14, color: "#64748b", marginBottom: 8, lineHeight: 20 },
-  label: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#374151",
-    marginBottom: 4,
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 18,
-    letterSpacing: 2,
-    backgroundColor: "#f8fafc",
-    color: "#1e293b",
-  },
-  errorBox: {
-    backgroundColor: "#fef2f2",
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#fecaca",
-  },
-  errorBoxFatal: {
-    backgroundColor: "#fff7ed",
-    borderColor: "#fed7aa",
-  },
-  errorText: {
-    color: "#b91c1c",
-    fontSize: 14,
-  },
-  button: {
-    height: 48,
-    backgroundColor: "#2563eb",
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  backLink: { alignItems: "center", marginTop: 8, padding: 8 },
-  backLinkText: { color: "#64748b", fontSize: 14 },
-});
+function makeStyles(t: Theme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: t.background },
+    form: {
+      flex: 1,
+      justifyContent: "center",
+      paddingHorizontal: spacing.xl,
+      gap: spacing.md,
+    },
+    title: {
+      fontSize: typography.size["2xl"],
+      fontWeight: typography.weight.bold,
+      marginBottom: spacing.xs,
+      color: t.foreground,
+    },
+    subtitle: {
+      fontSize: typography.size.base,
+      color: t.foregroundMuted,
+      marginBottom: spacing.sm,
+      lineHeight: 20,
+    },
+    label: {
+      fontSize: typography.size.sm,
+      fontWeight: typography.weight.medium,
+      color: t.foreground,
+      marginBottom: spacing.xs,
+    },
+    input: {
+      height: 48,
+      borderWidth: 1,
+      borderColor: t.border,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      fontSize: typography.size.xl,
+      letterSpacing: 2,
+      backgroundColor: t.backgroundSubtle,
+      color: t.foreground,
+    },
+    errorBox: {
+      backgroundColor: t.destructiveSubtle,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      borderWidth: 1,
+      borderColor: t.destructiveBorder,
+    },
+    errorBoxFatal: {
+      backgroundColor: t.warningSubtle,
+      borderColor: t.warning,
+    },
+    errorText: {
+      color: t.destructive,
+      fontSize: typography.size.base,
+    },
+    button: {
+      height: 48,
+      backgroundColor: t.primary,
+      borderRadius: radius.md,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: spacing.sm,
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: {
+      color: t.primaryForeground,
+      fontSize: typography.size.lg,
+      fontWeight: typography.weight.semibold,
+    },
+    backLink: { alignItems: "center", marginTop: spacing.sm, padding: spacing.sm },
+    backLinkText: { color: t.foregroundMuted, fontSize: typography.size.base },
+  });
+}

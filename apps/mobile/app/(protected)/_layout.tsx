@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
 import { useAuth } from "@/lib/auth";
+import { useTheme, typography } from "@/lib/theme";
 import { ActivityIndicator, Text, View } from "react-native";
 
 function TabIcon({ symbol, color }: { symbol: string; color: string }): React.JSX.Element {
@@ -8,11 +9,12 @@ function TabIcon({ symbol, color }: { symbol: string; color: string }): React.JS
 
 export default function ProtectedLayout(): React.JSX.Element {
   const { session, isLoading } = useAuth();
+  const t = useTheme();
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator />
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: t.background }}>
+        <ActivityIndicator color={t.primary} />
       </View>
     );
   }
@@ -25,15 +27,18 @@ export default function ProtectedLayout(): React.JSX.Element {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#6366f1",
-        tabBarInactiveTintColor: "#94a3b8",
+        tabBarActiveTintColor: t.tabBarActive,
+        tabBarInactiveTintColor: t.tabBarInactive,
         tabBarStyle: {
-          backgroundColor: "#ffffff",
-          borderTopColor: "#e2e8f0",
+          backgroundColor: t.tabBarBackground,
+          borderTopColor: t.tabBarBorder,
           height: 60,
           paddingBottom: 8,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "500" },
+        tabBarLabelStyle: {
+          fontSize: typography.size.xs,
+          fontWeight: typography.weight.medium,
+        },
       }}
     >
       <Tabs.Screen
@@ -58,11 +63,22 @@ export default function ProtectedLayout(): React.JSX.Element {
         }}
       />
       <Tabs.Screen
+        name="budgets"
+        options={{
+          title: "Budgets",
+          tabBarIcon: ({ color }) => <TabIcon symbol="◈" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
           tabBarIcon: ({ color }) => <TabIcon symbol="◎" color={color} />,
         }}
+      />
+      <Tabs.Screen
+        name="settings/accounts"
+        options={{ href: null }}
       />
     </Tabs>
   );

@@ -121,6 +121,206 @@ export interface RefreshResponse {
   expires_at: number;
 }
 
+export interface SignUpResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  user: { id: string; email: string };
+}
+
+export interface OnboardingStatusResponse {
+  completed: boolean;
+  displayName: string | null;
+  preferredCurrency: string;
+  timezone: string | null;
+  interestedCategories: string[];
+  interestedGoalTypes: string[];
+  monthlyIncomeMinor: number | null;
+  incomeFrequency: string | null;
+}
+
+export interface TransactionJSON {
+  id: string;
+  account_id: string;
+  type: "income" | "expense" | "transfer" | "goal_contribution" | "goal_withdrawal";
+  amount_minor: number;
+  currency: string;
+  category_id: string | null;
+  category_name: string | null;
+  item_name: string | null;
+  merchant: string | null;
+  description: string | null;
+  occurred_at: string;
+  status: "posted" | "pending";
+  transfer_pair_id: string | null;
+  goal_id: string | null;
+}
+
+export interface TransactionsResponse {
+  transactions: TransactionJSON[];
+}
+
+export interface TransactionParams {
+  limit?: number;
+  account_id?: string;
+  from?: string;
+  to?: string;
+}
+
+export interface CategoryJSON {
+  id: string;
+  name: string;
+  icon: string | null;
+}
+
+export interface CategoriesResponse {
+  categories: CategoryJSON[];
+}
+
+export interface CreateTransactionBody {
+  kind: "expense" | "income";
+  account_id: string;
+  category_id: string;
+  amount_minor: number;
+  merchant?: string;
+  item_name?: string;
+  description?: string;
+  occurred_at: string;
+}
+
+export interface UpdateTransactionBody {
+  transaction_id: string;
+  account_id: string;
+  category_id: string;
+  amount_minor: number;
+  merchant?: string;
+  item_name?: string;
+  description?: string;
+  occurred_at: string;
+}
+
+export interface CreateTransactionResponse {
+  transaction: TransactionJSON;
+}
+
+export interface UpdateTransactionResponse {
+  transaction: TransactionJSON;
+}
+
+export interface PrivacyModeResponse {
+  enabled: boolean;
+}
+
+// ── Goals types ───────────────────────────────────────────────────────────────
+
+export interface GoalDetailJSON {
+  id: string;
+  name: string;
+  target_amount_minor: number;
+  saved_amount_minor: number;
+  target_date: string | null;
+  funding_account_id: string;
+  status: "active" | "completed" | "archived";
+  term: "short" | "long";
+  created_at: string;
+  completed_at: string | null;
+  archived_at: string | null;
+}
+
+export interface GoalsResponse {
+  goals: GoalDetailJSON[];
+}
+
+export interface GoalResponse {
+  goal: GoalDetailJSON;
+}
+
+export interface CreateGoalBody {
+  name: string;
+  target_amount_minor: number;
+  target_date?: string | null;
+  funding_account_id: string;
+  term?: "short" | "long";
+  initial_saved_amount_minor?: number;
+}
+
+export interface UpdateGoalBody {
+  goal_id: string;
+  name?: string;
+  target_amount_minor?: number;
+  target_date?: string | null;
+  funding_account_id?: string;
+  term?: "short" | "long";
+}
+
+export interface AddContributionBody {
+  goal_id: string;
+  account_id: string;
+  amount_minor: number;
+}
+
+// ── Budget types ──────────────────────────────────────────────────────────────
+
+export type BudgetStatus = "under" | "near_limit" | "exceeded";
+
+export interface BudgetWithUsageJSON {
+  id: string;
+  categoryId: string;
+  periodStart: string;
+  periodEnd: string;
+  isRecurring: boolean;
+  limitMinor: number;
+  spentMinor: number;
+  remainingMinor: number;
+  percentUsed: number;
+  status: BudgetStatus;
+  actualSpendMinor?: number;
+}
+
+export interface BudgetsResponse {
+  budgets: BudgetWithUsageJSON[];
+}
+
+export interface BudgetRowResponse {
+  budget: {
+    id: string;
+    user_id: string;
+    category_id: string;
+    amount_minor: number;
+    period_start: string;
+    period_end: string;
+    is_recurring: boolean;
+    created_at: string;
+    updated_at: string;
+  };
+}
+
+export interface CreateBudgetBody {
+  category_id: string;
+  amount_minor: number;
+  period_start: string;
+  apply_to_upcoming?: boolean;
+}
+
+export interface UpdateBudgetBody {
+  budget_id: string;
+  amount_minor: number;
+  apply_to_upcoming?: boolean;
+}
+
+export interface ContributionResponse {
+  transaction: {
+    id: string;
+    account_id: string;
+    type: string;
+    amount_minor: number;
+    currency: string;
+    occurred_at: string;
+    goal_id: string | null;
+  };
+  goal: GoalDetailJSON | null;
+}
+
 async function get<T>(path: string, accessToken: string): Promise<T> {
   const res = await fetch(`${API_BASE as string}${path}`, {
     method: "GET",
@@ -150,12 +350,58 @@ async function post<T>(
   return data as T;
 }
 
+async function patch<T>(path: string, body: unknown, accessToken: string): Promise<T> {
+  const res = await fetch(`${API_BASE as string}${path}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data as ApiError).error?.toString() ?? "Unknown error");
+  return data as T;
+}
+
+async function put<T>(path: string, body: unknown, accessToken: string): Promise<T> {
+  const res = await fetch(`${API_BASE as string}${path}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data as ApiError).error?.toString() ?? "Unknown error");
+  return data as T;
+}
+
+async function del<T>(path: string, body: unknown, accessToken: string): Promise<T> {
+  const res = await fetch(`${API_BASE as string}${path}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 204) return undefined as T;
+  const data = await res.json();
+  if (!res.ok) throw new Error((data as ApiError).error?.toString() ?? "Unknown error");
+  return data as T;
+}
+
 export const api = {
   getDashboard: (accessToken: string) =>
     get<DashboardResponse>("/api/mobile/dashboard", accessToken),
 
   signIn: (email: string, password: string) =>
     post<SignInResponse>("/api/mobile/auth/sign-in", { email, password }),
+
+  signUp: (email: string, password: string) =>
+    post<SignUpResponse>("/api/mobile/auth/sign-up", { email, password }),
 
   verifyMfa: (challengeToken: string, code: string) =>
     post<VerifyMfaResponse>("/api/mobile/auth/verify-2fa", {
@@ -168,4 +414,97 @@ export const api = {
 
   signOut: (accessToken: string) =>
     post<{ success: boolean }>("/api/mobile/auth/sign-out", {}, accessToken),
+
+  // Onboarding
+  getOnboardingStatus: (accessToken: string) =>
+    get<OnboardingStatusResponse>("/api/mobile/onboarding", accessToken),
+
+  saveOnboardingStep: (data: Record<string, unknown>, accessToken: string) =>
+    post<{ success: boolean }>("/api/mobile/onboarding", data, accessToken),
+
+  completeOnboarding: (data: Record<string, unknown>, accessToken: string) =>
+    put<{ success: boolean }>("/api/mobile/onboarding", data, accessToken),
+
+  // Accounts
+  getAccounts: (accessToken: string) =>
+    get<{ accounts: AccountJSON[] }>("/api/mobile/accounts", accessToken),
+
+  createAccount: (data: Record<string, unknown>, accessToken: string) =>
+    post<{ account: AccountJSON }>("/api/mobile/accounts", data, accessToken),
+
+  updateAccount: (accountId: string, data: Record<string, unknown>, accessToken: string) =>
+    patch<{ account: AccountJSON }>("/api/mobile/accounts", { accountId, ...data }, accessToken),
+
+  archiveAccount: (accountId: string, accessToken: string) =>
+    del<{ account: AccountJSON }>("/api/mobile/accounts", { accountId }, accessToken),
+
+  // Privacy mode
+  updatePrivacyMode: (enabled: boolean, accessToken: string) =>
+    patch<{ enabled: boolean }>("/api/mobile/profile/privacy-mode", { enabled }, accessToken),
+
+  // Google OAuth — PKCE code exchange (server-side MFA check).
+  // Response shape mirrors SignInResponse; reuse existing types.
+  googleAuth: (params: { code: string; code_verifier: string; redirect_uri: string }) =>
+    post<SignInResponse>("/api/mobile/auth/google", params),
+
+  // Transactions
+  getTransactions: (accessToken: string, params?: TransactionParams) => {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.account_id) qs.set("account_id", params.account_id);
+    if (params?.from) qs.set("from", params.from);
+    if (params?.to) qs.set("to", params.to);
+    const query = qs.toString() ? `?${qs.toString()}` : "";
+    return get<TransactionsResponse>(`/api/mobile/transactions${query}`, accessToken);
+  },
+
+  createTransaction: (body: CreateTransactionBody, accessToken: string) =>
+    post<CreateTransactionResponse>("/api/mobile/transactions", body, accessToken),
+
+  updateTransaction: (body: UpdateTransactionBody, accessToken: string) =>
+    patch<UpdateTransactionResponse>("/api/mobile/transactions", body, accessToken),
+
+  deleteTransaction: (transactionId: string, accessToken: string) =>
+    del<void>("/api/mobile/transactions", { transaction_id: transactionId }, accessToken),
+
+  // Categories
+  getCategories: (accessToken: string) =>
+    get<CategoriesResponse>("/api/mobile/categories", accessToken),
+
+  // Privacy mode
+  getPrivacyMode: (accessToken: string) =>
+    get<PrivacyModeResponse>("/api/mobile/profile/privacy-mode", accessToken),
+
+  // Goals
+  getGoals: (accessToken: string, status?: "active" | "completed" | "archived" | "all") => {
+    const qs = status ? `?status=${status}` : "";
+    return get<GoalsResponse>(`/api/mobile/goals${qs}`, accessToken);
+  },
+
+  createGoal: (body: CreateGoalBody, accessToken: string) =>
+    post<GoalResponse>("/api/mobile/goals", body, accessToken),
+
+  updateGoal: (body: UpdateGoalBody, accessToken: string) =>
+    patch<GoalResponse>("/api/mobile/goals", body, accessToken),
+
+  archiveGoal: (goalId: string, accessToken: string) =>
+    del<void>("/api/mobile/goals", { goal_id: goalId }, accessToken),
+
+  addContribution: (body: AddContributionBody, accessToken: string) =>
+    post<ContributionResponse>("/api/mobile/goals/contributions", body, accessToken),
+
+  // Budgets
+  getBudgets: (accessToken: string, periodStart?: string) => {
+    const qs = periodStart ? `?period_start=${periodStart}` : "";
+    return get<BudgetsResponse>(`/api/mobile/budgets${qs}`, accessToken);
+  },
+
+  createBudget: (body: CreateBudgetBody, accessToken: string) =>
+    post<BudgetRowResponse>("/api/mobile/budgets", body, accessToken),
+
+  updateBudget: (body: UpdateBudgetBody, accessToken: string) =>
+    patch<BudgetRowResponse>("/api/mobile/budgets", body, accessToken),
+
+  deleteBudget: (budgetId: string, accessToken: string) =>
+    del<void>("/api/mobile/budgets", { budget_id: budgetId }, accessToken),
 };

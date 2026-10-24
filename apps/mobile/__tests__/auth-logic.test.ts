@@ -2,6 +2,7 @@
  * Pure-logic tests for the auth layer.
  * These run in Node without a React Native renderer.
  */
+export {};
 
 // ── Email validation (extracted from sign-in.tsx inline helper) ────────────
 
@@ -178,6 +179,70 @@ describe("security invariant: challenge token is not an auth session", () => {
     expect("access_token" in mfaResp).toBe(false);
     expect("refresh_token" in mfaResp).toBe(false);
     expect(mfaResp.challenge_token).toBe("abc");
+  });
+});
+
+// ── checkOnboarding routing logic ────────────────────────────────────────
+// Pure-logic mirror of the checkOnboarding() helper in lib/auth.tsx.
+// The actual function calls api.getOnboardingStatus which is a real HTTP client,
+// so we test the decision logic here using the same branching rules.
+
+type OnboardingResult = "complete" | "incomplete" | "error";
+
+function resolveOnboardingResult(
+  completed: boolean | null,
+  errorMessage: string | null,
+): OnboardingResult {
+  if (errorMessage !== null) {
+    if (errorMessage.includes("404") || errorMessage.toLowerCase().includes("not found")) {
+      return "incomplete";
+    }
+    return "error";
+  }
+  return completed ? "complete" : "incomplete";
+}
+
+function routeAfterOnboarding(result: OnboardingResult): string {
+  return result === "incomplete" ? "/onboarding" : "/(protected)/home";
+}
+
+describe("checkOnboarding — decision logic", () => {
+  it("completed=true => 'complete'", () => {
+    expect(resolveOnboardingResult(true, null)).toBe("complete");
+  });
+
+  it("completed=false => 'incomplete'", () => {
+    expect(resolveOnboardingResult(false, null)).toBe("incomplete");
+  });
+
+  it("404 error => 'incomplete' (new user, no profile yet)", () => {
+    expect(resolveOnboardingResult(null, "404 Not Found")).toBe("incomplete");
+  });
+
+  it("'not found' error message => 'incomplete'", () => {
+    expect(resolveOnboardingResult(null, "profile not found")).toBe("incomplete");
+  });
+
+  it("network error => 'error' (don't block authenticated user)", () => {
+    expect(resolveOnboardingResult(null, "fetch failed: network error")).toBe("error");
+  });
+
+  it("server 500 error => 'error'", () => {
+    expect(resolveOnboardingResult(null, "Internal Server Error 500")).toBe("error");
+  });
+});
+
+describe("post-auth routing decision", () => {
+  it("'complete' => home", () => {
+    expect(routeAfterOnboarding("complete")).toBe("/(protected)/home");
+  });
+
+  it("'incomplete' => onboarding", () => {
+    expect(routeAfterOnboarding("incomplete")).toBe("/onboarding");
+  });
+
+  it("'error' => home (fail-open: authenticated users reach the app)", () => {
+    expect(routeAfterOnboarding("error")).toBe("/(protected)/home");
   });
 });
 

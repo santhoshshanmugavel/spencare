@@ -169,7 +169,7 @@ site_url = "http://127.0.0.1:3000"
 # "localhost" and "127.0.0.1" as different OAuth origins -- neither
 # implies the other. Both hosts are listed here so sign-in works
 # regardless of which one the browser is actually pointed at.
-additional_redirect_urls = ["http://127.0.0.1:3000", "http://localhost:3000"]
+additional_redirect_urls = ["http://127.0.0.1:3000", "http://localhost:3000", "spencare://auth/callback"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -383,7 +383,7 @@ max_frequency = "5s"
 # ENVIRONMENT REQUIREMENT (unchanged): a Google Cloud OAuth client with
 # authorized redirect URI `<site_url>/auth/v1/callback`.
 [auth.external.google]
-enabled = false
+enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"

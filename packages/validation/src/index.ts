@@ -13,6 +13,8 @@ export {
   mobileSignInSchema,
   mobileVerifyMfaSchema,
   mobileRefreshSchema,
+  mobileSignUpSchema,
+  mobileGoogleAuthSchema,
   type SignUpInput,
   type SignInInput,
   type ForgotPasswordInput,
@@ -25,6 +27,8 @@ export {
   type MobileSignInInput,
   type MobileVerifyMfaInput,
   type MobileRefreshInput,
+  type MobileSignUpInput,
+  type MobileGoogleAuthInput,
 } from "./auth.js";
 
 export {

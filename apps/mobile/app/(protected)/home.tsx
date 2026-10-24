@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -7,8 +7,10 @@ import {
   Text,
   View,
 } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/lib/auth";
 import { api, type DashboardResponse, type MoneyJSON } from "@/lib/api";
+import { useTheme, radius, spacing, typography, type Theme } from "@/lib/theme";
 
 // ── Money formatting ─────────────────────────────────────────────────────────
 
@@ -34,26 +36,61 @@ function formatMinor(minor: number, currency: string, privacyMode: boolean): str
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function SectionLabel({ label }: { label: string }): React.JSX.Element {
+function SectionLabel({ label, t }: { label: string; t: Theme }): React.JSX.Element {
+  const styles = useMemo(() => makeSectionLabelStyles(t), [t]);
   return <Text style={styles.sectionLabel}>{label}</Text>;
 }
 
-function Card({ children }: { children: React.ReactNode }): React.JSX.Element {
+function makeSectionLabelStyles(t: Theme) {
+  return StyleSheet.create({
+    sectionLabel: {
+      fontSize: typography.size.sm,
+      fontWeight: typography.weight.semibold,
+      color: t.foregroundMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+      marginBottom: spacing.sm,
+      marginTop: spacing.xs,
+    },
+  });
+}
+
+function Card({ children, t }: { children: React.ReactNode; t: Theme }): React.JSX.Element {
+  const styles = useMemo(() => makeCardStyles(t), [t]);
   return <View style={styles.card}>{children}</View>;
+}
+
+function makeCardStyles(t: Theme) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: t.card,
+      borderRadius: radius.lg,
+      padding: spacing.lg,
+      marginBottom: spacing.lg,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.04,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+  });
 }
 
 function SafeToSpendCard({
   data,
   privacyMode,
+  t,
 }: {
   data: DashboardResponse["safeToSpend"];
   privacyMode: boolean;
+  t: Theme;
 }): React.JSX.Element {
+  const styles = useMemo(() => makeSafeToSpendStyles(t), [t]);
   const isNegative = parseInt(data.amount.amountMinorUnits, 10) < 0;
   return (
     <View style={styles.heroCard}>
       <Text style={styles.heroLabel}>Safe to Spend</Text>
-      <Text style={[styles.heroAmount, isNegative && styles.negative]}>
+      <Text style={[styles.heroAmount, isNegative && styles.heroAmountNegative]}>
         {formatMoney(data.amount, privacyMode)}
       </Text>
       <Text style={styles.heroSub}>
@@ -73,17 +110,45 @@ function SafeToSpendCard({
   );
 }
 
+function makeSafeToSpendStyles(t: Theme) {
+  return StyleSheet.create({
+    heroCard: {
+      backgroundColor: t.primary,
+      borderRadius: radius.lg,
+      padding: spacing.xl,
+      marginBottom: 20,
+    },
+    heroLabel: {
+      fontSize: typography.size.sm,
+      fontWeight: typography.weight.medium,
+      color: "rgba(255,255,255,0.75)",
+      marginBottom: spacing.sm - 2,
+    },
+    heroAmount: {
+      fontSize: typography.size["5xl"],
+      fontWeight: typography.weight.extrabold,
+      color: "#FFFFFF",
+      letterSpacing: -1,
+    },
+    heroAmountNegative: { color: "rgba(255,200,200,1)" },
+    heroSub: { fontSize: typography.size.sm, color: "rgba(255,255,255,0.65)", marginTop: spacing.xs },
+  });
+}
+
 function AccountsCard({
   accounts,
   privacyMode,
+  t,
 }: {
   accounts: DashboardResponse["accounts"];
   privacyMode: boolean;
+  t: Theme;
 }): React.JSX.Element {
+  const styles = useMemo(() => makeRowStyles(t), [t]);
   const visible = accounts.filter((a) => !a.is_archived);
   if (visible.length === 0) {
     return (
-      <Card>
+      <Card t={t}>
         <Text style={styles.emptyText}>No accounts yet</Text>
       </Card>
     );
@@ -96,7 +161,7 @@ function AccountsCard({
     epfo: "EPFO",
   };
   return (
-    <Card>
+    <Card t={t}>
       {visible.map((a, i) => (
         <View key={a.id} style={[styles.row, i < visible.length - 1 && styles.rowBorder]}>
           <View>
@@ -120,13 +185,16 @@ function CashFlowCard({
   cashFlow,
   currency,
   privacyMode,
+  t,
 }: {
   cashFlow: DashboardResponse["cashFlow"];
   currency: string;
   privacyMode: boolean;
+  t: Theme;
 }): React.JSX.Element {
+  const styles = useMemo(() => makeCashFlowStyles(t), [t]);
   return (
-    <Card>
+    <Card t={t}>
       <View style={styles.cashFlowRow}>
         <View style={styles.cashFlowItem}>
           <Text style={styles.cashFlowLabel}>Income</Text>
@@ -158,23 +226,43 @@ function CashFlowCard({
   );
 }
 
+function makeCashFlowStyles(t: Theme) {
+  return StyleSheet.create({
+    cashFlowRow: { flexDirection: "row", alignItems: "center" },
+    cashFlowItem: { flex: 1, alignItems: "center" },
+    cashFlowDivider: { width: 1, height: 36, backgroundColor: t.separator },
+    cashFlowLabel: {
+      fontSize: typography.size.xs,
+      color: t.foregroundSubtle,
+      marginBottom: spacing.xs,
+      textTransform: "uppercase",
+    },
+    cashFlowAmount: { fontSize: typography.size.lg, fontWeight: typography.weight.bold },
+    positive: { color: t.income },
+    negative: { color: t.destructive },
+  });
+}
+
 function GoalsCard({
   goals,
   privacyMode,
+  t,
 }: {
   goals: DashboardResponse["goals"];
   privacyMode: boolean;
+  t: Theme;
 }): React.JSX.Element {
+  const styles = useMemo(() => makeGoalStyles(t), [t]);
   const active = goals.filter((g) => g.status === "active");
   if (active.length === 0) {
     return (
-      <Card>
+      <Card t={t}>
         <Text style={styles.emptyText}>No active goals</Text>
       </Card>
     );
   }
   return (
-    <Card>
+    <Card t={t}>
       {active.slice(0, 3).map((g, i) => {
         const pct =
           g.target_amount_minor > 0
@@ -202,22 +290,49 @@ function GoalsCard({
   );
 }
 
+function makeGoalStyles(t: Theme) {
+  return StyleSheet.create({
+    goalItem: { paddingVertical: 10 },
+    goalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: spacing.sm - 2,
+    },
+    progressBg: {
+      height: 6,
+      backgroundColor: t.separator,
+      borderRadius: radius.pill,
+      overflow: "hidden",
+    },
+    progressFill: { height: "100%", backgroundColor: t.primary, borderRadius: radius.pill },
+    goalAmounts: { fontSize: typography.size.xs, color: t.foregroundSubtle, marginTop: spacing.xs },
+    rowLabel: { fontSize: typography.size.md, fontWeight: typography.weight.medium, color: t.foreground },
+    rowSub: { fontSize: typography.size.sm, color: t.foregroundSubtle, marginTop: 2 },
+    rowBorder: { borderBottomWidth: 1, borderBottomColor: t.separator },
+    emptyText: { fontSize: typography.size.base, color: t.foregroundSubtle, textAlign: "center", paddingVertical: spacing.sm },
+  });
+}
+
 function BillsCard({
   bills,
   privacyMode,
+  t,
 }: {
   bills: DashboardResponse["upcomingBills"];
   privacyMode: boolean;
+  t: Theme;
 }): React.JSX.Element {
+  const styles = useMemo(() => makeRowStyles(t), [t]);
   if (bills.length === 0) {
     return (
-      <Card>
+      <Card t={t}>
         <Text style={styles.emptyText}>No upcoming bills</Text>
       </Card>
     );
   }
   return (
-    <Card>
+    <Card t={t}>
       {bills.map((b, i) => {
         // Timezone-safe: normalise both sides to UTC midnight using local date
         // components so the day boundary matches what the user sees on their
@@ -247,6 +362,28 @@ function BillsCard({
   );
 }
 
+function makeRowStyles(t: Theme) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: spacing.sm,
+    },
+    rowBorder: { borderBottomWidth: 1, borderBottomColor: t.separator },
+    rowLabel: { fontSize: typography.size.md, fontWeight: typography.weight.medium, color: t.foreground },
+    rowSub: { fontSize: typography.size.sm, color: t.foregroundSubtle, marginTop: 2 },
+    rowAmount: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: t.foreground },
+    emptyText: {
+      fontSize: typography.size.base,
+      color: t.foregroundSubtle,
+      textAlign: "center",
+      paddingVertical: spacing.sm,
+    },
+    warning: { color: t.warning },
+  });
+}
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 type State =
@@ -256,38 +393,57 @@ type State =
 
 export default function HomeScreen(): React.JSX.Element {
   const { session } = useAuth();
+  const t = useTheme();
+  const styles = useMemo(() => makeHomeStyles(t), [t]);
+
   const [state, setState] = useState<State>({ status: "loading" });
   const [refreshing, setRefreshing] = useState(false);
+  // Tracks whether the initial load has completed; used to gate silent focus refreshes.
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(
-    async (isRefresh = false): Promise<void> => {
+    async (mode: "full" | "refresh" | "silent" = "full"): Promise<void> => {
       if (!session) return;
-      if (!isRefresh) setState({ status: "loading" });
+      if (mode === "full") setState({ status: "loading" });
+      if (mode === "refresh") setRefreshing(true);
       try {
         const data = await api.getDashboard(session.accessToken);
         setState({ status: "success", data });
+        hasLoadedRef.current = true;
       } catch (e) {
-        setState({ status: "error", message: e instanceof Error ? e.message : "Failed to load" });
+        // Silent refreshes on focus never surface an error — stale data is
+        // better than an error flash every time the user switches tabs.
+        if (mode !== "silent") {
+          setState({ status: "error", message: e instanceof Error ? e.message : "Failed to load" });
+        }
       } finally {
-        if (isRefresh) setRefreshing(false);
+        if (mode === "refresh") setRefreshing(false);
       }
     },
     [session],
   );
 
   useEffect(() => {
-    void load();
+    void load("full");
   }, [load]);
 
+  // Silently refresh privacy mode (and all data) whenever the screen regains
+  // focus — e.g. after the user toggles Privacy Mode on the Profile tab.
+  // Skip the first focus event because useEffect already handles the initial load.
+  useFocusEffect(
+    useCallback(() => {
+      if (hasLoadedRef.current) void load("silent");
+    }, [load]),
+  );
+
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    void load(true);
+    void load("refresh");
   }, [load]);
 
   if (state.status === "loading") {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#6366f1" />
+        <ActivityIndicator size="large" color={t.primary} />
       </View>
     );
   }
@@ -296,7 +452,7 @@ export default function HomeScreen(): React.JSX.Element {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>{state.message}</Text>
-        <Text style={styles.retryText} onPress={() => void load()}>
+        <Text style={styles.retryText} onPress={() => void load("full")}>
           Tap to retry
         </Text>
       </View>
@@ -313,7 +469,7 @@ export default function HomeScreen(): React.JSX.Element {
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.scrollContent}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={t.primary} />}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -322,119 +478,75 @@ export default function HomeScreen(): React.JSX.Element {
       </View>
 
       {/* Safe-to-Spend */}
-      <SafeToSpendCard data={data.safeToSpend} privacyMode={privacyMode} />
+      <SafeToSpendCard data={data.safeToSpend} privacyMode={privacyMode} t={t} />
 
       {/* This month */}
-      <SectionLabel label="This Month" />
-      <CashFlowCard cashFlow={data.cashFlow} currency={data.preferredCurrency} privacyMode={privacyMode} />
+      <SectionLabel label="This Month" t={t} />
+      <CashFlowCard cashFlow={data.cashFlow} currency={data.preferredCurrency} privacyMode={privacyMode} t={t} />
 
       {/* Accounts */}
-      <SectionLabel label="Accounts" />
-      <AccountsCard accounts={data.accounts} privacyMode={privacyMode} />
+      <SectionLabel label="Accounts" t={t} />
+      <AccountsCard accounts={data.accounts} privacyMode={privacyMode} t={t} />
 
       {/* Goals */}
       {data.goals.some((g) => g.status === "active") && (
         <>
-          <SectionLabel label="Goals" />
-          <GoalsCard goals={data.goals} privacyMode={privacyMode} />
+          <SectionLabel label="Goals" t={t} />
+          <GoalsCard goals={data.goals} privacyMode={privacyMode} t={t} />
         </>
       )}
 
       {/* Upcoming bills */}
-      <SectionLabel label="Upcoming Bills" />
-      <BillsCard bills={data.upcomingBills} privacyMode={privacyMode} />
+      <SectionLabel label="Upcoming Bills" t={t} />
+      <BillsCard bills={data.upcomingBills} privacyMode={privacyMode} t={t} />
 
       <View style={styles.bottomPad} />
     </ScrollView>
   );
 }
 
-// ── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: "#f8fafc" },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 56, paddingBottom: 24 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f8fafc" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  greeting: { fontSize: 22, fontWeight: "700", color: "#1e293b" },
-  privacyBadge: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#7c3aed",
-    backgroundColor: "#ede9fe",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 99,
-  },
-  heroCard: {
-    backgroundColor: "#6366f1",
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 20,
-  },
-  heroLabel: { fontSize: 13, fontWeight: "500", color: "#c7d2fe", marginBottom: 6 },
-  heroAmount: { fontSize: 36, fontWeight: "800", color: "#ffffff", letterSpacing: -1 },
-  heroSub: { fontSize: 12, color: "#a5b4fc", marginTop: 4 },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#64748b",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-  },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: "#f1f5f9" },
-  rowLabel: { fontSize: 15, fontWeight: "500", color: "#1e293b" },
-  rowSub: { fontSize: 12, color: "#94a3b8", marginTop: 2 },
-  rowAmount: { fontSize: 15, fontWeight: "600", color: "#1e293b" },
-  cashFlowRow: { flexDirection: "row", alignItems: "center" },
-  cashFlowItem: { flex: 1, alignItems: "center" },
-  cashFlowDivider: { width: 1, height: 36, backgroundColor: "#f1f5f9" },
-  cashFlowLabel: { fontSize: 11, color: "#94a3b8", marginBottom: 4, textTransform: "uppercase" },
-  cashFlowAmount: { fontSize: 16, fontWeight: "700" },
-  goalItem: { paddingVertical: 10 },
-  goalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  progressBg: {
-    height: 6,
-    backgroundColor: "#f1f5f9",
-    borderRadius: 99,
-    overflow: "hidden",
-  },
-  progressFill: { height: "100%", backgroundColor: "#6366f1", borderRadius: 99 },
-  goalAmounts: { fontSize: 11, color: "#94a3b8", marginTop: 4 },
-  emptyText: { fontSize: 14, color: "#94a3b8", textAlign: "center", paddingVertical: 8 },
-  positive: { color: "#22c55e" },
-  negative: { color: "#ef4444" },
-  warning: { color: "#f59e0b" },
-  errorText: { fontSize: 15, color: "#ef4444", textAlign: "center", marginHorizontal: 24 },
-  retryText: { fontSize: 14, color: "#6366f1", marginTop: 12, fontWeight: "600" },
-  bottomPad: { height: 16 },
-});
+function makeHomeStyles(t: Theme) {
+  return StyleSheet.create({
+    scroll: { flex: 1, backgroundColor: t.backgroundSubtle },
+    scrollContent: { paddingHorizontal: spacing.lg, paddingTop: 56, paddingBottom: spacing.xl },
+    center: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: t.backgroundSubtle,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: spacing.lg,
+    },
+    greeting: {
+      fontSize: typography.size["2xl"],
+      fontWeight: typography.weight.bold,
+      color: t.foreground,
+    },
+    privacyBadge: {
+      fontSize: typography.size.xs,
+      fontWeight: typography.weight.semibold,
+      color: t.primary,
+      backgroundColor: t.primarySubtle,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radius.pill,
+    },
+    errorText: {
+      fontSize: typography.size.md,
+      color: t.destructive,
+      textAlign: "center",
+      marginHorizontal: spacing.xl,
+    },
+    retryText: {
+      fontSize: typography.size.base,
+      color: t.primary,
+      marginTop: spacing.md,
+      fontWeight: typography.weight.semibold,
+    },
+    bottomPad: { height: spacing.lg },
+  });
+}

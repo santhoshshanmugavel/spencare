@@ -144,3 +144,22 @@ export const mobileRefreshSchema = z.object({
   refresh_token: z.string().min(1, "Refresh token is required."),
 });
 export type MobileRefreshInput = z.infer<typeof mobileRefreshSchema>;
+
+export const mobileSignUpSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+});
+export type MobileSignUpInput = z.infer<typeof mobileSignUpSchema>;
+
+// RFC 7636 PKCE verifier: 43–128 unreserved characters (base64url alphabet)
+export const mobileGoogleAuthSchema = z.object({
+  code: z.string().min(1, "Authorization code is required."),
+  code_verifier: z
+    .string()
+    .min(43, "PKCE code verifier must be at least 43 characters.")
+    .max(128, "PKCE code verifier must not exceed 128 characters."),
+  redirect_uri: z
+    .string()
+    .regex(/^spencare:\/\//, "Redirect URI must use the spencare:// scheme."),
+});
+export type MobileGoogleAuthInput = z.infer<typeof mobileGoogleAuthSchema>;

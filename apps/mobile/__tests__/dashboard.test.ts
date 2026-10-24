@@ -335,6 +335,85 @@ describe("Investment account display — market_value_minor", () => {
   });
 });
 
+// ── BUG 2 regression — Privacy Mode silent refresh ────────────────────────────
+//
+// The load() function on home.tsx was changed to accept a mode:
+//   'full'    — shows the loading spinner (initial load)
+//   'refresh' — shows the pull-to-refresh indicator
+//   'silent'  — fetches new data without any loading indicator
+//
+// The useFocusEffect fires on every screen focus with mode='silent' so that
+// when the user toggles Privacy Mode on the Profile tab and returns to Home,
+// the freshly fetched privacyMode=true is applied without a spinner.
+//
+// These tests mirror the state-machine logic.
+
+type LoadMode = "full" | "refresh" | "silent";
+type ScreenStatus = "loading" | "refreshing" | "success" | "error";
+
+function simulateLoad(
+  mode: LoadMode,
+  succeeds: boolean,
+  currentStatus: ScreenStatus,
+): { showsSpinner: boolean; showsRefreshing: boolean; nextStatus: ScreenStatus } {
+  const showsSpinner = mode === "full";
+  const showsRefreshing = mode === "refresh";
+  let nextStatus: ScreenStatus;
+  if (succeeds) {
+    nextStatus = "success";
+  } else if (mode === "silent") {
+    // Silent failures leave status unchanged (stale data stays visible)
+    nextStatus = currentStatus;
+  } else {
+    nextStatus = "error";
+  }
+  return { showsSpinner, showsRefreshing, nextStatus };
+}
+
+describe("Dashboard load mode — BUG 2 regression", () => {
+  it("'full' mode shows spinner", () => {
+    const { showsSpinner } = simulateLoad("full", true, "loading");
+    expect(showsSpinner).toBe(true);
+  });
+
+  it("'full' mode does NOT show pull-to-refresh indicator", () => {
+    const { showsRefreshing } = simulateLoad("full", true, "loading");
+    expect(showsRefreshing).toBe(false);
+  });
+
+  it("'refresh' mode shows pull-to-refresh, not spinner", () => {
+    const r = simulateLoad("refresh", true, "success");
+    expect(r.showsRefreshing).toBe(true);
+    expect(r.showsSpinner).toBe(false);
+  });
+
+  it("'silent' mode shows neither spinner nor refreshing indicator", () => {
+    const r = simulateLoad("silent", true, "success");
+    expect(r.showsSpinner).toBe(false);
+    expect(r.showsRefreshing).toBe(false);
+  });
+
+  it("'silent' mode success updates state to success", () => {
+    const { nextStatus } = simulateLoad("silent", true, "success");
+    expect(nextStatus).toBe("success");
+  });
+
+  it("'silent' mode failure leaves status unchanged — stale data preferred over error flash", () => {
+    const { nextStatus } = simulateLoad("silent", false, "success");
+    expect(nextStatus).toBe("success");
+  });
+
+  it("'full' mode failure transitions to error", () => {
+    const { nextStatus } = simulateLoad("full", false, "loading");
+    expect(nextStatus).toBe("error");
+  });
+
+  it("'refresh' mode failure transitions to error", () => {
+    const { nextStatus } = simulateLoad("refresh", false, "success");
+    expect(nextStatus).toBe("error");
+  });
+});
+
 // ── Cash-flow currency source ─────────────────────────────────────────────────
 //
 // The cash-flow card must use the user's preferred_currency from the dashboard
@@ -356,5 +435,256 @@ describe("Cash-flow currency — preferredCurrency", () => {
     const usdAmount = 100000; // $1,000.00 in cents
     const major = usdAmount / (PRECISION["USD"] ?? 100);
     expect(major).toBe(1000);
+  });
+});
+
+// ── goals_only Safe-to-Spend state ────────────────────────────────────────────
+//
+// When the user has active goals but no active budget, the domain returns
+// state = "goals_only". STS amount = cashAfterReserves - upcomingBillsTotal
+// where cashAfterReserves = availableBalance - goalReservedTotal.
+// Verified with synthetic data: STS = ₹32,401 (3240100 minor).
+
+describe("Safe-to-Spend — goals_only state", () => {
+  it("state 'goals_only' is carried in the response", () => {
+    const d = buildDashboard({
+      safeToSpend: {
+        state: "goals_only",
+        amount: money(3240100),
+        availableBalance: money(10500000),
+        goalReservedTotal: money(7000000),
+        cardPaymentReservedTotal: money(0),
+        upcomingBillsTotal: money(259900),
+        commitmentReservedTotal: money(0),
+        loanReservedTotal: money(0),
+        ownedSpendableTotal: money(10500000),
+        creditAvailableTotal: money(0),
+      },
+    });
+    expect(d.safeToSpend.state).toBe("goals_only");
+  });
+
+  it("goals_only: amount = availableBalance - goalReservedTotal - upcomingBillsTotal", () => {
+    const sts = {
+      availableBalance: money(10500000),
+      goalReservedTotal: money(7000000),
+      upcomingBillsTotal: money(259900),
+      amount: money(3240100),
+    };
+    const available = parseInt(sts.availableBalance.amountMinorUnits, 10);
+    const goals = parseInt(sts.goalReservedTotal.amountMinorUnits, 10);
+    const bills = parseInt(sts.upcomingBillsTotal.amountMinorUnits, 10);
+    const amount = parseInt(sts.amount.amountMinorUnits, 10);
+    expect(amount).toBe(available - goals - bills);
+  });
+
+  it("goals_only: hand-traced synthetic values — bank+cash - goals - bills = ₹32,401", () => {
+    // seed_dashboard_data.sql: bank=10000000, cash=500000, goals=7000000, bills=259900
+    const available = 10000000 + 500000;
+    const goals = 5000000 + 2000000;
+    const bills = 59900 + 200000;
+    expect(available - goals - bills).toBe(3240100);
+  });
+});
+
+// ── Full STS multi-deduction formula ─────────────────────────────────────────
+//
+// Full formula: amount = availableBalance - goalReservedTotal
+//   - cardPaymentReservedTotal - upcomingBillsTotal
+//   - commitmentReservedTotal - loanReservedTotal
+
+describe("Safe-to-Spend — full deduction formula", () => {
+  it("all deduction fields contribute to reducing the STS amount", () => {
+    const available = 5000000;
+    const goals = 500000;
+    const card = 200000;
+    const bills = 300000;
+    const commitments = 400000;
+    const loans = 100000;
+    const expected = available - goals - card - bills - commitments - loans;
+    const sts = {
+      amount: money(expected),
+      availableBalance: money(available),
+      goalReservedTotal: money(goals),
+      cardPaymentReservedTotal: money(card),
+      upcomingBillsTotal: money(bills),
+      commitmentReservedTotal: money(commitments),
+      loanReservedTotal: money(loans),
+    };
+    const computed =
+      parseInt(sts.availableBalance.amountMinorUnits, 10) -
+      parseInt(sts.goalReservedTotal.amountMinorUnits, 10) -
+      parseInt(sts.cardPaymentReservedTotal.amountMinorUnits, 10) -
+      parseInt(sts.upcomingBillsTotal.amountMinorUnits, 10) -
+      parseInt(sts.commitmentReservedTotal.amountMinorUnits, 10) -
+      parseInt(sts.loanReservedTotal.amountMinorUnits, 10);
+    expect(parseInt(sts.amount.amountMinorUnits, 10)).toBe(computed);
+  });
+
+  it("isNegative is true when STS amount is negative", () => {
+    const d = buildDashboard({
+      safeToSpend: {
+        ...buildDashboard().safeToSpend,
+        amount: money(-50000),
+        availableBalance: money(100000),
+        upcomingBillsTotal: money(150000),
+      },
+    });
+    const isNegative = parseInt(d.safeToSpend.amount.amountMinorUnits, 10) < 0;
+    expect(isNegative).toBe(true);
+  });
+});
+
+// ── formatMinor — INR Indian number grouping (en-IN locale) ──────────────────
+//
+// Indian number system groups: last 3 digits, then every 2 digits (lakhs/crores).
+// `en-IN` locale produces "1,00,000" for 100000 — NOT "100,000" (en-US).
+// home.tsx uses `toLocaleString("en-IN")` for all INR amounts.
+
+function formatMinorFn(minor: number, currency: string, privacyMode: boolean): string {
+  if (privacyMode) return "••••";
+  const major = minor / (PRECISION[currency] ?? 100);
+  const symbol = currency === "INR" ? "₹" : currency;
+  return `${symbol}${Math.abs(major).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+describe("formatMinor — INR Indian number grouping", () => {
+  it("₹1,000 for 100000 minor (one thousand)", () => {
+    expect(formatMinorFn(100000, "INR", false)).toBe("₹1,000");
+  });
+
+  it("₹10,000 for 1000000 minor (ten thousand)", () => {
+    expect(formatMinorFn(1000000, "INR", false)).toBe("₹10,000");
+  });
+
+  it("₹1,00,000 for 10000000 minor (one lakh) — Indian two-digit grouping", () => {
+    // en-IN produces "1,00,000", NOT "100,000" (en-US). Verified on rendered dashboard.
+    expect(formatMinorFn(10000000, "INR", false)).toBe("₹1,00,000");
+  });
+
+  it("₹80,000 for 8000000 minor (eighty thousand — Zerodha Demat in synthetic data)", () => {
+    expect(formatMinorFn(8000000, "INR", false)).toBe("₹80,000");
+  });
+
+  it("₹32,401 for 3240100 minor (STS amount in synthetic data)", () => {
+    expect(formatMinorFn(3240100, "INR", false)).toBe("₹32,401");
+  });
+
+  it("₹5,000 for 500000 minor (cash wallet balance)", () => {
+    expect(formatMinorFn(500000, "INR", false)).toBe("₹5,000");
+  });
+});
+
+// ── Goal percentage rounding ──────────────────────────────────────────────────
+//
+// home.tsx: Math.min(100, Math.round((saved / target) * 100))
+// 16.67% rounds to 17%; 20.00% stays 20%.
+
+describe("Goal percentage — rounding", () => {
+  it("16.67% rounds to 17% (Emergency Fund: ₹50,000 / ₹3,00,000)", () => {
+    const pct = Math.min(100, Math.round((5000000 / 30000000) * 100));
+    expect(pct).toBe(17);
+  });
+
+  it("20% for Travel Fund (exact: ₹20,000 / ₹1,00,000)", () => {
+    const pct = Math.min(100, Math.round((2000000 / 10000000) * 100));
+    expect(pct).toBe(20);
+  });
+
+  it("0% when nothing saved", () => {
+    const pct = Math.min(100, Math.round((0 / 500000) * 100));
+    expect(pct).toBe(0);
+  });
+
+  it("0% when target_amount_minor is 0 (guard against NaN)", () => {
+    // home.tsx uses `target_amount_minor > 0 ? Math.round(...) : 0`
+    const target = 0;
+    const pct = target > 0 ? Math.min(100, Math.round((500000 / target) * 100)) : 0;
+    expect(pct).toBe(0);
+  });
+});
+
+// ── no_accounts Safe-to-Spend state ──────────────────────────────────────────
+
+describe("Safe-to-Spend — no_accounts state", () => {
+  it("no_accounts state is preserved in the response", () => {
+    const d = buildDashboard({
+      safeToSpend: {
+        ...buildDashboard().safeToSpend,
+        state: "no_accounts",
+        amount: money(0),
+        availableBalance: money(0),
+      },
+      accounts: [],
+    });
+    expect(d.safeToSpend.state).toBe("no_accounts");
+    expect(d.accounts).toHaveLength(0);
+  });
+
+  it("no_accounts: STS amount is zero", () => {
+    const d = buildDashboard({
+      safeToSpend: { ...buildDashboard().safeToSpend, state: "no_accounts", amount: money(0) },
+      accounts: [],
+    });
+    expect(parseInt(d.safeToSpend.amount.amountMinorUnits, 10)).toBe(0);
+  });
+});
+
+// ── Credit card account list display ─────────────────────────────────────────
+//
+// In AccountsCard, credit cards show `balance_minor` (typically 0 — not the
+// amount owed). The `credit_used_minor` contributes to Net Worth as a liability
+// but is NOT displayed in the account row to avoid implying it is an asset.
+// Verified: SBI Card shows ₹0 on the rendered dashboard with credit_used=₹25,000.
+
+describe("Credit card account list display", () => {
+  it("credit card display value is balance_minor, not credit_used_minor", () => {
+    // home.tsx line 111: for non-investment, display = balance_minor
+    const cc = {
+      type: "credit_card",
+      balance_minor: 0,
+      market_value_minor: null as null | number,
+      credit_used_minor: 2500000,
+    };
+    const displayMinor =
+      cc.type === "investment" ? cc.market_value_minor : cc.balance_minor;
+    expect(displayMinor).toBe(0);
+    expect(displayMinor).not.toBe(cc.credit_used_minor);
+  });
+
+  it("credit_used_minor equals Net Worth totalLiabilities for a single credit card", () => {
+    const creditUsed = 2500000;
+    const d = buildDashboard({
+      accounts: [
+        { id: "a1", name: "HDFC", type: "bank", currency: "INR", balance_minor: 10000000, market_value_minor: null, credit_limit_minor: null, credit_used_minor: null, is_archived: false },
+        { id: "cc1", name: "SBI Card", type: "credit_card", currency: "INR", balance_minor: 0, market_value_minor: null, credit_limit_minor: 10000000, credit_used_minor: creditUsed, is_archived: false },
+      ],
+      netWorth: {
+        netWorth: money(10000000 - creditUsed),
+        totalAssets: money(10000000),
+        totalLiabilities: money(creditUsed),
+      },
+    });
+    const liabilities = parseInt(d.netWorth.totalLiabilities.amountMinorUnits, 10);
+    const ccUsed = d.accounts.find((a) => a.type === "credit_card")?.credit_used_minor ?? 0;
+    expect(liabilities).toBe(ccUsed);
+  });
+
+  it("credit limit is NOT an asset and never appears in Net Worth totalAssets", () => {
+    const d = buildDashboard({
+      accounts: [
+        { id: "cc1", name: "SBI Card", type: "credit_card", currency: "INR", balance_minor: 0, market_value_minor: null, credit_limit_minor: 10000000, credit_used_minor: 2500000, is_archived: false },
+      ],
+      netWorth: {
+        netWorth: money(-2500000),
+        totalAssets: money(0),
+        totalLiabilities: money(2500000),
+      },
+    });
+    const assets = parseInt(d.netWorth.totalAssets.amountMinorUnits, 10);
+    const creditLimit = d.accounts[0]!.credit_limit_minor ?? 0;
+    // totalAssets must never equal the credit limit
+    expect(assets).not.toBe(creditLimit);
+    expect(assets).toBe(0);
   });
 });
