@@ -188,6 +188,56 @@ function AccountsCard({
   );
 }
 
+function CreditUtilizationCard({
+  accounts,
+  privacyMode,
+  t,
+}: {
+  accounts: DashboardResponse["accounts"];
+  privacyMode: boolean;
+  t: Theme;
+}): React.JSX.Element | null {
+  const styles = useMemo(() => makeCreditStyles(t), [t]);
+  const cards = accounts.filter(
+    (a) => !a.is_archived && a.type === "credit_card" && (a.credit_limit_minor ?? 0) > 0,
+  );
+  if (cards.length === 0) return null;
+
+  const totalLimit = cards.reduce((s, a) => s + (a.credit_limit_minor ?? 0), 0);
+  const totalUsed = cards.reduce((s, a) => s + (a.credit_used_minor ?? 0), 0);
+  const pct = Math.round((totalUsed / totalLimit) * 100);
+  const currency = cards[0]?.currency ?? "INR";
+  const barColor = pct >= 80 ? t.destructive : pct >= 50 ? t.warning : t.income;
+
+  return (
+    <Card t={t}>
+      <View style={styles.header}>
+        <Text style={styles.label}>Credit Utilization</Text>
+        <Text style={[styles.pct, { color: barColor }]}>{privacyMode ? "••%" : `${pct}%`}</Text>
+      </View>
+      <View style={styles.barBg}>
+        <View style={[styles.barFill, { width: `${Math.min(pct, 100)}%` as `${number}%`, backgroundColor: barColor }]} />
+      </View>
+      <Text style={styles.sub}>
+        {privacyMode
+          ? "•••• used of ••••"
+          : `${formatMinor(totalUsed, currency, false)} used of ${formatMinor(totalLimit, currency, false)}`}
+      </Text>
+    </Card>
+  );
+}
+
+function makeCreditStyles(t: Theme) {
+  return StyleSheet.create({
+    header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
+    label: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: t.foreground },
+    pct: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+    barBg: { height: 6, backgroundColor: t.separator, borderRadius: radius.pill, overflow: "hidden", marginBottom: spacing.xs },
+    barFill: { height: "100%", borderRadius: radius.pill },
+    sub: { fontSize: typography.size.xs, color: t.foregroundSubtle },
+  });
+}
+
 function CashFlowCard({
   cashFlow,
   currency,
@@ -727,6 +777,7 @@ export default function HomeScreen(): React.JSX.Element {
       {/* Accounts */}
       <SectionLabel label="Accounts" t={t} />
       <AccountsCard accounts={data.accounts} privacyMode={privacyMode} t={t} />
+      <CreditUtilizationCard accounts={data.accounts} privacyMode={privacyMode} t={t} />
 
       {/* Goals */}
       {data.goals.some((g) => g.status === "active") && (
