@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   getVehicleDashboard,
   updateVehicle,
+  deleteVehicle,
 } from "@spencare/domain-application";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { z } from "zod";
@@ -99,4 +100,20 @@ export async function PATCH(
     return Response.json({ error: result.error.message }, { status });
   }
   return Response.json({ vehicle: result.value });
+}
+
+/** DELETE /api/mobile/vehicles/[id] — archive (soft-delete) a vehicle */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const ctx = await resolveUser(request);
+  if (!ctx) return Response.json({ error: "Unauthorized." }, { status: 401 });
+  const { id } = await params;
+  const result = await deleteVehicle.execute(ctx, { vehicleId: id });
+  if (!result.ok) {
+    const status = result.error.code === "not_found" ? 404 : 422;
+    return Response.json({ error: result.error.message }, { status });
+  }
+  return new Response(null, { status: 204 });
 }

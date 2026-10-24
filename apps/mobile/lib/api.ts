@@ -542,6 +542,102 @@ export interface CreateFuelEntryBody {
   notes?: string | null;
 }
 
+export type VehicleExpenseCategory = "repair" | "accessories" | "tyres" | "cleaning" | "parking" | "toll" | "other";
+export type MaintenanceCategory = "service" | "oil_change" | "tyre_rotation" | "tyre_replacement" | "brake_service" | "battery" | "chain" | "filter" | "other";
+export type VehicleDocumentType = "insurance" | "puc" | "rc" | "road_tax" | "permit" | "warranty" | "other";
+
+export interface VehicleExpenseJSON {
+  id: string;
+  vehicle_id: string;
+  occurred_at: string;
+  amount_minor: number;
+  currency: string;
+  expense_category: VehicleExpenseCategory;
+  description: string | null;
+  vendor: string | null;
+  odometer: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface MaintenanceRecordJSON {
+  id: string;
+  vehicle_id: string;
+  title: string;
+  maintenance_category: MaintenanceCategory;
+  serviced_at: string | null;
+  odometer: number | null;
+  cost_minor: number | null;
+  currency: string;
+  vendor: string | null;
+  notes: string | null;
+  next_due_date: string | null;
+  next_due_odometer: number | null;
+  status: string;
+  created_at: string;
+}
+
+export interface VehicleDocumentJSON {
+  id: string;
+  vehicle_id: string;
+  document_type: VehicleDocumentType;
+  title: string;
+  issuer: string | null;
+  reference_number: string | null;
+  issue_date: string | null;
+  expiry_date: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface VehicleReminderJSON {
+  id: string;
+  vehicle_id: string;
+  reminder_type: string;
+  title: string;
+  due_date: string | null;
+  due_odometer: number | null;
+  is_dismissed: boolean;
+  dismissed_at: string | null;
+  created_at: string;
+}
+
+export interface CreateVehicleExpenseBody {
+  occurred_at: string;
+  amount_minor: number;
+  currency?: string;
+  expense_category?: VehicleExpenseCategory;
+  description?: string | null;
+  vendor?: string | null;
+  odometer?: number | null;
+  notes?: string | null;
+}
+
+export interface CreateMaintenanceBody {
+  title: string;
+  maintenance_category?: MaintenanceCategory;
+  serviced_at?: string | null;
+  odometer?: number | null;
+  cost_minor?: number | null;
+  currency?: string;
+  vendor?: string | null;
+  notes?: string | null;
+  next_due_date?: string | null;
+  next_due_odometer?: number | null;
+  status?: "completed" | "upcoming" | "overdue";
+}
+
+export interface CreateVehicleDocumentBody {
+  document_type: VehicleDocumentType;
+  title: string;
+  issuer?: string | null;
+  reference_number?: string | null;
+  issue_date?: string | null;
+  expiry_date?: string | null;
+  notes?: string | null;
+  reminder_days_before?: number[];
+}
+
 export const api = {
   getDashboard: (accessToken: string) =>
     get<DashboardResponse>("/api/mobile/dashboard", accessToken),
@@ -737,6 +833,49 @@ export const api = {
       body,
       accessToken,
     ),
+
+  deleteFuelEntry: (vehicleId: string, entryId: string, accessToken: string) =>
+    del<void>(`/api/mobile/vehicles/${vehicleId}/fuel-entries/${entryId}`, undefined, accessToken),
+
+  // Vehicle expenses
+  listExpenses: (vehicleId: string, accessToken: string) =>
+    get<{ expenses: VehicleExpenseJSON[] }>(`/api/mobile/vehicles/${vehicleId}/expenses`, accessToken),
+
+  addExpense: (vehicleId: string, body: CreateVehicleExpenseBody, accessToken: string) =>
+    post<{ expense: VehicleExpenseJSON }>(`/api/mobile/vehicles/${vehicleId}/expenses`, body, accessToken),
+
+  deleteExpense: (vehicleId: string, expenseId: string, accessToken: string) =>
+    del<void>(`/api/mobile/vehicles/${vehicleId}/expenses/${expenseId}`, undefined, accessToken),
+
+  // Maintenance records
+  listMaintenance: (vehicleId: string, accessToken: string) =>
+    get<{ maintenance_records: MaintenanceRecordJSON[] }>(`/api/mobile/vehicles/${vehicleId}/maintenance`, accessToken),
+
+  addMaintenance: (vehicleId: string, body: CreateMaintenanceBody, accessToken: string) =>
+    post<{ maintenance_record: MaintenanceRecordJSON }>(`/api/mobile/vehicles/${vehicleId}/maintenance`, body, accessToken),
+
+  deleteMaintenance: (vehicleId: string, recordId: string, accessToken: string) =>
+    del<void>(`/api/mobile/vehicles/${vehicleId}/maintenance/${recordId}`, undefined, accessToken),
+
+  // Vehicle documents
+  listDocuments: (vehicleId: string, accessToken: string) =>
+    get<{ documents: VehicleDocumentJSON[] }>(`/api/mobile/vehicles/${vehicleId}/documents`, accessToken),
+
+  addDocument: (vehicleId: string, body: CreateVehicleDocumentBody, accessToken: string) =>
+    post<{ document: VehicleDocumentJSON }>(`/api/mobile/vehicles/${vehicleId}/documents`, body, accessToken),
+
+  deleteDocument: (vehicleId: string, documentId: string, accessToken: string) =>
+    del<void>(`/api/mobile/vehicles/${vehicleId}/documents/${documentId}`, undefined, accessToken),
+
+  // Vehicle reminders
+  listReminders: (vehicleId: string, accessToken: string) =>
+    get<{ reminders: VehicleReminderJSON[] }>(`/api/mobile/vehicles/${vehicleId}/reminders`, accessToken),
+
+  dismissReminder: (vehicleId: string, reminderId: string, accessToken: string) =>
+    patch<void>(`/api/mobile/vehicles/${vehicleId}/reminders/${reminderId}`, {}, accessToken),
+
+  deleteVehicle: (vehicleId: string, accessToken: string) =>
+    del<void>(`/api/mobile/vehicles/${vehicleId}`, undefined, accessToken),
 
   // Profile
   getProfile: (accessToken: string) =>

@@ -200,12 +200,18 @@ Methodology: Inspected all web routes, domain commands, and mobile screens.
 
 | Feature | Web Route | Mobile Status | Notes |
 |---------|-----------|---------------|-------|
-| List vehicles | `/vehicles` | ❌ Missing | |
-| Vehicle detail | `/vehicles/[id]` | ❌ Missing | |
-| Add vehicle | — | ❌ Missing | |
-| Log fuel/odometer | — | ❌ Missing | |
-| Import (Fuelio) | `/vehicles/[id]/import` | ❌ Missing | |
-| Link transaction to vehicle | — | ❌ Missing | |
+| List vehicles | `/vehicles` | ✅ Complete | Profile → Vehicles & Fuel |
+| Vehicle detail (stats) | `/vehicles/[id]` | ✅ Complete | Odometer, efficiency, total cost |
+| Add vehicle | — | ✅ Complete | Create modal with make/model/type/fuel |
+| Log fuel/odometer | — | ✅ Complete | Fuel tab in vehicle detail |
+| Log expense | — | ✅ Complete | Expenses tab + add modal |
+| Log service/maintenance | — | ✅ Complete | Service tab + add modal; auto-creates reminder if next due date set |
+| Track documents | — | ✅ Complete | Docs tab + add modal; auto-creates expiry reminders |
+| View reminders | — | ✅ Complete | Reminders tab with dismiss action |
+| Delete fuel entry | — | ✅ Complete | API route only (no UI swipe-to-delete yet) |
+| Import (Fuelio CSV) | `/vehicles/[id]/import` | ❌ Blocked | `expo-document-picker` not installed; API route not built (no file picker on mobile) |
+| Link transaction to vehicle | — | ❌ Missing | Requires account+category picker; deferred for MVP |
+| Vehicle photo | — | ❌ Missing | No native image picker installed |
 
 ---
 
@@ -260,12 +266,12 @@ Methodology: Inspected all web routes, domain commands, and mobile screens.
 | Bills/Upcoming | 7 | 1 | 9 | 17 |
 | Spensa AI | 5 | 0 | 1 | 6 |
 | Plans | 0 | 0 | 6 | 6 |
-| Vehicles | 0 | 0 | 6 | 6 |
+| Vehicles | 8 | 0 | 4 | 12 |
 | Settings | 7 | 1 | 9 | 17 |
 | Smart Capture | 0 | 0 | 5 | 5 |
-| **TOTAL** | **66** | **8** | **49** | **123** |
+| **TOTAL** | **74** | **8** | **49** | **131** |
 
-**Current parity: 58% → 59% complete (+1 feature this session). Category filter on transactions (server-side, badge count).**
+**Current parity: 61% complete (+8 features this session). Full vehicles/fuel/expenses/maintenance/documents/reminders screen added.**
 
 ---
 

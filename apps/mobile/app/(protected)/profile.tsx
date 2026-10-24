@@ -227,6 +227,20 @@ export default function ProfileScreen(): React.JSX.Element {
 
           <View style={styles.separator} />
 
+          <View style={styles.separator} />
+
+          <TouchableOpacity
+            style={styles.navRow}
+            onPress={() => router.push("/settings/vehicles" as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Manage vehicles and fuel"
+          >
+            <Text style={styles.navRowText}>Vehicles & Fuel</Text>
+            <Text style={styles.navRowChevron}>›</Text>
+          </TouchableOpacity>
+
+          <View style={styles.separator} />
+
           <TouchableOpacity
             style={styles.navRow}
             onPress={() => router.push("/settings/categories" as never)}
