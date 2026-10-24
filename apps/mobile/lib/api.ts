@@ -458,6 +458,90 @@ export interface UpdateProfileBody {
   timezone?: string;
 }
 
+// ── Vehicles ──────────────────────────────────────────────────────────────────
+
+export interface VehicleJSON {
+  id: string;
+  name: string;
+  vehicle_type: string;
+  make: string | null;
+  model: string | null;
+  variant: string | null;
+  manufacturing_year: number | null;
+  registration_number: string | null;
+  fuel_type: string;
+  odometer_unit: string;
+  fuel_unit: string;
+  current_odometer: number; // tenths of odometer_unit (÷10 to get display value)
+  status: "active" | "archived";
+  notes: string | null;
+  created_at: string;
+}
+
+export interface FuelEntryJSON {
+  id: string;
+  vehicle_id: string;
+  occurred_at: string;
+  odometer: number;          // tenths of unit
+  fuel_quantity_ml: number;  // millilitres
+  total_cost_minor: number | null;
+  currency: string;
+  fuel_type: string;
+  is_full_tank: boolean;
+  is_missed: boolean;
+  station_name: string | null;
+  notes: string | null;
+}
+
+export interface VehicleDashboardJSON {
+  vehicle: VehicleJSON;
+  efficiency: { type: string; intervalCount?: number; kmPerLitreCx100?: number };
+  cost_per_km: { type: string; costPerKmCx100?: number; currency?: string };
+  monthly_costs: Array<{ month: string; fuelCostMinor: number; otherCostMinor: number; totalCostMinor: number; currency: string; fuelLitresMl: number }>;
+  total_fuel_cost_minor: number;
+  total_other_cost_minor: number;
+  total_cost_minor: number;
+  currency: string;
+}
+
+export interface CreateVehicleBody {
+  name: string;
+  vehicle_type: string;
+  fuel_type: string;
+  odometer_unit?: string;
+  fuel_unit?: string;
+  make?: string | null;
+  model?: string | null;
+  variant?: string | null;
+  manufacturing_year?: number | null;
+  registration_number?: string | null;
+  current_odometer?: number;
+  notes?: string | null;
+}
+
+export interface UpdateVehicleBody {
+  name?: string;
+  make?: string | null;
+  model?: string | null;
+  registration_number?: string | null;
+  current_odometer?: number;
+  notes?: string | null;
+  status?: "active" | "archived";
+}
+
+export interface CreateFuelEntryBody {
+  occurred_at: string;
+  odometer: number;         // tenths of unit
+  fuel_quantity_ml: number; // millilitres
+  total_cost_minor?: number | null;
+  currency?: string;
+  fuel_type?: string;
+  is_full_tank?: boolean;
+  is_missed?: boolean;
+  station_name?: string | null;
+  notes?: string | null;
+}
+
 export const api = {
   getDashboard: (accessToken: string) =>
     get<DashboardResponse>("/api/mobile/dashboard", accessToken),
@@ -627,6 +711,32 @@ export const api = {
       body: JSON.stringify(body),
     });
   },
+
+  // Vehicles
+  listVehicles: (accessToken: string) =>
+    get<{ vehicles: VehicleJSON[] }>("/api/mobile/vehicles", accessToken),
+
+  createVehicle: (body: CreateVehicleBody, accessToken: string) =>
+    post<{ vehicle: VehicleJSON }>("/api/mobile/vehicles", body, accessToken),
+
+  getVehicle: (vehicleId: string, accessToken: string) =>
+    get<VehicleDashboardJSON>(`/api/mobile/vehicles/${vehicleId}`, accessToken),
+
+  updateVehicle: (vehicleId: string, body: UpdateVehicleBody, accessToken: string) =>
+    patch<{ vehicle: VehicleJSON }>(`/api/mobile/vehicles/${vehicleId}`, body, accessToken),
+
+  listFuelEntries: (vehicleId: string, accessToken: string, limit?: number) =>
+    get<{ fuel_entries: FuelEntryJSON[] }>(
+      `/api/mobile/vehicles/${vehicleId}/fuel-entries${limit ? `?limit=${limit}` : ""}`,
+      accessToken,
+    ),
+
+  addFuelEntry: (vehicleId: string, body: CreateFuelEntryBody, accessToken: string) =>
+    post<{ fuel_entry: FuelEntryJSON }>(
+      `/api/mobile/vehicles/${vehicleId}/fuel-entries`,
+      body,
+      accessToken,
+    ),
 
   // Profile
   getProfile: (accessToken: string) =>

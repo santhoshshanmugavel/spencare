@@ -94,6 +94,10 @@ export default function ProtectedLayout(): React.JSX.Element {
         name="settings/accounts"
         options={{ href: null }}
       />
+      <Tabs.Screen
+        name="settings/vehicles"
+        options={{ href: null }}
+      />
     </Tabs>
   );
 }
