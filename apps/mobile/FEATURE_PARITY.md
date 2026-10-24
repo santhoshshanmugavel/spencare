@@ -1,28 +1,30 @@
 # Spencare Mobile — Feature Parity Matrix
 
-Last updated: 2026-10-24 (session 6 — CRITICAL RELEASE DIRECTIVE audit)  
-Branch: `mobile-foundation` @ `bcba950`  
-Methodology: Inspected all web routes, domain commands, and mobile screens.
+Last updated: 2026-10-24 (session 7 — vehicles/fuel verification + test fix)  
+Branch: `mobile-foundation` @ `fd08ae4`  
+Methodology: Inspected all web routes, domain commands, and mobile screens; ran full test suite.
 
 ## Build & Test Status
 
 | Check | Status | Notes |
 |-------|--------|-------|
 | Mobile tsc | ✅ 0 errors | |
-| Web tsc | ⚠️ 2 pre-existing errors | `settings-nav.tsx` ReactNode — not a mobile regression |
+| Web tsc | ✅ 0 errors | Fixed in fd08ae4 |
 | Mobile tests | ✅ 350/350 | |
 | domain-application | ✅ 539/539 | |
+| @spencare/web tests | ✅ 1089/1089 | Fixed budgets route test (missing listCategories mock) |
 | mcp-server | ✅ 43/43 | |
-| @spencare/ai | ❌ 38 failing | Pre-existing: `claude-3-5-haiku-latest` deprecated + vitest mock infra |
+| @spencare/ai | ❌ pre-existing | `claude-3-5-haiku-latest` deprecated + vitest mock infra |
 
 ## Release Blockers
 
 | # | Issue | Status |
 |---|-------|--------|
 | 1 | TS2353 categoryId in transactions route | ✅ Fixed (bcba950) |
-| 2 | settings-nav.tsx ReactNode errors (web) | ⚠️ Pre-existing — fix before merge |
-| 3 | @spencare/ai test failures | ⚠️ Pre-existing — fix before merge |
-| 4 | mobile-foundation 2 commits behind main | Must rebase before PR |
+| 2 | settings-nav.tsx ReactNode errors (web) | ✅ Resolved — web tsc 0 errors |
+| 3 | budgets route test (listCategories not mocked) | ✅ Fixed (this session) |
+| 4 | @spencare/ai test failures | ⚠️ Pre-existing — fix before merge |
+| 5 | mobile-foundation commits behind main | Must rebase before PR |
 
 ---
 

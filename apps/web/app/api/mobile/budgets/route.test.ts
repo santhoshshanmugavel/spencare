@@ -6,12 +6,14 @@ import { GET, POST, PATCH, DELETE } from "./route";
 const {
   getUserSpy,
   listBudgetsWithUsageSpy,
+  listCategoriesSpy,
   createBudgetSpy,
   updateBudgetSpy,
   deleteBudgetSpy,
 } = vi.hoisted(() => ({
   getUserSpy: vi.fn(),
   listBudgetsWithUsageSpy: vi.fn(),
+  listCategoriesSpy: vi.fn(),
   createBudgetSpy: vi.fn(),
   updateBudgetSpy: vi.fn(),
   deleteBudgetSpy: vi.fn(),
@@ -27,6 +29,7 @@ vi.mock("@supabase/supabase-js", () => ({
 
 vi.mock("@spencare/domain-application", () => ({
   listBudgetsWithUsage: listBudgetsWithUsageSpy,
+  listCategories: listCategoriesSpy,
   createBudget: { execute: createBudgetSpy },
   updateBudget: { execute: updateBudgetSpy },
   deleteBudget: { execute: deleteBudgetSpy },
@@ -92,6 +95,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   getUserSpy.mockResolvedValue({ data: { user: MOCK_USER }, error: null });
   listBudgetsWithUsageSpy.mockResolvedValue([MOCK_BUDGET_WITH_USAGE]);
+  listCategoriesSpy.mockResolvedValue([{ id: CATEGORY_ID, name: "Food" }]);
   createBudgetSpy.mockResolvedValue({ ok: true, value: MOCK_BUDGET_ROW });
   updateBudgetSpy.mockResolvedValue({ ok: true, value: MOCK_BUDGET_ROW });
   deleteBudgetSpy.mockResolvedValue({ ok: true, value: undefined });
