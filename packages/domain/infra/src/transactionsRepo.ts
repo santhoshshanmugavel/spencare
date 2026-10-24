@@ -45,6 +45,7 @@ const TRANSACTION_COLUMNS =
 
 export interface ListTransactionsOptions {
   accountId?: string;
+  categoryId?: string;
   limit?: number;
   /**
    * Phase 13 (Cash Flow) -- inclusive date-range filter on `occurred_at`,
@@ -70,6 +71,7 @@ export async function listTransactions(
     .eq("user_id", userId)
     .is("deleted_at", null);
   if (options.accountId) query = query.eq("account_id", options.accountId);
+  if (options.categoryId) query = query.eq("category_id", options.categoryId);
   if (options.occurredFrom) {
     // Date-only strings are IST calendar dates; anchor to IST midnight so timestamps
     // from 00:00 IST (+05:30) onward are included, not just UTC midnight onward.
