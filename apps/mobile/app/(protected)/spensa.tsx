@@ -89,13 +89,13 @@ function MessageBubble({ message }: MessageBubbleProps) {
       maxWidth: "80%",
       borderRadius: 16,
       padding: 12,
-      backgroundColor: isUser ? t.primary : t.surface,
+      backgroundColor: isUser ? t.primary : t.card,
       borderWidth: isUser ? 0 : 1,
       borderColor: t.border,
     },
     text: {
       fontSize: typography.size.sm,
-      color: isUser ? "#fff" : t.text,
+      color: isUser ? "#fff" : t.foreground,
       lineHeight: 20,
     },
     pendingDots: {
@@ -107,7 +107,7 @@ function MessageBubble({ message }: MessageBubbleProps) {
       width: 6,
       height: 6,
       borderRadius: 3,
-      backgroundColor: t.textMuted,
+      backgroundColor: t.foregroundMuted,
     },
     avatar: {
       width: 28,
@@ -149,7 +149,7 @@ function MessageBubble({ message }: MessageBubbleProps) {
 export default function SpensaScreen() {
   const { session } = useAuth();
   const t = useTheme();
-  const accessToken = session?.access_token ?? "";
+  const accessToken = session?.accessToken ?? "";
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -276,7 +276,7 @@ export default function SpensaScreen() {
     header: {
       padding: 20,
       paddingTop: 56,
-      backgroundColor: t.surface,
+      backgroundColor: t.card,
       borderBottomWidth: 1,
       borderBottomColor: t.border,
       flexDirection: "row",
@@ -293,10 +293,10 @@ export default function SpensaScreen() {
       alignItems: "center",
     },
     avatarLargeText: { fontSize: 18, color: "#fff" },
-    title: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: t.text },
-    subtitle: { fontSize: typography.size.xs, color: t.textMuted },
+    title: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: t.foreground },
+    subtitle: { fontSize: typography.size.xs, color: t.foregroundMuted },
     clearBtn: { padding: 8 },
-    clearBtnText: { fontSize: typography.size.sm, color: t.textMuted },
+    clearBtnText: { fontSize: typography.size.sm, color: t.foregroundMuted },
     emptyBox: {
       flex: 1,
       justifyContent: "center",
@@ -306,29 +306,29 @@ export default function SpensaScreen() {
     emptyTitle: {
       fontSize: typography.size.xl,
       fontWeight: typography.weight.bold,
-      color: t.text,
+      color: t.foreground,
       marginBottom: 8,
       textAlign: "center",
     },
     emptySubtitle: {
       fontSize: typography.size.sm,
-      color: t.textMuted,
+      color: t.foregroundMuted,
       textAlign: "center",
       marginBottom: 24,
     },
     suggestionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
     suggestionChip: {
-      backgroundColor: t.surface,
+      backgroundColor: t.card,
       borderWidth: 1,
       borderColor: t.border,
       borderRadius: 20,
       paddingHorizontal: 14,
       paddingVertical: 8,
     },
-    suggestionText: { fontSize: typography.size.sm, color: t.text },
+    suggestionText: { fontSize: typography.size.sm, color: t.foreground },
     messageList: { paddingTop: 16, paddingBottom: 8 },
     inputBar: {
-      backgroundColor: t.surface,
+      backgroundColor: t.card,
       borderTopWidth: 1,
       borderTopColor: t.border,
       padding: 12,
@@ -349,7 +349,7 @@ export default function SpensaScreen() {
     },
     inputText: {
       fontSize: typography.size.md,
-      color: t.text,
+      color: t.foreground,
     },
     sendBtn: {
       width: 40,
@@ -372,7 +372,7 @@ export default function SpensaScreen() {
     stopBtnText: { color: "#fff", fontSize: 14, fontWeight: typography.weight.bold },
     disclaimer: {
       fontSize: typography.size.xs,
-      color: t.textMuted,
+      color: t.foregroundMuted,
       textAlign: "center",
       paddingHorizontal: 16,
       paddingBottom: 6,
@@ -448,7 +448,7 @@ export default function SpensaScreen() {
           value={input}
           onChangeText={setInput}
           placeholder="Ask Spensa anything…"
-          placeholderTextColor={t.textMuted}
+          placeholderTextColor={t.foregroundMuted}
           multiline
           editable={!streaming}
           onSubmitEditing={() => sendMessage(input)}

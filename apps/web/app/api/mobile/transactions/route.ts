@@ -68,6 +68,7 @@ export async function GET(request: Request): Promise<Response> {
   const rawLimit = parseInt(url.searchParams.get("limit") ?? "50", 10);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
   const accountId = url.searchParams.get("account_id") ?? undefined;
+  const categoryId = url.searchParams.get("category_id") ?? undefined;
   const occurredFrom = url.searchParams.get("from") ?? undefined;
   const occurredTo = url.searchParams.get("to") ?? undefined;
 
@@ -83,7 +84,7 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     const [rows, categories] = await Promise.all([
-      listTransactions(ctx, { limit, accountId, occurredFrom, occurredTo }),
+      listTransactions(ctx, { limit, accountId, categoryId, occurredFrom, occurredTo }),
       listCategories(ctx),
     ]);
 

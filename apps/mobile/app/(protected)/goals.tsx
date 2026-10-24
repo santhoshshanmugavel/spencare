@@ -72,6 +72,51 @@ export function calcPercent(saved: number, target: number): number {
   return Math.min(100, Math.round((saved / target) * 100));
 }
 
+// ── Pace status ───────────────────────────────────────────────────────────────
+
+type PaceStatus = "on_track" | "at_risk" | "behind" | "no_deadline" | "completed" | "overdue";
+
+function computePaceStatus(goal: GoalDetailJSON): PaceStatus {
+  if (goal.status === "completed") return "completed";
+  if (!goal.target_date) return "no_deadline";
+
+  const now = Date.now();
+  const createdMs = new Date(goal.created_at).getTime();
+  const targetMs = new Date(goal.target_date).getTime();
+
+  if (now >= targetMs) return "overdue";
+
+  const totalDuration = targetMs - createdMs;
+  if (totalDuration <= 0) return "no_deadline";
+
+  const elapsed = now - createdMs;
+  const timePercent = Math.round((elapsed / totalDuration) * 100);
+  const progressPercent = calcPercent(goal.saved_amount_minor, goal.target_amount_minor);
+
+  const gap = timePercent - progressPercent;
+  if (gap <= 0) return "on_track";
+  if (gap <= 15) return "at_risk";
+  return "behind";
+}
+
+const PACE_LABEL: Record<PaceStatus, string> = {
+  on_track: "On Track",
+  at_risk: "At Risk",
+  behind: "Behind",
+  no_deadline: "No Deadline",
+  completed: "Done",
+  overdue: "Overdue",
+};
+
+const PACE_COLORS: Record<PaceStatus, { color: string; bg: string }> = {
+  on_track: { color: "#16A34A", bg: "#DCFCE7" },
+  at_risk: { color: "#D97706", bg: "#FEF3C7" },
+  behind: { color: "#DC2626", bg: "#FEE2E2" },
+  no_deadline: { color: "#6B7280", bg: "#F3F4F6" },
+  completed: { color: "#16A34A", bg: "#DCFCE7" },
+  overdue: { color: "#DC2626", bg: "#FEE2E2" },
+};
+
 // ── Account filtering ─────────────────────────────────────────────────────────
 
 /** Only bank, cash, and investment accounts can fund goals (not credit cards). */
@@ -103,6 +148,8 @@ function GoalCard({
   const percent = calcPercent(goal.saved_amount_minor, goal.target_amount_minor);
   const isCompleted = goal.status === "completed";
   const isArchived = goal.status === "archived";
+  const paceStatus = computePaceStatus(goal);
+  const showPaceBadge = !isArchived && paceStatus !== "completed";
 
   const savedDisplay = privacyMode ? "₹ ••••" : formatMoney(goal.saved_amount_minor);
   const targetDisplay = privacyMode ? "₹ ••••" : formatMoney(goal.target_amount_minor);
@@ -137,6 +184,11 @@ function GoalCard({
           </Text>
           {isCompleted && <Text style={styles.badgeCompleted}>Done</Text>}
           {isArchived && <Text style={styles.badgeArchived}>Archived</Text>}
+          {showPaceBadge && (
+            <Text style={[styles.badgeArchived, { color: PACE_COLORS[paceStatus].color, backgroundColor: PACE_COLORS[paceStatus].bg }]}>
+              {PACE_LABEL[paceStatus]}
+            </Text>
+          )}
         </View>
         {goal.target_date && (
           <Text style={styles.cardDate}>By {formatDate(goal.target_date)}</Text>

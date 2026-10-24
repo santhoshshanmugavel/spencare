@@ -163,6 +163,7 @@ export interface TransactionsResponse {
 export interface TransactionParams {
   limit?: number;
   account_id?: string;
+  category_id?: string;
   from?: string;
   to?: string;
 }
@@ -479,6 +480,9 @@ export const api = {
   signOut: (accessToken: string) =>
     post<{ success: boolean }>("/api/mobile/auth/sign-out", {}, accessToken),
 
+  forgotPassword: (email: string) =>
+    post<{ ok: boolean }>("/api/mobile/auth/forgot-password", { email }),
+
   // Onboarding
   getOnboardingStatus: (accessToken: string) =>
     get<OnboardingStatusResponse>("/api/mobile/onboarding", accessToken),
@@ -516,6 +520,7 @@ export const api = {
     const qs = new URLSearchParams();
     if (params?.limit) qs.set("limit", String(params.limit));
     if (params?.account_id) qs.set("account_id", params.account_id);
+    if (params?.category_id) qs.set("category_id", params.category_id);
     if (params?.from) qs.set("from", params.from);
     if (params?.to) qs.set("to", params.to);
     const query = qs.toString() ? `?${qs.toString()}` : "";

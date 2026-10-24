@@ -1,6 +1,6 @@
 # Spencare Mobile — Feature Parity Matrix
 
-Last updated: 2026-10-24 (session 3)  
+Last updated: 2026-10-24 (session 5)  
 Branch: `mobile-foundation`  
 Methodology: Inspected all web routes, domain commands, and mobile screens.
 
@@ -24,8 +24,8 @@ Methodology: Inspected all web routes, domain commands, and mobile screens.
 |---------|-----------|---------------|-------|
 | Email/password sign-in | `/login` | ✅ Complete | sign-in.tsx |
 | Sign-up | `/signup` | ✅ Complete | sign-up.tsx |
-| Forgot password | `/forgot-password` | ❌ Missing | No mobile reset password screen |
-| Password reset | `/reset-password` | ❌ Missing | Needs deep-link handling |
+| Forgot password | `/forgot-password` | ✅ Complete | forgot-password.tsx; triggers email via /api/mobile/auth/forgot-password |
+| Password reset | `/reset-password` | 🟡 Partial | Email sent; reset completes on web (Supabase redirect) |
 | Google OAuth | — | ✅ Complete | PKCE flow implemented |
 | TOTP 2FA verify | `/verify-2fa` | ✅ Complete | verify-mfa.tsx |
 | Onboarding wizard | `/onboarding` | ✅ Complete | 3-step onboarding |
@@ -84,7 +84,7 @@ Methodology: Inspected all web routes, domain commands, and mobile screens.
 | Group by date | — | ✅ Complete | |
 | Day subtotals | — | ✅ Complete | |
 | Search transactions | `/cash-flow/transactions` | ✅ Complete | Client-side search by merchant/category/description |
-| Category filter | `/cash-flow/transactions` | ❌ Missing | |
+| Category filter | `/cash-flow/transactions` | ✅ Complete | Server-side filter via category_id param; badge count included |
 | Transaction detail view | — | 🟡 Partial | Edit modal exists; dedicated detail screen missing |
 | CSV import | `/cash-flow/import` | ❌ Missing | |
 | Spending investigation | `/cash-flow/investigate` | ❌ Missing | |
@@ -103,7 +103,7 @@ Methodology: Inspected all web routes, domain commands, and mobile screens.
 | Contribute to goal | `/goals` | ✅ Complete | Debits account |
 | View contribution history | `/goals` | 🟡 Partial | Count shown; no history list |
 | Goal progress (%) | `/goals` | ✅ Complete | |
-| Goal pace status | `/goals` | ❌ Missing | On-track/at-risk indicator |
+| Goal pace status | `/goals` | ✅ Complete | On-track/at-risk/behind/overdue badge on GoalCard |
 | Contribution plan (auto-save) | `/goals` | ❌ Missing | Web has contribution plan management |
 | Goal detail dialog | `/goals` | 🟡 Partial | Basic detail in edit sheet |
 | Withdraw from goal | `/goals` | ✅ Complete | Withdraw modal — creates goal_withdrawal transaction |
@@ -231,11 +231,11 @@ Methodology: Inspected all web routes, domain commands, and mobile screens.
 
 | Category | Complete | Partial | Missing | Total |
 |----------|----------|---------|---------|-------|
-| Auth & Onboarding | 5 | 0 | 2 | 7 |
+| Auth & Onboarding | 6 | 1 | 0 | 7 |
 | Dashboard | 6 | 0 | 7 | 13 |
 | Accounts | 5 | 1 | 2 | 8 |
-| Transactions | 12 | 2 | 3 | 17 |
-| Goals | 8 | 2 | 2 | 12 |
+| Transactions | 13 | 2 | 2 | 17 |
+| Goals | 9 | 2 | 1 | 12 |
 | Budgets | 8 | 0 | 1 | 9 |
 | Bills/Upcoming | 7 | 1 | 9 | 17 |
 | Spensa AI | 5 | 0 | 1 | 6 |
@@ -243,9 +243,9 @@ Methodology: Inspected all web routes, domain commands, and mobile screens.
 | Vehicles | 0 | 0 | 6 | 6 |
 | Settings | 7 | 1 | 9 | 17 |
 | Smart Capture | 0 | 0 | 5 | 5 |
-| **TOTAL** | **63** | **7** | **53** | **123** |
+| **TOTAL** | **66** | **8** | **49** | **123** |
 
-**Current parity: 51% → 56% complete (+7 features this session). Categories CRUD, profile editing, search, edit bill, budget home card, goal withdrawal added.**
+**Current parity: 58% → 59% complete (+1 feature this session). Category filter on transactions (server-side, badge count).**
 
 ---
 

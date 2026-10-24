@@ -143,6 +143,7 @@ export type DateFilterMode = "all" | "this_month" | "last_month" | "custom";
 
 export interface ActiveFilters {
   accountId: string | null;
+  categoryId: string | null;
   dateMode: DateFilterMode;
   from: string;
   to: string;
@@ -150,6 +151,7 @@ export interface ActiveFilters {
 
 export const DEFAULT_FILTERS: ActiveFilters = {
   accountId: null,
+  categoryId: null,
   dateMode: "all",
   from: "",
   to: "",
@@ -226,6 +228,7 @@ export function dateFilterLabel(mode: DateFilterMode, from: string, to: string):
 export function countActiveFilters(f: ActiveFilters): number {
   let n = 0;
   if (f.accountId !== null) n++;
+  if (f.categoryId !== null) n++;
   if (f.dateMode !== "all") n++;
   return n;
 }
@@ -676,6 +679,7 @@ interface FilterSheetProps {
   onApply: (filters: ActiveFilters) => void;
   onClear: () => void;
   accounts: AccountJSON[];
+  categories: CategoryJSON[];
   initialFilters: ActiveFilters;
 }
 
@@ -686,23 +690,25 @@ const DATE_MODES: { value: DateFilterMode; label: string }[] = [
   { value: "custom", label: "Custom range" },
 ];
 
-function FilterSheet({ visible, onClose, onApply, onClear, accounts, initialFilters }: FilterSheetProps) {
+function FilterSheet({ visible, onClose, onApply, onClear, accounts, categories, initialFilters }: FilterSheetProps) {
   const [draftAccountId, setDraftAccountId] = useState<string | null>(initialFilters.accountId);
+  const [draftCategoryId, setDraftCategoryId] = useState<string | null>(initialFilters.categoryId);
   const [draftDateMode, setDraftDateMode] = useState<DateFilterMode>(initialFilters.dateMode);
   const [draftFrom, setDraftFrom] = useState(initialFilters.from);
   const [draftTo, setDraftTo] = useState(initialFilters.to);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const { accountId: initAccountId, dateMode: initDateMode, from: initFrom, to: initTo } = initialFilters;
+  const { accountId: initAccountId, categoryId: initCategoryId, dateMode: initDateMode, from: initFrom, to: initTo } = initialFilters;
   useEffect(() => {
     if (visible) {
       setDraftAccountId(initAccountId);
+      setDraftCategoryId(initCategoryId);
       setDraftDateMode(initDateMode);
       setDraftFrom(initFrom);
       setDraftTo(initTo);
       setValidationError(null);
     }
-  }, [visible, initAccountId, initDateMode, initFrom, initTo]);
+  }, [visible, initAccountId, initCategoryId, initDateMode, initFrom, initTo]);
 
   function handleApply() {
     if (draftDateMode === "custom") {
@@ -720,7 +726,7 @@ function FilterSheet({ visible, onClose, onApply, onClear, accounts, initialFilt
       }
     }
     setValidationError(null);
-    onApply({ accountId: draftAccountId, dateMode: draftDateMode, from: draftFrom, to: draftTo });
+    onApply({ accountId: draftAccountId, categoryId: draftCategoryId, dateMode: draftDateMode, from: draftFrom, to: draftTo });
   }
 
   function handleClearAndClose() {
@@ -770,6 +776,36 @@ function FilterSheet({ visible, onClose, onApply, onClear, accounts, initialFilt
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* Category filter */}
+          {categories.length > 0 && (
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Category</Text>
+              <TouchableOpacity
+                style={[styles.pickerRow, draftCategoryId === null && styles.pickerRowSelected]}
+                onPress={() => setDraftCategoryId(null)}
+                accessibilityLabel="All categories"
+              >
+                <Text style={[styles.pickerRowText, draftCategoryId === null && styles.pickerRowTextSelected]}>
+                  All categories
+                </Text>
+                {draftCategoryId === null && <Text style={styles.checkmark}>✓</Text>}
+              </TouchableOpacity>
+              {categories.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[styles.pickerRow, draftCategoryId === c.id && styles.pickerRowSelected]}
+                  onPress={() => setDraftCategoryId(c.id)}
+                  accessibilityLabel={c.name}
+                >
+                  <Text style={[styles.pickerRowText, draftCategoryId === c.id && styles.pickerRowTextSelected]}>
+                    {c.icon ? `${c.icon} ${c.name}` : c.name}
+                  </Text>
+                  {draftCategoryId === c.id && <Text style={styles.checkmark}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           {/* Date filter */}
           <View style={styles.formGroup}>
@@ -842,6 +878,7 @@ export default function TransactionsScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionJSON | null>(null);
   const [filterAccountId, setFilterAccountId] = useState<string | null>(null);
+  const [filterCategoryId, setFilterCategoryId] = useState<string | null>(null);
   const [filterDateMode, setFilterDateMode] = useState<DateFilterMode>("all");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
@@ -850,6 +887,7 @@ export default function TransactionsScreen() {
 
   function clearFilters() {
     setFilterAccountId(null);
+    setFilterCategoryId(null);
     setFilterDateMode("all");
     setFilterFrom("");
     setFilterTo("");
@@ -889,6 +927,7 @@ export default function TransactionsScreen() {
       setError(null);
       const f = overrideFilters ?? {
         accountId: filterAccountId,
+        categoryId: filterCategoryId,
         dateMode: filterDateMode,
         from: filterFrom,
         to: filterTo,
@@ -899,6 +938,7 @@ export default function TransactionsScreen() {
           api.getTransactions(session.accessToken, {
             limit: 100,
             account_id: f.accountId ?? undefined,
+            category_id: f.categoryId ?? undefined,
             ...dateRange,
           }),
           api.getPrivacyMode(session.accessToken),
@@ -916,7 +956,7 @@ export default function TransactionsScreen() {
         setRefreshing(false);
       }
     },
-    [session, filterAccountId, filterDateMode, filterFrom, filterTo],
+    [session, filterAccountId, filterCategoryId, filterDateMode, filterFrom, filterTo],
   );
 
   useFocusEffect(
@@ -961,6 +1001,7 @@ export default function TransactionsScreen() {
   const items = flatten(sections);
   const currentFilters: ActiveFilters = {
     accountId: filterAccountId,
+    categoryId: filterCategoryId,
     dateMode: filterDateMode,
     from: filterFrom,
     to: filterTo,
@@ -1117,6 +1158,7 @@ export default function TransactionsScreen() {
         onClose={() => setShowFilterSheet(false)}
         onApply={(newFilters) => {
           setFilterAccountId(newFilters.accountId);
+          setFilterCategoryId(newFilters.categoryId);
           setFilterDateMode(newFilters.dateMode);
           setFilterFrom(newFilters.from);
           setFilterTo(newFilters.to);
@@ -1128,6 +1170,7 @@ export default function TransactionsScreen() {
           clearFilters();
         }}
         accounts={accounts}
+        categories={categories}
         initialFilters={currentFilters}
       />
     </View>

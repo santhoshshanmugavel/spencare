@@ -216,6 +216,15 @@ export default function SignInScreen(): React.JSX.Element {
           )}
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.forgotLink}
+          onPress={() => router.push("/(auth)/forgot-password")}
+          accessibilityRole="link"
+          accessibilityLabel="Forgot password"
+        >
+          <Text style={styles.footerLink}>Forgot password?</Text>
+        </TouchableOpacity>
+
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>New to Spencare? </Text>
           <TouchableOpacity
@@ -340,6 +349,11 @@ function makeStyles(t: Theme) {
       color: t.foreground,
       fontSize: typography.size.lg,
       fontWeight: typography.weight.semibold,
+    },
+    forgotLink: {
+      alignItems: "center",
+      paddingVertical: spacing.sm,
+      marginTop: spacing.xs,
     },
     footerRow: {
       flexDirection: "row",

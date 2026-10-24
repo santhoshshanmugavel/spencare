@@ -125,22 +125,22 @@ function PayBillModal({ bill, accounts, categories, onClose, onPaid, accessToken
 
   const s = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-    sheet: { backgroundColor: t.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
-    title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.text, marginBottom: 4 },
-    subtitle: { fontSize: typography.size.sm, color: t.textMuted, marginBottom: 20 },
-    label: { fontSize: typography.size.sm, color: t.textMuted, marginBottom: 6, fontWeight: typography.weight.medium },
-    input: { borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, fontSize: typography.size.md, color: t.text, backgroundColor: t.background, marginBottom: 14 },
+    sheet: { backgroundColor: t.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
+    title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.foreground, marginBottom: 4 },
+    subtitle: { fontSize: typography.size.sm, color: t.foregroundMuted, marginBottom: 20 },
+    label: { fontSize: typography.size.sm, color: t.foregroundMuted, marginBottom: 6, fontWeight: typography.weight.medium },
+    input: { borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, fontSize: typography.size.md, color: t.foreground, backgroundColor: t.background, marginBottom: 14 },
     row: { flexDirection: "row", gap: 12, marginBottom: 14 },
     halfInput: { flex: 1 },
     error: { color: "#EF4444", fontSize: typography.size.sm, marginBottom: 12 },
     btn: { backgroundColor: t.primary, borderRadius: 12, padding: 14, alignItems: "center" },
     btnText: { color: "#fff", fontWeight: typography.weight.semibold, fontSize: typography.size.md },
     cancelBtn: { padding: 14, alignItems: "center", marginTop: 8 },
-    cancelText: { color: t.textMuted, fontSize: typography.size.md },
+    cancelText: { color: t.foregroundMuted, fontSize: typography.size.md },
     scrollPicker: { maxHeight: 120, borderWidth: 1, borderColor: t.border, borderRadius: 10, marginBottom: 14 },
     pickerItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: t.border },
     pickerItemSelected: { backgroundColor: t.primary + "20" },
-    pickerItemText: { fontSize: typography.size.sm, color: t.text },
+    pickerItemText: { fontSize: typography.size.sm, color: t.foreground },
     pickerItemTextSelected: { color: t.primary, fontWeight: typography.weight.medium },
   });
 
@@ -160,7 +160,7 @@ function PayBillModal({ bill, accounts, categories, onClose, onPaid, accessToken
             onChangeText={setAmountStr}
             keyboardType="decimal-pad"
             placeholder="0.00"
-            placeholderTextColor={t.textMuted}
+            placeholderTextColor={t.foregroundMuted}
           />
 
           <Text style={s.label}>Date Paid</Text>
@@ -169,7 +169,7 @@ function PayBillModal({ bill, accounts, categories, onClose, onPaid, accessToken
             value={date}
             onChangeText={setDate}
             placeholder="YYYY-MM-DD"
-            placeholderTextColor={t.textMuted}
+            placeholderTextColor={t.foregroundMuted}
           />
 
           <Text style={s.label}>Account</Text>
@@ -258,20 +258,20 @@ function AddBillModal({ categories, onClose, onCreated, accessToken }: AddBillMo
 
   const s = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-    sheet: { backgroundColor: t.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
-    title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.text, marginBottom: 20 },
-    label: { fontSize: typography.size.sm, color: t.textMuted, marginBottom: 6, fontWeight: typography.weight.medium },
-    input: { borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, fontSize: typography.size.md, color: t.text, backgroundColor: t.background, marginBottom: 14 },
+    sheet: { backgroundColor: t.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
+    title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.foreground, marginBottom: 20 },
+    label: { fontSize: typography.size.sm, color: t.foregroundMuted, marginBottom: 6, fontWeight: typography.weight.medium },
+    input: { borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, fontSize: typography.size.md, color: t.foreground, backgroundColor: t.background, marginBottom: 14 },
     chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
     chip: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: t.border, backgroundColor: t.background },
     chipSelected: { backgroundColor: t.primary, borderColor: t.primary },
-    chipText: { fontSize: typography.size.sm, color: t.text },
+    chipText: { fontSize: typography.size.sm, color: t.foreground },
     chipTextSelected: { color: "#fff" },
     error: { color: "#EF4444", fontSize: typography.size.sm, marginBottom: 12 },
     btn: { backgroundColor: t.primary, borderRadius: 12, padding: 14, alignItems: "center" },
     btnText: { color: "#fff", fontWeight: typography.weight.semibold, fontSize: typography.size.md },
     cancelBtn: { padding: 14, alignItems: "center", marginTop: 8 },
-    cancelText: { color: t.textMuted, fontSize: typography.size.md },
+    cancelText: { color: t.foregroundMuted, fontSize: typography.size.md },
   });
 
   return (
@@ -286,7 +286,7 @@ function AddBillModal({ categories, onClose, onCreated, accessToken }: AddBillMo
             value={name}
             onChangeText={setName}
             placeholder="e.g. Netflix, Electricity"
-            placeholderTextColor={t.textMuted}
+            placeholderTextColor={t.foregroundMuted}
             autoFocus
           />
 
@@ -312,7 +312,7 @@ function AddBillModal({ categories, onClose, onCreated, accessToken }: AddBillMo
             onChangeText={setAmountStr}
             keyboardType="decimal-pad"
             placeholder="0.00"
-            placeholderTextColor={t.textMuted}
+            placeholderTextColor={t.foregroundMuted}
           />
 
           {categories.length > 0 && (
@@ -325,7 +325,7 @@ function AddBillModal({ categories, onClose, onCreated, accessToken }: AddBillMo
                     style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: t.border, backgroundColor: c.id === categoryId ? t.primary + "20" : "transparent" }}
                     onPress={() => setCategoryId(c.id)}
                   >
-                    <Text style={{ fontSize: typography.size.sm, color: c.id === categoryId ? t.primary : t.text }}>
+                    <Text style={{ fontSize: typography.size.sm, color: c.id === categoryId ? t.primary : t.foreground }}>
                       {c.name}
                     </Text>
                   </TouchableOpacity>
@@ -396,20 +396,20 @@ function EditBillModal({ bill, categories, onClose, onUpdated, accessToken }: Ed
 
   const s = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-    sheet: { backgroundColor: t.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
-    title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.text, marginBottom: 20 },
-    label: { fontSize: typography.size.sm, color: t.textMuted, marginBottom: 6, fontWeight: typography.weight.medium },
-    input: { borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, fontSize: typography.size.md, color: t.text, backgroundColor: t.background, marginBottom: 14 },
+    sheet: { backgroundColor: t.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
+    title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.foreground, marginBottom: 20 },
+    label: { fontSize: typography.size.sm, color: t.foregroundMuted, marginBottom: 6, fontWeight: typography.weight.medium },
+    input: { borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, fontSize: typography.size.md, color: t.foreground, backgroundColor: t.background, marginBottom: 14 },
     chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
     chip: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: t.border, backgroundColor: t.background },
     chipSelected: { backgroundColor: t.primary, borderColor: t.primary },
-    chipText: { fontSize: typography.size.sm, color: t.text },
+    chipText: { fontSize: typography.size.sm, color: t.foreground },
     chipTextSelected: { color: "#fff" },
     error: { color: "#EF4444", fontSize: typography.size.sm, marginBottom: 12 },
     btn: { backgroundColor: t.primary, borderRadius: 12, padding: 14, alignItems: "center" },
     btnText: { color: "#fff", fontWeight: typography.weight.semibold, fontSize: typography.size.md },
     cancelBtn: { padding: 14, alignItems: "center", marginTop: 8 },
-    cancelText: { color: t.textMuted, fontSize: typography.size.md },
+    cancelText: { color: t.foregroundMuted, fontSize: typography.size.md },
   });
 
   return (
@@ -424,7 +424,7 @@ function EditBillModal({ bill, categories, onClose, onUpdated, accessToken }: Ed
             value={name}
             onChangeText={setName}
             placeholder="e.g. Netflix, Electricity"
-            placeholderTextColor={t.textMuted}
+            placeholderTextColor={t.foregroundMuted}
             autoFocus
           />
 
@@ -450,7 +450,7 @@ function EditBillModal({ bill, categories, onClose, onUpdated, accessToken }: Ed
             onChangeText={setAmountStr}
             keyboardType="decimal-pad"
             placeholder="0.00"
-            placeholderTextColor={t.textMuted}
+            placeholderTextColor={t.foregroundMuted}
           />
 
           {categories.length > 0 && (
@@ -463,7 +463,7 @@ function EditBillModal({ bill, categories, onClose, onUpdated, accessToken }: Ed
                     style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: t.border, backgroundColor: c.id === categoryId ? t.primary + "20" : "transparent" }}
                     onPress={() => setCategoryId(c.id)}
                   >
-                    <Text style={{ fontSize: typography.size.sm, color: c.id === categoryId ? t.primary : t.text }}>
+                    <Text style={{ fontSize: typography.size.sm, color: c.id === categoryId ? t.primary : t.foreground }}>
                       {c.name}
                     </Text>
                   </TouchableOpacity>
@@ -503,7 +503,7 @@ function BillRow({ bill, privacyMode, onPay, onEdit, onDelete }: BillRowProps) {
   const isPaid = bill.status === "matched";
   const isOverdue = days < 0 && !isPaid;
 
-  let urgencyColor = t.textMuted;
+  let urgencyColor = t.foregroundMuted;
   let urgencyLabel = `Due in ${days} days`;
   if (isPaid) {
     urgencyColor = "#22C55E";
@@ -521,7 +521,7 @@ function BillRow({ bill, privacyMode, onPay, onEdit, onDelete }: BillRowProps) {
 
   const s = StyleSheet.create({
     row: {
-      backgroundColor: t.surface,
+      backgroundColor: t.card,
       borderRadius: 12,
       padding: 14,
       marginBottom: 10,
@@ -532,12 +532,12 @@ function BillRow({ bill, privacyMode, onPay, onEdit, onDelete }: BillRowProps) {
     },
     rowOverdue: { borderColor: "#EF4444" + "40" },
     info: { flex: 1, marginRight: 8 },
-    name: { fontSize: typography.size.md, fontWeight: typography.weight.medium, color: t.text, marginBottom: 2 },
-    namePaid: { color: t.textMuted, textDecorationLine: "line-through" },
-    meta: { fontSize: typography.size.xs, color: t.textMuted, marginTop: 2 },
+    name: { fontSize: typography.size.md, fontWeight: typography.weight.medium, color: t.foreground, marginBottom: 2 },
+    namePaid: { color: t.foregroundMuted, textDecorationLine: "line-through" },
+    meta: { fontSize: typography.size.xs, color: t.foregroundMuted, marginTop: 2 },
     urgency: { fontSize: typography.size.xs, fontWeight: typography.weight.medium, marginTop: 3 },
-    amount: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: t.text, marginBottom: 6, textAlign: "right" },
-    amountMasked: { color: t.textMuted },
+    amount: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: t.foreground, marginBottom: 6, textAlign: "right" },
+    amountMasked: { color: t.foregroundMuted },
     payBtn: {
       backgroundColor: t.primary,
       borderRadius: 8,
@@ -549,7 +549,7 @@ function BillRow({ bill, privacyMode, onPay, onEdit, onDelete }: BillRowProps) {
       marginLeft: 8,
       padding: 6,
     },
-    deleteBtnText: { fontSize: 18, color: t.textMuted },
+    deleteBtnText: { fontSize: 18, color: t.foregroundMuted },
     paidBadge: {
       backgroundColor: "#22C55E20",
       borderRadius: 8,
@@ -597,9 +597,9 @@ function BillRow({ bill, privacyMode, onPay, onEdit, onDelete }: BillRowProps) {
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function UpcomingScreen() {
-  const { session, profile: authProfile } = useAuth();
+  const { session } = useAuth();
   const t = useTheme();
-  const accessToken = session?.access_token ?? "";
+  const accessToken = session?.accessToken ?? "";
 
   const [bills, setBills] = useState<BillPredictionJSON[]>([]);
   const [accounts, setAccounts] = useState<AccountJSON[]>([]);
@@ -611,18 +611,20 @@ export default function UpcomingScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [payingBill, setPayingBill] = useState<BillPredictionJSON | null>(null);
   const [editingBill, setEditingBill] = useState<BillPredictionJSON | null>(null);
-  const privacyMode = authProfile?.privacyMode ?? false;
+  const [privacyMode, setPrivacyMode] = useState(false);
 
   async function loadData(tab = activeTab) {
     try {
-      const [billsRes, accountsRes, categoriesRes] = await Promise.all([
+      const [billsRes, accountsRes, categoriesRes, pmRes] = await Promise.all([
         api.getBills(accessToken, tab),
         api.getAccounts(accessToken),
         api.getCategories(accessToken),
+        api.getPrivacyMode(accessToken),
       ]);
       setBills(billsRes.bills);
       setAccounts(accountsRes.accounts);
       setCategories(categoriesRes.categories);
+      setPrivacyMode(pmRes.enabled);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load bills.");
@@ -683,12 +685,12 @@ export default function UpcomingScreen() {
     header: {
       padding: 20,
       paddingTop: 56,
-      backgroundColor: t.surface,
+      backgroundColor: t.card,
       borderBottomWidth: 1,
       borderBottomColor: t.border,
     },
     headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-    title: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: t.text },
+    title: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: t.foreground },
     addBtn: {
       backgroundColor: t.primary,
       borderRadius: 20,
@@ -701,14 +703,14 @@ export default function UpcomingScreen() {
     summaryCard: {
       margin: 16,
       padding: 16,
-      backgroundColor: t.surface,
+      backgroundColor: t.card,
       borderRadius: 14,
       borderWidth: 1,
       borderColor: t.border,
     },
-    summaryLabel: { fontSize: typography.size.sm, color: t.textMuted, marginBottom: 4 },
-    summaryAmount: { fontSize: typography.size["2xl"], fontWeight: typography.weight.bold, color: t.text },
-    summaryAmountMasked: { color: t.textMuted },
+    summaryLabel: { fontSize: typography.size.sm, color: t.foregroundMuted, marginBottom: 4 },
+    summaryAmount: { fontSize: typography.size["2xl"], fontWeight: typography.weight.bold, color: t.foreground },
+    summaryAmountMasked: { color: t.foregroundMuted },
     tabRow: {
       flexDirection: "row",
       gap: 8,
@@ -721,10 +723,10 @@ export default function UpcomingScreen() {
       borderRadius: 20,
       borderWidth: 1,
       borderColor: t.border,
-      backgroundColor: t.surface,
+      backgroundColor: t.card,
     },
     tabActive: { backgroundColor: t.primary, borderColor: t.primary },
-    tabText: { fontSize: typography.size.sm, color: t.textMuted },
+    tabText: { fontSize: typography.size.sm, color: t.foregroundMuted },
     tabTextActive: { color: "#fff", fontWeight: typography.weight.medium },
     list: { paddingHorizontal: 16, paddingBottom: 32 },
     errorBox: {
@@ -736,8 +738,8 @@ export default function UpcomingScreen() {
     errorText: { color: "#EF4444", fontSize: typography.size.sm },
     emptyBox: { alignItems: "center", paddingVertical: 60 },
     emptyIcon: { fontSize: 48, marginBottom: 12 },
-    emptyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.text, marginBottom: 6 },
-    emptyText: { fontSize: typography.size.sm, color: t.textMuted, textAlign: "center", paddingHorizontal: 32 },
+    emptyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.foreground, marginBottom: 6 },
+    emptyText: { fontSize: typography.size.sm, color: t.foregroundMuted, textAlign: "center", paddingHorizontal: 32 },
   });
 
   return (
