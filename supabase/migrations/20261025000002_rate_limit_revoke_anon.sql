@@ -1,0 +1,24 @@
+-- Migration 20261025000002: Remove anon execute grant from rate-limit RPC.
+--
+-- WHY:
+--   check_and_increment_rate_limit is granted to anon, which exposes it via
+--   PostgREST. An unauthenticated caller with the public anon key can exhaust
+--   any user's rate-limit bucket by supplying a known user UUID (verified in
+--   local integration testing: 5 anon POST /rpc/check_and_increment_rate_limit
+--   calls drive a capture_event:<uuid> bucket to exhaustion, causing subsequent
+--   legitimate requests to be rejected with 429).
+--
+--   All application call-sites (auth, capture, MCP) use the service-role client.
+--   The anon grant was added for pre-auth routes (login, signup, password-reset)
+--   but those routes already use serviceClient — the grant is unused by app code.
+--
+-- IMPACT:
+--   - Revokes PostgREST RPC exposure to unauthenticated callers.
+--   - No application code path is affected: all callers use service-role.
+--   - authenticated role keep its grant (may be needed for future direct auth flows).
+--
+-- ROLLBACK:
+--   GRANT EXECUTE ON FUNCTION check_and_increment_rate_limit(text, integer, integer)
+--     TO anon;
+
+REVOKE EXECUTE ON FUNCTION check_and_increment_rate_limit(text, integer, integer) FROM anon;

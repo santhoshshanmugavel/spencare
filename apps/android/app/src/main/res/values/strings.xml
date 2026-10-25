@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Spencare Capture</string>
+    <string name="notification_access_title">Notification Access Required</string>
+    <string name="notification_access_message">Spencare needs notification access to detect financial transactions. This is used only to capture payment alerts — no other notifications are stored or sent to Spencare servers.</string>
+    <string name="status_active">Capture active. Listening for financial notifications.</string>
+    <string name="status_no_access">Notification access not granted.</string>
+    <string name="status_not_signed_in">Please sign in to Spencare to start capturing.</string>
+    <string name="btn_grant_access">Open Notification Access Settings</string>
+    <string name="btn_sign_in">Sign in to Spencare</string>
+</resources>

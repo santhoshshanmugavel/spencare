@@ -21,6 +21,8 @@ import {
   type AccountJSON,
   type CategoryJSON,
   type CommitmentJSON,
+  type CreateCommitmentBody,
+  type UpdateCommitmentBody,
 } from "../../lib/api";
 import { useTheme, typography } from "../../lib/theme";
 
@@ -711,9 +713,10 @@ interface CommitmentRowProps {
   onResume: (item: CommitmentJSON) => void;
   onDelete: (item: CommitmentJSON) => void;
   onMarkPaid: (item: CommitmentJSON) => void;
+  onEdit: (item: CommitmentJSON) => void;
 }
 
-function CommitmentRow({ item, privacyMode, onPause, onResume, onDelete, onMarkPaid }: CommitmentRowProps) {
+function CommitmentRow({ item, privacyMode, onPause, onResume, onDelete, onMarkPaid, onEdit }: CommitmentRowProps) {
   const t = useTheme();
   const days = item.next_payment_date ? daysUntil(item.next_payment_date) : null;
   const isOverdue = days !== null && days < 0;
@@ -777,6 +780,9 @@ function CommitmentRow({ item, privacyMode, onPause, onResume, onDelete, onMarkP
         <TouchableOpacity style={[s.actionBtn, s.actionBtnPrimary]} onPress={() => onMarkPaid(item)}>
           <Text style={[s.actionBtnText, s.actionBtnTextPrimary]}>Pay</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={s.actionBtn} onPress={() => onEdit(item)}>
+          <Text style={s.actionBtnText}>Edit</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={s.actionBtn} onPress={() => isPaused ? onResume(item) : onPause(item)}>
           <Text style={s.actionBtnText}>{isPaused ? "Resume" : "Pause"}</Text>
         </TouchableOpacity>
@@ -785,6 +791,233 @@ function CommitmentRow({ item, privacyMode, onPause, onResume, onDelete, onMarkP
         </TouchableOpacity>
       </View>
     </View>
+  );
+}
+
+// ── Add/Edit Commitment Modals ────────────────────────────────────────────────
+
+const COMMITMENT_FREQS = ["weekly", "biweekly", "monthly", "quarterly", "yearly", "irregular", "one_time"] as const;
+type CommitmentFreq = (typeof COMMITMENT_FREQS)[number];
+
+interface AddCommitmentModalProps {
+  categories: CategoryJSON[];
+  accessToken: string;
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+function AddCommitmentModal({ categories, accessToken, onClose, onCreated }: AddCommitmentModalProps) {
+  const t = useTheme();
+  const [name, setName] = useState("");
+  const [amountStr, setAmountStr] = useState("");
+  const [freq, setFreq] = useState<CommitmentFreq>("monthly");
+  const [nextDate, setNextDate] = useState(todayIso());
+  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleCreate() {
+    if (!name.trim()) { setError("Enter a commitment name."); return; }
+    const amountMinor = majorToMinor(amountStr);
+    if (amountMinor <= 0) { setError("Enter a valid amount."); return; }
+    if (!categoryId) { setError("Select a category."); return; }
+    setSaving(true); setError(null);
+    try {
+      const body: CreateCommitmentBody = {
+        name: name.trim(),
+        amount_minor: amountMinor,
+        category_id: categoryId,
+        payment_frequency: freq,
+        next_payment_date: nextDate,
+        notes: notes.trim() || null,
+      };
+      await api.createCommitment(body, accessToken);
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const s = StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+    sheet: { backgroundColor: t.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
+    title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.foreground, marginBottom: 20 },
+    label: { fontSize: typography.size.sm, color: t.foregroundMuted, marginBottom: 6, fontWeight: typography.weight.medium },
+    input: { borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, fontSize: typography.size.md, color: t.foreground, backgroundColor: t.background, marginBottom: 14 },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+    chip: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: t.border, backgroundColor: t.background },
+    chipSelected: { backgroundColor: t.primary, borderColor: t.primary },
+    chipText: { fontSize: typography.size.sm, color: t.foreground },
+    chipTextSelected: { color: "#fff" },
+    error: { color: "#EF4444", fontSize: typography.size.sm, marginBottom: 12 },
+    btn: { backgroundColor: t.primary, borderRadius: 12, padding: 14, alignItems: "center" },
+    btnText: { color: "#fff", fontWeight: typography.weight.semibold, fontSize: typography.size.md },
+    cancelBtn: { padding: 14, alignItems: "center", marginTop: 8 },
+    cancelText: { color: t.foregroundMuted, fontSize: typography.size.md },
+  });
+
+  return (
+    <Modal transparent animationType="slide" visible onRequestClose={onClose}>
+      <View style={s.overlay}>
+        <ScrollView style={s.sheet} keyboardShouldPersistTaps="handled">
+          <Text style={s.title}>Add Commitment</Text>
+
+          <Text style={s.label}>Name</Text>
+          <TextInput style={s.input} value={name} onChangeText={setName} placeholder="e.g. Rent, Insurance" placeholderTextColor={t.foregroundMuted} autoFocus />
+
+          <Text style={s.label}>Amount</Text>
+          <TextInput style={s.input} value={amountStr} onChangeText={setAmountStr} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={t.foregroundMuted} />
+
+          <Text style={s.label}>Frequency</Text>
+          <View style={s.chipRow}>
+            {COMMITMENT_FREQS.map((f) => (
+              <TouchableOpacity key={f} style={[s.chip, f === freq && s.chipSelected]} onPress={() => setFreq(f)}>
+                <Text style={[s.chipText, f === freq && s.chipTextSelected]}>{recurrenceLabel(f)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={s.label}>Next Payment Date (YYYY-MM-DD)</Text>
+          <TextInput style={s.input} value={nextDate} onChangeText={setNextDate} placeholder="2025-12-01" placeholderTextColor={t.foregroundMuted} keyboardType="numbers-and-punctuation" />
+
+          {categories.length > 0 && (
+            <>
+              <Text style={s.label}>Category</Text>
+              <ScrollView style={{ maxHeight: 100, borderWidth: 1, borderColor: t.border, borderRadius: 10, marginBottom: 14 }}>
+                {categories.map((c) => (
+                  <TouchableOpacity key={c.id} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: t.border, backgroundColor: c.id === categoryId ? t.primary + "20" : "transparent" }} onPress={() => setCategoryId(c.id)}>
+                    <Text style={{ fontSize: typography.size.sm, color: c.id === categoryId ? t.primary : t.foreground }}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          <Text style={s.label}>Notes (optional)</Text>
+          <TextInput style={s.input} value={notes} onChangeText={setNotes} placeholder="Any notes…" placeholderTextColor={t.foregroundMuted} multiline />
+
+          {error ? <Text style={s.error}>{error}</Text> : null}
+
+          <TouchableOpacity style={s.btn} onPress={handleCreate} disabled={saving}>
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Add Commitment</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
+            <Text style={s.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+interface EditCommitmentModalProps {
+  commitment: CommitmentJSON;
+  categories: CategoryJSON[];
+  accessToken: string;
+  onClose: () => void;
+  onUpdated: () => void;
+}
+
+function EditCommitmentModal({ commitment, categories, accessToken, onClose, onUpdated }: EditCommitmentModalProps) {
+  const t = useTheme();
+  const [name, setName] = useState(commitment.name);
+  const [amountStr, setAmountStr] = useState(String(commitment.amount_minor / 100));
+  const [freq, setFreq] = useState<CommitmentFreq>((commitment.payment_frequency as CommitmentFreq) ?? "monthly");
+  const [nextDate, setNextDate] = useState(commitment.next_payment_date ?? todayIso());
+  const [categoryId, setCategoryId] = useState(commitment.category_id ?? categories[0]?.id ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    const amountMinor = majorToMinor(amountStr);
+    if (amountMinor <= 0) { setError("Enter a valid amount."); return; }
+    setSaving(true); setError(null);
+    try {
+      const body: UpdateCommitmentBody = {
+        name: name.trim() || undefined,
+        amount_minor: amountMinor,
+        category_id: categoryId || undefined,
+        payment_frequency: freq,
+        next_payment_date: nextDate,
+      };
+      await api.updateCommitment(commitment.id, body, accessToken);
+      onUpdated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const s = StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+    sheet: { backgroundColor: t.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
+    title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: t.foreground, marginBottom: 20 },
+    label: { fontSize: typography.size.sm, color: t.foregroundMuted, marginBottom: 6, fontWeight: typography.weight.medium },
+    input: { borderWidth: 1, borderColor: t.border, borderRadius: 10, padding: 12, fontSize: typography.size.md, color: t.foreground, backgroundColor: t.background, marginBottom: 14 },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+    chip: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: t.border, backgroundColor: t.background },
+    chipSelected: { backgroundColor: t.primary, borderColor: t.primary },
+    chipText: { fontSize: typography.size.sm, color: t.foreground },
+    chipTextSelected: { color: "#fff" },
+    error: { color: "#EF4444", fontSize: typography.size.sm, marginBottom: 12 },
+    btn: { backgroundColor: t.primary, borderRadius: 12, padding: 14, alignItems: "center" },
+    btnText: { color: "#fff", fontWeight: typography.weight.semibold, fontSize: typography.size.md },
+    cancelBtn: { padding: 14, alignItems: "center", marginTop: 8 },
+    cancelText: { color: t.foregroundMuted, fontSize: typography.size.md },
+  });
+
+  return (
+    <Modal transparent animationType="slide" visible onRequestClose={onClose}>
+      <View style={s.overlay}>
+        <ScrollView style={s.sheet} keyboardShouldPersistTaps="handled">
+          <Text style={s.title}>Edit Commitment</Text>
+
+          <Text style={s.label}>Name</Text>
+          <TextInput style={s.input} value={name} onChangeText={setName} placeholderTextColor={t.foregroundMuted} />
+
+          <Text style={s.label}>Amount</Text>
+          <TextInput style={s.input} value={amountStr} onChangeText={setAmountStr} keyboardType="decimal-pad" placeholderTextColor={t.foregroundMuted} />
+
+          <Text style={s.label}>Frequency</Text>
+          <View style={s.chipRow}>
+            {COMMITMENT_FREQS.map((f) => (
+              <TouchableOpacity key={f} style={[s.chip, f === freq && s.chipSelected]} onPress={() => setFreq(f)}>
+                <Text style={[s.chipText, f === freq && s.chipTextSelected]}>{recurrenceLabel(f)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={s.label}>Next Payment Date (YYYY-MM-DD)</Text>
+          <TextInput style={s.input} value={nextDate} onChangeText={setNextDate} keyboardType="numbers-and-punctuation" placeholderTextColor={t.foregroundMuted} />
+
+          {categories.length > 0 && (
+            <>
+              <Text style={s.label}>Category</Text>
+              <ScrollView style={{ maxHeight: 100, borderWidth: 1, borderColor: t.border, borderRadius: 10, marginBottom: 14 }}>
+                {categories.map((c) => (
+                  <TouchableOpacity key={c.id} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: t.border, backgroundColor: c.id === categoryId ? t.primary + "20" : "transparent" }} onPress={() => setCategoryId(c.id)}>
+                    <Text style={{ fontSize: typography.size.sm, color: c.id === categoryId ? t.primary : t.foreground }}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {error ? <Text style={s.error}>{error}</Text> : null}
+
+          <TouchableOpacity style={s.btn} onPress={handleSave} disabled={saving}>
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Save Changes</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
+            <Text style={s.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </Modal>
   );
 }
 
@@ -804,8 +1037,10 @@ export default function UpcomingScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"upcoming" | "all" | "commitments">("upcoming");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddCommitmentModal, setShowAddCommitmentModal] = useState(false);
   const [payingBill, setPayingBill] = useState<BillPredictionJSON | null>(null);
   const [editingBill, setEditingBill] = useState<BillPredictionJSON | null>(null);
+  const [editingCommitment, setEditingCommitment] = useState<CommitmentJSON | null>(null);
   const [privacyMode, setPrivacyMode] = useState(false);
   const [payingCommitment, setPayingCommitment] = useState<CommitmentJSON | null>(null);
 
@@ -1001,7 +1236,7 @@ export default function UpcomingScreen() {
       <View style={s.header}>
         <View style={s.headerRow}>
           <Text style={s.title}>Upcoming</Text>
-          <TouchableOpacity style={s.addBtn} onPress={() => setShowAddModal(true)}>
+          <TouchableOpacity style={s.addBtn} onPress={() => activeTab === "commitments" ? setShowAddCommitmentModal(true) : setShowAddModal(true)}>
             <Text style={s.addBtnText}>+</Text>
           </TouchableOpacity>
         </View>
@@ -1049,7 +1284,7 @@ export default function UpcomingScreen() {
           <View style={s.emptyBox}>
             <Text style={s.emptyIcon}>🔁</Text>
             <Text style={s.emptyTitle}>No commitments</Text>
-            <Text style={s.emptyText}>Add recurring commitments in the web app to track them here.</Text>
+            <Text style={s.emptyText}>Tap + to add a recurring commitment like rent, insurance, or subscriptions.</Text>
           </View>
         ) : (
           <FlatList
@@ -1063,6 +1298,7 @@ export default function UpcomingScreen() {
                 onResume={handleResumeCommitment}
                 onDelete={handleDeleteCommitment}
                 onMarkPaid={setPayingCommitment}
+                onEdit={setEditingCommitment}
               />
             )}
             contentContainerStyle={s.list}
@@ -1105,6 +1341,33 @@ export default function UpcomingScreen() {
           onClose={() => setShowAddModal(false)}
           onCreated={() => {
             setShowAddModal(false);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Add Commitment Modal */}
+      {showAddCommitmentModal && (
+        <AddCommitmentModal
+          categories={categories}
+          accessToken={accessToken}
+          onClose={() => setShowAddCommitmentModal(false)}
+          onCreated={() => {
+            setShowAddCommitmentModal(false);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Edit Commitment Modal */}
+      {editingCommitment && (
+        <EditCommitmentModal
+          commitment={editingCommitment}
+          categories={categories}
+          accessToken={accessToken}
+          onClose={() => setEditingCommitment(null)}
+          onUpdated={() => {
+            setEditingCommitment(null);
             loadData();
           }}
         />

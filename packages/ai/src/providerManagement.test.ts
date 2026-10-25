@@ -124,6 +124,33 @@ describe("switchProvider — the same operation as connectProvider", () => {
     expect(result.ok).toBe(true);
     expect(vi.mocked(infra.replaceActiveCredential)).toHaveBeenCalledTimes(1);
   });
+
+  it("passes the requested provider and correct last-four to replaceActiveCredential", async () => {
+    const infra = await import("@spencare/domain-infra");
+    const resolver = await import("./resolver.js");
+    vi.mocked(resolver.buildAdapterForProvider).mockReturnValue(fakeAdapter({ valid: true }));
+    vi.mocked(infra.getActiveProviderStatus).mockResolvedValue({ provider: "anthropic", keyLastFour: "9999", isActive: true, lastValidatedAt: "", lastValidationError: null } as never);
+
+    const { switchProvider } = await import("./providerManagement.js");
+    await switchProvider(ctx, { provider: "anthropic", apiKey: "sk-switch-key-9999" });
+
+    expect(vi.mocked(infra.replaceActiveCredential)).toHaveBeenCalledWith(
+      ctx.serviceRoleSupabase, "u1", "anthropic", expect.anything(), "9999",
+    );
+  });
+
+  it("an invalid key never calls replaceActiveCredential — existing credential survives a failed switch", async () => {
+    const infra = await import("@spencare/domain-infra");
+    const resolver = await import("./resolver.js");
+    vi.mocked(resolver.buildAdapterForProvider).mockReturnValue(fakeAdapter({ valid: false, error: "invalid api key" }));
+
+    const { switchProvider } = await import("./providerManagement.js");
+    const result = await switchProvider(ctx, { provider: "anthropic", apiKey: "sk-bad-switch-key" });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("invalid_key");
+    expect(vi.mocked(infra.replaceActiveCredential)).not.toHaveBeenCalled();
+  });
 });
 
 describe("updateProviderKey — rotation (the critical invariant: invalid new key never destroys the old one)", () => {

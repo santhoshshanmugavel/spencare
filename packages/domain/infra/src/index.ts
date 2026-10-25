@@ -82,3 +82,20 @@ export {
   type ConfirmEpfoPassbookBatchResult,
   callConfirmEpfoPassbookBatch,
 } from "./epfoRepo.js";
+
+// ATC Phase 2
+export {
+  insertCaptureEvent,
+  updateCaptureEventStatus,
+  listPendingCaptureEvents,
+  upsertDeviceRegistration,
+  getActiveDeviceRegistration,
+  listDeviceRegistrations,
+  revokeDeviceRegistration,
+  type CaptureSource,
+  type CaptureProcessingStatus,
+  type CaptureEventRow,
+  type DeviceRegistrationRow,
+  type InsertCaptureEventInput,
+  type UpsertDeviceRegistrationInput,
+} from "./captureEventsRepo.js";

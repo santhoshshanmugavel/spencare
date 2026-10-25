@@ -1,0 +1,35 @@
+[versions]
+agp = "8.3.2"
+kotlin = "1.9.23"
+coreKtx = "1.13.1"
+appcompat = "1.7.0"
+material = "1.12.0"
+workRuntime = "2.9.1"
+# Supabase Kotlin SDK (stable release ≥2 weeks old)
+supabase = "2.5.3"
+ktor = "2.3.12"
+# Coroutines
+coroutines = "1.8.1"
+# Security for encrypted SharedPreferences
+securityCrypto = "1.1.0-alpha06"
+# JUnit
+junit = "4.13.2"
+mockk = "1.13.12"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
+supabase-gotrue = { group = "io.github.jan-tennert.supabase", name = "gotrue-kt", version.ref = "supabase" }
+supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt", version.ref = "supabase" }
+ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

@@ -660,3 +660,10 @@ export {
 } from "./commands/vehiclePhoto.js";
 
 export { getVehiclePhotoSignedUrl } from "@spencare/domain-infra";
+
+// ATC Phase 2
+export {
+  processCaptureEvent,
+  type IncomingCaptureEventPayload,
+  type ProcessCaptureEventResult,
+} from "./commands/captureEvent.js";

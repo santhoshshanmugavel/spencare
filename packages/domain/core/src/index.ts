@@ -407,3 +407,23 @@ export {
   type ParsedPassbookResult,
   parseEpfoPassbook,
 } from "./epfo/index.js";
+
+// ATC Phase 2
+export {
+  containsOtp,
+  extractAmount as extractNotifAmount,
+  extractDirection as extractNotifDirection,
+  extractMerchant as extractNotifMerchant,
+  extractReferenceId as extractNotifReferenceId,
+  extractAccountHint,
+  extractDate as extractNotifDate,
+  classifyNotification,
+  extractNotification,
+  isFailedTransaction,
+  scoreNotificationConfidence,
+  KNOWN_FINANCIAL_PACKAGES,
+  NOTIFICATION_PARSER_VERSION,
+  type NotificationClass,
+  type NotificationExtractionResult,
+  type NotificationConfidenceInput,
+} from "./notificationParser.js";

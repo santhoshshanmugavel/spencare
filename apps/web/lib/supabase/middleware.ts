@@ -29,7 +29,8 @@ import type { Database } from "@spencare/domain-infra";
 // Phase 39 (mobile): `/api/mobile` uses its own Bearer-token auth (Supabase
 // JWT for authenticated endpoints, no token for sign-in) -- it must never
 // be redirected to `/login` by the browser-session middleware.
-const SELF_AUTHENTICATING_API_PATHS = ["/api/cron", "/api/mcp", "/api/telegram", "/api/mobile", "/oauth/token", "/oauth/register", "/.well-known"];
+// ATC Phase 2: `/api/capture` uses the same JWT Bearer pattern as `/api/mobile`.
+const SELF_AUTHENTICATING_API_PATHS = ["/api/cron", "/api/mcp", "/api/telegram", "/api/mobile", "/api/capture", "/oauth/token", "/oauth/register", "/.well-known"];
 
 const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth"];
 const MFA_EXEMPT_PATHS = ["/verify-2fa", "/auth", "/logout"];

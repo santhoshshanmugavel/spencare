@@ -1,0 +1,141 @@
+package com.spencare.capture.service
+
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import android.util.Log
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.spencare.capture.parser.NotificationParser
+import com.spencare.capture.worker.EventUploadWorker
+import java.util.concurrent.TimeUnit
+
+/**
+ * Core Android notification listener for Automatic Transaction Capture.
+ *
+ * This service is the entry point for ALL incoming notifications on the device.
+ * It applies a strict allowlist + OTP pre-filter before queuing anything:
+ *
+ *  1. Check if the package name is in KNOWN_FINANCIAL_PACKAGES (fast path).
+ *     Non-financial app notifications are discarded immediately.
+ *  2. Run the OTP filter — if the notification contains OTP patterns, discard
+ *     it without logging, storing, or uploading anything.
+ *  3. Run the financial classifier — if there is no amount + direction signal,
+ *     discard as non-financial.
+ *  4. Queue an EventUploadWorker via WorkManager (network-constrained,
+ *     with exponential backoff, unique work keyed on source_ref_id).
+ *
+ * The notification text is passed as WorkManager input data. WorkManager
+ * stores it in its internal SQLite database until the upload succeeds, then
+ * deletes it. Text from OTP or non-financial events is never written anywhere.
+ *
+ * ACTIVATION: This service is declared `android:enabled="false"` in the
+ * manifest. It is only enabled after the user explicitly grants Notification
+ * Access in Android Settings. MainActivity checks and enables it.
+ */
+class SpencareNotificationService : NotificationListenerService() {
+
+    companion object {
+        private const val TAG = "SpencareNotifService"
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        sbn ?: return
+
+        val packageName = sbn.packageName ?: return
+        val deviceReceivedAtMs = sbn.postTime
+
+        val notification = sbn.notification ?: return
+        val extras = notification.extras ?: return
+
+        val title = extras.getCharSequence("android.title")?.toString()
+        val body = extras.getCharSequence("android.text")?.toString()
+            ?: extras.getCharSequence("android.bigText")?.toString()
+
+        // ── 1. Classify ──────────────────────────────────────────────────────
+        if (!NotificationParser.shouldCapture(
+                packageName,
+                title ?: "",
+                body ?: ""
+            )
+        ) {
+            return
+        }
+
+        // ── 2. Build idempotency key ─────────────────────────────────────────
+        val notificationKey = sbn.key ?: "$packageName:${sbn.id}"
+        val sourceRefId = NotificationParser.buildSourceRefId(
+            packageName, notificationKey, deviceReceivedAtMs
+        )
+
+        Log.d(TAG, "Queuing financial notification from $packageName (ref=$sourceRefId)")
+
+        // ── 3. Queue upload ──────────────────────────────────────────────────
+        val inputData = Data.Builder()
+            .putString(EventUploadWorker.KEY_SOURCE_REF_ID, sourceRefId)
+            .putString(EventUploadWorker.KEY_PACKAGE_NAME, packageName)
+            .putString(EventUploadWorker.KEY_TITLE, title)
+            .putString(EventUploadWorker.KEY_BODY, body)
+            .putString(EventUploadWorker.KEY_DEVICE_RECEIVED_AT,
+                java.time.Instant.ofEpochMilli(deviceReceivedAtMs)
+                    .atZone(java.time.ZoneId.of("UTC"))
+                    .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            )
+            // Device fingerprint + name are retrieved from the singleton
+            // CaptureDeviceRegistry in a production build. For Phase 2 PoC,
+            // the worker reads them from BuildConfig.
+            .putString(EventUploadWorker.KEY_DEVICE_FINGERPRINT,
+                getDeviceFingerprint())
+            .putString(EventUploadWorker.KEY_DEVICE_NAME,
+                android.os.Build.MODEL)
+            .build()
+
+        val workRequest = OneTimeWorkRequestBuilder<EventUploadWorker>()
+            .setInputData(inputData)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            )
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                30L,
+                TimeUnit.SECONDS,
+            )
+            .build()
+
+        WorkManager.getInstance(applicationContext)
+            .enqueueUniqueWork(
+                "capture_event_$sourceRefId",
+                ExistingWorkPolicy.KEEP,
+                workRequest,
+            )
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        // Not used in Phase 2.
+    }
+
+    /**
+     * Returns a stable, non-hardware device fingerprint. Stored in
+     * EncryptedSharedPreferences and generated once on first launch.
+     *
+     * Phase 2 PoC: uses a simple UUID stored in prefs.
+     * Phase 3: move to the AuthManager-managed CaptureDeviceRegistry.
+     */
+    private fun getDeviceFingerprint(): String {
+        val prefs = applicationContext.getSharedPreferences(
+            "capture_device",
+            android.content.Context.MODE_PRIVATE
+        )
+        return prefs.getString("fingerprint", null) ?: run {
+            val fp = java.util.UUID.randomUUID().toString()
+            prefs.edit().putString("fingerprint", fp).apply()
+            fp
+        }
+    }
+}

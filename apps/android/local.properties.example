@@ -1,0 +1,38 @@
+# Spencare Android capture app — local build configuration
+# Copy this file to local.properties and fill in your values.
+# local.properties is gitignored; never commit secrets.
+#
+# Android SDK path (filled in automatically by Android Studio):
+# sdk.dir=/Users/you/Library/Android/sdk
+
+# ---------------------------------------------------------------------------
+# Supabase project credentials
+# ---------------------------------------------------------------------------
+# For local Supabase dev server (`supabase start`): use the local demo values
+# printed by `npx supabase status`. The anon key is safe to commit in examples
+# because local Supabase uses hardcoded demo keys.
+#
+# Android emulator accesses the host machine at 10.0.2.2 (not localhost).
+SUPABASE_URL=http://10.0.2.2:54321
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7urfjjMvpLQdaemon00example
+
+# For production Supabase: get from Supabase dashboard → Settings → API.
+# SUPABASE_URL=https://wjaxxoselhlbjrtuhqlq.supabase.co
+# SUPABASE_ANON_KEY=<production anon key>
+
+# ---------------------------------------------------------------------------
+# Capture API base URL
+# ---------------------------------------------------------------------------
+# The base URL for the Spencare web API. No trailing slash.
+#
+# Android emulator → host machine local dev server:
+CAPTURE_API_BASE_URL=http://10.0.2.2:3000
+#
+# Physical device on the same LAN (replace with your machine's LAN IP):
+# CAPTURE_API_BASE_URL=http://192.168.1.X:3000
+#
+# Staging / production (must be HTTPS for non-local hosts):
+# CAPTURE_API_BASE_URL=https://spencare.vercel.app
+#
+# If this property is absent or empty, debug builds will fail at runtime
+# with a clear error; release builds will fail at compile time.

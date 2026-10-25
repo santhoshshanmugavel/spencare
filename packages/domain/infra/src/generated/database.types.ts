@@ -356,6 +356,105 @@ export type Database = {
           },
         ]
       }
+      capture_events: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          created_transaction_id: string | null
+          device_received_at: string | null
+          device_registration_id: string | null
+          error_message: string | null
+          extracted_account_hint: string | null
+          extracted_amount_minor: number | null
+          extracted_currency: string | null
+          extracted_merchant: string | null
+          extracted_occurred_at: string | null
+          extracted_reference_id: string | null
+          extracted_type: string | null
+          id: string
+          parser_version: string | null
+          processing_status: Database["public"]["Enums"]["capture_processing_status"]
+          promoted_candidate_id: string | null
+          raw_content: string | null
+          raw_content_expires_at: string | null
+          received_at: string
+          retry_count: number
+          source: Database["public"]["Enums"]["capture_source"]
+          source_ref_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          created_transaction_id?: string | null
+          device_received_at?: string | null
+          device_registration_id?: string | null
+          error_message?: string | null
+          extracted_account_hint?: string | null
+          extracted_amount_minor?: number | null
+          extracted_currency?: string | null
+          extracted_merchant?: string | null
+          extracted_occurred_at?: string | null
+          extracted_reference_id?: string | null
+          extracted_type?: string | null
+          id?: string
+          parser_version?: string | null
+          processing_status?: Database["public"]["Enums"]["capture_processing_status"]
+          promoted_candidate_id?: string | null
+          raw_content?: string | null
+          raw_content_expires_at?: string | null
+          received_at?: string
+          retry_count?: number
+          source: Database["public"]["Enums"]["capture_source"]
+          source_ref_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          created_transaction_id?: string | null
+          device_received_at?: string | null
+          device_registration_id?: string | null
+          error_message?: string | null
+          extracted_account_hint?: string | null
+          extracted_amount_minor?: number | null
+          extracted_currency?: string | null
+          extracted_merchant?: string | null
+          extracted_occurred_at?: string | null
+          extracted_reference_id?: string | null
+          extracted_type?: string | null
+          id?: string
+          parser_version?: string | null
+          processing_status?: Database["public"]["Enums"]["capture_processing_status"]
+          promoted_candidate_id?: string | null
+          raw_content?: string | null
+          raw_content_expires_at?: string | null
+          received_at?: string
+          retry_count?: number
+          source?: Database["public"]["Enums"]["capture_source"]
+          source_ref_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capture_events_created_transaction_id_fkey"
+            columns: ["created_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "capture_events_device_registration_id_fkey"
+            columns: ["device_registration_id"]
+            isOneToOne: false
+            referencedRelation: "device_registrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           archived_at: string | null
@@ -575,6 +674,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      device_registrations: {
+        Row: {
+          created_at: string
+          device_fingerprint: string
+          device_name: string
+          id: string
+          last_seen_at: string | null
+          notification_access_granted: boolean
+          revoked_at: string | null
+          sms_permission_granted: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_fingerprint: string
+          device_name?: string
+          id?: string
+          last_seen_at?: string | null
+          notification_access_granted?: boolean
+          revoked_at?: string | null
+          sms_permission_granted?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_fingerprint?: string
+          device_name?: string
+          id?: string
+          last_seen_at?: string | null
+          notification_access_granted?: boolean
+          revoked_at?: string | null
+          sms_permission_granted?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       epfo_contribution_profiles: {
         Row: {
@@ -3655,6 +3793,15 @@ export type Database = {
       ai_provider: "anthropic" | "openai" | "google" | "openrouter" | "other"
       audit_actor: "web" | "spensa" | "mcp" | "system" | "gmail"
       bill_prediction_status: "open" | "matched" | "skipped" | "overdue"
+      capture_processing_status:
+        | "pending"
+        | "extracting"
+        | "extracted"
+        | "failed"
+        | "duplicate"
+        | "ignored"
+        | "promoted"
+      capture_source: "android_notification" | "sms" | "gmail" | "statement" | "manual"
       channel_connection_status: "connected" | "disconnected"
       commitment_occurrence_status: "upcoming" | "paid" | "skipped"
       commitment_status: "active" | "paused" | "completed" | "cancelled"

@@ -38,6 +38,34 @@ export const RATE_LIMITS = {
    * infeasible within the window.
    */
   MOBILE_MFA_VERIFY: { maxAttempts: 5, windowSeconds: 300 },
+  /**
+   * 60 capture events per minute per user (ATC Phase 2).
+   * A legitimate user's phone might batch a short burst of notifications on
+   * reconnect; 60/min is generous for that while blocking unbounded flooding.
+   * Key: `capture_event:<userId>`.
+   */
+  CAPTURE_EVENT: { maxAttempts: 60, windowSeconds: 60 },
+  /**
+   * 10 device registrations per hour per user (ATC Phase 2).
+   * A legitimate user installs once and re-registers on reinstall; 10/hr
+   * blocks rapid device-table flooding from a compromised token while leaving
+   * ample headroom for normal use.
+   * Key: `device_register:<userId>`.
+   */
+  DEVICE_REGISTER: { maxAttempts: 10, windowSeconds: 3600 },
+  /**
+   * 30 device list requests per minute per user (ATC Phase 2).
+   * Read-only; the device management screen in the app may poll this on load.
+   * Key: `device_list:<userId>`.
+   */
+  DEVICE_LIST: { maxAttempts: 30, windowSeconds: 60 },
+  /**
+   * 10 device revocations per hour per user (ATC Phase 2).
+   * Revocation is a destructive one-shot action; 10/hr matches DEVICE_REGISTER
+   * and blocks bulk-revocation loops from a compromised token.
+   * Key: `device_revoke:<userId>`.
+   */
+  DEVICE_REVOKE: { maxAttempts: 10, windowSeconds: 3600 },
 } as const;
 
 export async function checkRateLimit(client: TypedSupabaseClient, bucketKey: string, limit: { maxAttempts: number; windowSeconds: number }): Promise<boolean> {

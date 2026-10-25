@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { router } from "expo-router";
 import { useAuth } from "../../lib/auth";
 import { api } from "../../lib/api";
 import { useTheme, typography } from "../../lib/theme";
@@ -22,6 +23,7 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   pending?: boolean;
+  noProvider?: boolean;
 }
 
 // ── SSE parser ────────────────────────────────────────────────────────────────
@@ -120,6 +122,15 @@ function MessageBubble({ message }: MessageBubbleProps) {
       alignSelf: "flex-end",
     },
     avatarText: { fontSize: 14 },
+    ctaButton: {
+      marginTop: 8,
+      backgroundColor: t.primary,
+      borderRadius: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      alignItems: "center",
+    },
+    ctaText: { fontSize: typography.size.sm, color: "#fff", fontWeight: typography.weight.semibold },
   });
 
   return (
@@ -137,7 +148,17 @@ function MessageBubble({ message }: MessageBubbleProps) {
             <View style={s.dot} />
           </View>
         ) : (
-          <Text style={s.text}>{message.content}</Text>
+          <>
+            <Text style={s.text}>{message.content}</Text>
+            {message.noProvider && (
+              <TouchableOpacity
+                style={s.ctaButton}
+                onPress={() => router.push("/settings/ai" as never)}
+              >
+                <Text style={s.ctaText}>Set up AI Provider</Text>
+              </TouchableOpacity>
+            )}
+          </>
         )}
       </View>
     </View>
@@ -218,7 +239,16 @@ export default function SpensaScreen() {
         } else if (type === "message_delta" || type === "message_stop") {
           // stream ended
         } else if (type === "error") {
-          throw new Error((event.message as string) ?? "AI error");
+          const errMsg = (event.message as string) ?? "AI error";
+          const isNoProvider = errMsg.toLowerCase().includes("no ai provider");
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === pendingId
+                ? { ...m, content: errMsg, pending: false, noProvider: isNoProvider }
+                : m,
+            ),
+          );
+          return;
         }
 
         // Update the pending message in real-time

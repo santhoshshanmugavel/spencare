@@ -211,6 +211,21 @@ export default function ProfileScreen(): React.JSX.Element {
           </View>
         </View>
 
+        {/* Spensa AI */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Spensa AI</Text>
+
+          <TouchableOpacity
+            style={styles.navRow}
+            onPress={() => router.push("/settings/ai" as never)}
+            accessibilityRole="button"
+            accessibilityLabel="AI Provider settings"
+          >
+            <Text style={styles.navRowText}>AI Provider</Text>
+            <Text style={styles.navRowChevron}>›</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Security */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security</Text>
