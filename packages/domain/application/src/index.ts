@@ -540,25 +540,10 @@ export {
   type UpcomingPlanContextMaps,
 } from "./queries/plans.js";
 
-// Phase 1 — Shared Financial Intelligence Engine
-export { comparePeriods } from "./queries/periodComparison.js";
 export { buildForecastInput } from "./queries/forecasting.js";
 export { captureScenarioBaseline } from "./queries/scenario.js";
 
 export {
-  calculatePeriodDiff,
-  isPeriodPartial,
-  getEquivalentElapsedPeriod,
-  buildMetricComparison,
-  type DateRange,
-  type PeriodComparisonRequest,
-  type PeriodComparisonResult,
-  type MetricComparison,
-  createEvidence,
-  evidenceFromComparison,
-  type EvidenceType,
-  type EvidenceSource,
-  type FinancialEvidence,
   EXCLUDED_TRANSACTION_TYPES,
   filterToExternalTransactions,
   sumByPeriod,

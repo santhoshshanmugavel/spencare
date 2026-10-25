@@ -9,7 +9,7 @@ describe("<CashFlowTabs>", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("renders all tabs as real links, Bills and Investigate are removed", () => {
+  it("renders all tabs as real links, Bills and Investigate are not present", () => {
     render(<CashFlowTabs active="transactions" />);
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/cash-flow");
     expect(screen.getByRole("link", { name: "Transactions" })).toHaveAttribute("href", "/cash-flow/transactions");
