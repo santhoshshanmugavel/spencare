@@ -873,6 +873,9 @@ export const api = {
   deleteFuelEntry: (vehicleId: string, entryId: string, accessToken: string) =>
     del<void>(`/api/mobile/vehicles/${vehicleId}/fuel-entries/${entryId}`, undefined, accessToken),
 
+  editFuelEntry: (vehicleId: string, entryId: string, body: Partial<CreateFuelEntryBody>, accessToken: string) =>
+    patch<{ fuel_entry: FuelEntryJSON }>(`/api/mobile/vehicles/${vehicleId}/fuel-entries/${entryId}`, body, accessToken),
+
   // Vehicle expenses
   listExpenses: (vehicleId: string, accessToken: string) =>
     get<{ expenses: VehicleExpenseJSON[] }>(`/api/mobile/vehicles/${vehicleId}/expenses`, accessToken),

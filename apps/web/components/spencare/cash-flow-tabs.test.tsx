@@ -14,14 +14,14 @@ describe("<CashFlowTabs>", () => {
     expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/cash-flow");
     expect(screen.getByRole("link", { name: "Transactions" })).toHaveAttribute("href", "/cash-flow/transactions");
     expect(screen.getByRole("link", { name: "Budgets" })).toHaveAttribute("href", "/cash-flow/budgets");
-    expect(screen.getByRole("link", { name: "Upcoming" })).toHaveAttribute("href", "/cash-flow/upcoming");
+    expect(screen.getByRole("link", { name: "Commitments" })).toHaveAttribute("href", "/cash-flow/upcoming");
     expect(screen.queryByRole("link", { name: "Bills" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Investigate" })).toBeNull();
   });
 
   it("marks the active tab distinctly from the others", () => {
     render(<CashFlowTabs active="upcoming" />);
-    const upcoming = screen.getByRole("link", { name: "Upcoming" });
+    const upcoming = screen.getByRole("link", { name: "Commitments" });
     const budgets = screen.getByRole("link", { name: "Budgets" });
     expect(upcoming.className).not.toBe(budgets.className);
   });

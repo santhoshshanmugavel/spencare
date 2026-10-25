@@ -146,7 +146,8 @@ describe("<ImportWizard> — upload step", () => {
     await user.click(screen.getByRole("button", { name: "Upload and process" }));
 
     expect(await screen.findByText(/don't match a supported statement format/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Upload and process" })).toBeInTheDocument();
+    // waitFor: button reverts to "Upload and process" once isPending settles after the error transition
+    await waitFor(() => expect(screen.getByRole("button", { name: "Upload and process" })).toBeInTheDocument());
   });
 
   it("Phase 28: offers a Credit Card as an import destination, clearly labeled by type", async () => {
@@ -218,7 +219,8 @@ describe("<ImportWizard> — review step", () => {
 
   it("enables Continue once a row is accepted", async () => {
     await renderAtReview([stagedRow({ review_status: "accepted" })]);
-    expect(screen.getByRole("button", { name: /continue \(1 to import\)/i })).toBeEnabled();
+    // waitFor: isPending from startTransition may still be true when review text first renders
+    await waitFor(() => expect(screen.getByRole("button", { name: /continue \(1 to import\)/i })).toBeEnabled());
   });
 
   it("has no axe violations in the review step", async () => {

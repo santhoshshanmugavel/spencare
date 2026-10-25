@@ -55,7 +55,7 @@ type DetailTab = "fuel" | "expenses" | "maintenance" | "reminders" | "docs";
 
 // ── Small reusable row components ─────────────────────────────────────────────
 
-function FuelRow({ entry, currency }: { entry: FuelEntryJSON; currency: string }) {
+function FuelRow({ entry, currency, onDelete }: { entry: FuelEntryJSON; currency: string; onDelete?: () => void }) {
   const t = useTheme();
   return (
     <View style={[styles.row, { borderBottomColor: t.separator }]}>
@@ -70,6 +70,11 @@ function FuelRow({ entry, currency }: { entry: FuelEntryJSON; currency: string }
           <Text style={[styles.rowAmt, { color: t.foreground }]}>{formatMoney(entry.total_cost_minor, entry.currency ?? currency)}</Text>
         )}
         {entry.is_full_tank && <Text style={[{ fontSize: 10, color: t.income }]}>FULL</Text>}
+        {onDelete && (
+          <TouchableOpacity onPress={onDelete} accessibilityLabel="Delete fuel entry">
+            <Text style={{ fontSize: 11, color: t.expense, marginTop: 2 }}>Delete</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -381,6 +386,43 @@ export default function VehiclesScreen(): React.JSX.Element {
     } catch { Alert.alert("Error", "Could not dismiss reminder."); }
   };
 
+  const handleDeleteFuel = (entryId: string) => {
+    if (!selectedVehicle) return;
+    Alert.alert("Delete Fuel Entry", "Delete this fuel entry? This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete", style: "destructive",
+        onPress: async () => {
+          try {
+            await api.deleteFuelEntry(selectedVehicle.id, entryId, accessToken);
+            setFuelEntries((prev) => prev.filter((e) => e.id !== entryId));
+          } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Could not delete fuel entry."); }
+        },
+      },
+    ]);
+  };
+
+  const handleDeleteVehicle = () => {
+    if (!selectedVehicle) return;
+    Alert.alert(
+      "Delete Vehicle",
+      `Delete "${selectedVehicle.name}" and all its data? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive",
+          onPress: async () => {
+            try {
+              await api.deleteVehicle(selectedVehicle.id, accessToken);
+              closeDetail();
+              await loadVehicles();
+            } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Could not delete vehicle."); }
+          },
+        },
+      ],
+    );
+  };
+
   const getAddAction = (): (() => void) | null => {
     if (activeTab === "fuel") return () => setShowAddFuel(true);
     if (activeTab === "expenses") return () => setShowAddExpense(true);
@@ -475,7 +517,7 @@ export default function VehiclesScreen(): React.JSX.Element {
               {activeTab === "fuel" && (
                 fuelEntries.length === 0
                   ? <Text style={[styles.empty, { color: t.foregroundMuted, margin: spacing.lg }]}>No fuel entries yet.</Text>
-                  : fuelEntries.map((e) => <FuelRow key={e.id} entry={e} currency={dashboard?.currency ?? "INR"} />)
+                  : fuelEntries.map((e) => <FuelRow key={e.id} entry={e} currency={dashboard?.currency ?? "INR"} onDelete={() => handleDeleteFuel(e.id)} />)
               )}
               {activeTab === "expenses" && (
                 expenses.length === 0
@@ -499,6 +541,13 @@ export default function VehiclesScreen(): React.JSX.Element {
               )}
             </ScrollView>
           )}
+
+          {/* ── Delete vehicle ── */}
+          <View style={{ borderTopColor: t.border, borderTopWidth: StyleSheet.hairlineWidth, padding: spacing.md }}>
+            <TouchableOpacity onPress={handleDeleteVehicle} style={{ alignItems: "center", paddingVertical: spacing.sm }} accessibilityLabel="Delete vehicle">
+              <Text style={{ color: t.expense, fontSize: 15 }}>Delete Vehicle</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
 

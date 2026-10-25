@@ -1,6 +1,6 @@
 # Spencare Mobile — Feature Parity Matrix
 
-Last updated: 2026-10-24 (session 12 — credit utilization card; loan tracker rows removed)  
+Last updated: 2026-10-25 (session 17 — all 1132 web tests passing; TypeScript clean across web/domain/mobile)  
 Branch: `mobile-foundation` @ uncommitted  
 Methodology: Inspected all web routes, domain commands, and mobile screens; ran full test suite.
 
@@ -10,9 +10,9 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 |-------|--------|-------|
 | Mobile tsc | ✅ 0 errors | |
 | Web tsc | ✅ 0 errors | Fixed in fd08ae4 |
-| Mobile tests | ✅ 350/350 | session 12 — unchanged |
+| Mobile tests | ✅ 379/379 | session 16 — unchanged |
 | domain-application | ✅ 539/539 | session 12 — unchanged |
-| @spencare/web tests | ✅ 1101/1101 | session 12 — unchanged |
+| @spencare/web tests | ✅ 1132/1132 | session 17 — all failures resolved; 2 import-wizard iPending fixes |
 | mcp-server | ✅ 43/43 | |
 | @spencare/ai | ❌ pre-existing | `claude-3-5-haiku-latest` deprecated + vitest mock infra |
 
@@ -23,7 +23,7 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | 1 | TS2353 categoryId in transactions route | ✅ Fixed (bcba950) |
 | 2 | settings-nav.tsx ReactNode errors (web) | ✅ Resolved — web tsc 0 errors |
 | 3 | budgets route test (listCategories not mocked) | ✅ Fixed (this session) |
-| 4 | @spencare/ai test failures | ⚠️ Pre-existing — fix before merge |
+| 4 | @spencare/ai test failures | ⚠️ Pre-existing — fix before merge (`claude-3-5-haiku-latest` deprecated + vitest mock) |
 | 5 | mobile-foundation commits behind main | Must rebase before PR |
 
 ---
@@ -207,12 +207,14 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | List vehicles | `/vehicles` | ✅ Complete | Profile → Vehicles & Fuel |
 | Vehicle detail (stats) | `/vehicles/[id]` | ✅ Complete | Odometer, efficiency, total cost |
 | Add vehicle | — | ✅ Complete | Create modal with make/model/type/fuel |
+| Delete vehicle | — | ✅ Complete | "Delete Vehicle" button at bottom of detail modal; Alert confirmation |
 | Log fuel/odometer | — | ✅ Complete | Fuel tab in vehicle detail |
+| Edit fuel entry | — | ✅ Complete | Tap any fuel row → pre-filled edit modal; PATCH route |
+| Delete fuel entry | — | ✅ Complete | Long-press any fuel row → Alert confirmation; DELETE route |
 | Log expense | — | ✅ Complete | Expenses tab + add modal |
 | Log service/maintenance | — | ✅ Complete | Service tab + add modal; auto-creates reminder if next due date set |
 | Track documents | — | ✅ Complete | Docs tab + add modal; auto-creates expiry reminders |
 | View reminders | — | ✅ Complete | Reminders tab with dismiss action |
-| Delete fuel entry | — | ✅ Complete | API route only (no UI swipe-to-delete yet) |
 | Import (Fuelio CSV) | `/vehicles/[id]/import` | ❌ Blocked | `expo-document-picker` not installed; API route not built (no file picker on mobile) |
 | Link transaction to vehicle | — | ❌ Missing | Requires account+category picker; deferred for MVP |
 | Vehicle photo | — | ❌ Missing | No native image picker installed |

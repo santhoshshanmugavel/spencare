@@ -178,9 +178,16 @@ export const updateFuelEntry: Command<UpdateFuelEntryInput, VehicleFuelEntryRow>
   consequential: false,
   async execute(ctx: AuthContext, input: UpdateFuelEntryInput): Promise<Result<VehicleFuelEntryRow>> {
     if (!input.entryId) return err({ code: "validation_error", message: "Missing entry id." });
+    if (input.odometer !== undefined && input.odometer < 0)
+      return err({ code: "validation_error", message: "Odometer must be non-negative." });
+    if (input.fuelQuantityMl !== undefined && input.fuelQuantityMl <= 0)
+      return err({ code: "validation_error", message: "Fuel quantity must be positive." });
     try {
-      const { entryId, vehicleId: _vid, ...patch } = input;
+      const { entryId, vehicleId, ...patch } = input;
       const row = await updateFuelEntryRow(ctx.supabase, ctx.userId, entryId, patch);
+      if (input.odometer !== undefined) {
+        await updateVehicleCurrentOdometerIfHigher(ctx.supabase, ctx.userId, vehicleId, row.odometer).catch(() => {});
+      }
       return ok(row);
     } catch {
       return err({ code: "update_failed", message: "Couldn't update the fuel entry. Try again." });
