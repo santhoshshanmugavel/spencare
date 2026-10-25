@@ -59,20 +59,6 @@ export {
   type UpdatePlannedCommitmentPatch,
 } from "./plannedCommitmentsRepo.js";
 export {
-  createLoan,
-  updateLoan,
-  deleteLoan,
-  getLoan,
-  listLoans,
-  getLoanReservedTotal,
-  type LoanType,
-  type LoanStatus,
-  type LoanRow,
-  type CreateLoanPatch,
-  type UpdateLoanPatch,
-} from "./loansRepo.js";
-
-export {
   listEpfoLedgerEntries,
   type ListEpfoLedgerFilter,
 } from "./epfoLedgerRepo.js";

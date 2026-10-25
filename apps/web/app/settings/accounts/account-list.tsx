@@ -51,7 +51,6 @@ export function AccountList({
   cardReservePerAccount = {},
   goalReservePerAccount = {},
   commitmentReservePerAccount = {},
-  loanReservePerAccount = {},
   cardReserveDetails = [],
   paymentAccountNameByCardId = {},
   paymentSources = [],
@@ -64,8 +63,6 @@ export function AccountList({
   goalReservePerAccount?: Record<string, number>;
   /** Per bank/cash account: sum of reserved_minor from upcoming planned_commitment_occurrences. */
   commitmentReservePerAccount?: Record<string, number>;
-  /** Per bank/cash account: sum of installment_amount_minor for active loans with that reserve_account_id. */
-  loanReservePerAccount?: Record<string, number>;
   /** Per-card breakdown used to show which cards contribute to each bank's reserve. */
   cardReserveDetails?: CardReserveDetail[];
   /** Maps credit_card_account_id -> payment bank name, for display on credit card tiles. */
@@ -73,7 +70,7 @@ export function AccountList({
   paymentSources?: CreditCardPaymentSourceRow[];
   /** Per credit card: canonical billing status (statement balance, payment status), keyed by account id. */
   billingStatusByCardId?: Record<string, CreditCardBillingStatusView>;
-  /** Per bank/cash account: itemized breakdown behind the goals / commitments / loans aggregates. Totals match the aggregate exactly (derived from the same source lists). */
+  /** Per bank/cash account: itemized breakdown behind the goals / commitments aggregates. Totals match the aggregate exactly (derived from the same source lists). */
   reserveBreakdownByAccount?: Record<string, AccountReserveBreakdown>;
 }) {
   const router = useRouter();
@@ -198,7 +195,6 @@ export function AccountList({
         masked={masked}
         goalReserveMinor={viewingDetails ? (goalReservePerAccount[viewingDetails.id] ?? 0) : 0}
         commitmentReserveMinor={viewingDetails ? (commitmentReservePerAccount[viewingDetails.id] ?? 0) : 0}
-        loanReserveMinor={viewingDetails ? (loanReservePerAccount[viewingDetails.id] ?? 0) : 0}
         cardReserveMinor={viewingDetails ? (cardReservePerAccount[viewingDetails.id] ?? 0) : 0}
         cardReserveDetails={viewingDetails ? cardReserveDetails.filter((d) => d.paymentAccountId === viewingDetails.id) : []}
         billingStatus={viewingDetails ? (billingStatusByCardId[viewingDetails.id] ?? null) : null}

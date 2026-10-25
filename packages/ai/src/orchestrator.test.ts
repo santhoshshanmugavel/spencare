@@ -50,6 +50,7 @@ vi.mock("@spencare/domain-infra", () => ({
   getPendingConfirmation: vi.fn(),
   getActiveEncryptedCredential: vi.fn(),
   decryptSecret: vi.fn(),
+  getCategorySpending: vi.fn(),
 }));
 
 const ctx = { userId: "u1", email: "a@b.com", supabase: {} as never, serviceRoleSupabase: {} as never };
@@ -67,7 +68,6 @@ async function setupBaseMocks() {
     cardPaymentReservedTotal: Money.zero("INR"),
     upcomingBillsTotal: Money.zero("INR"),
     commitmentReservedTotal: Money.zero("INR"),
-    loanReservedTotal: Money.zero("INR"),
     ownedSpendableTotal: Money.fromMinorUnits(500000n, "INR"),
     creditAvailableTotal: Money.zero("INR"),
   } as never);

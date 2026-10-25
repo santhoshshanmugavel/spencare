@@ -20,7 +20,7 @@ export function CashFlowTabs({ active }: { active: "overview" | "transactions" |
     { key: "overview" as const, label: "Overview", href: "/cash-flow" },
     { key: "transactions" as const, label: "Transactions", href: "/cash-flow/transactions" },
     { key: "budgets" as const, label: "Budgets", href: "/cash-flow/budgets" },
-    { key: "upcoming" as const, label: "Upcoming", href: "/cash-flow/upcoming" },
+    { key: "upcoming" as const, label: "Commitments", href: "/cash-flow/upcoming" },
   ];
   return (
     <div className="flex gap-1 border-b border-border">

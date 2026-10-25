@@ -398,7 +398,6 @@ describe("calculateSafeToSpend — production snapshot (2026-10-10)", () => {
       cardPaymentReservedTotal: money(316_940),
       upcomingBillsTotal: money(0),
       commitmentReservedTotal: money(195_834),
-      loanReservedTotal: money(0),
       budget: { totalAmount: money(8_137_600), totalSpent: money(7_786_112) },
       hasActiveGoals: true,
       hasActiveBudget: true,

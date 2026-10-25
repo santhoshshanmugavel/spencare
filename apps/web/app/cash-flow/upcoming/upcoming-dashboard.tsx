@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarClock, CreditCard, Landmark, MapPinned, PiggyBank, Plus, ShieldCheck, Target, Zap } from "lucide-react";
+import { CalendarClock, CreditCard, MapPinned, PiggyBank, Plus, ShieldCheck, Target, Zap } from "lucide-react";
 import {
   Money as DomainMoney,
   derivePreparationStatus,
@@ -12,7 +12,6 @@ import {
 } from "@spencare/domain-core";
 import type {
   PlannedCommitmentRow,
-  LoanRow,
   AccountRow,
   CategoryRow,
   UpcomingEvent,
@@ -27,11 +26,9 @@ import { ListRow } from "@/components/spencare/list-row";
 import { Money } from "@/components/spencare/money";
 import { EmptyState } from "@/components/spencare/empty-state";
 import { CommitmentSheet } from "./commitment-sheet";
-import { LoanSheet } from "./loan-sheet";
 import { CommitmentActions } from "./commitment-actions";
 import { PrepProtectActions } from "./prep-protect-actions";
 import { ProjectedItemActions } from "./projected-item-actions";
-import { LoanActions } from "./loan-actions";
 import { CreditCardPaymentDialog } from "./credit-card-actions";
 import { BillNowSheet } from "../bills/bill-now-sheet";
 import { EditBillSheet } from "../bills/edit-bill-sheet";
@@ -239,7 +236,6 @@ function isoToMonthKey(iso: string): string {
 export function UpcomingDashboard({
   events,
   commitments,
-  loans,
   bills = [],
   accounts,
   categories,
@@ -248,7 +244,6 @@ export function UpcomingDashboard({
 }: {
   events: UpcomingEvent[];
   commitments: PlannedCommitmentRow[];
-  loans: LoanRow[];
   bills?: BillPredictionWithDefinition[];
   accounts: AccountRow[];
   categories: CategoryRow[];
@@ -259,8 +254,6 @@ export function UpcomingDashboard({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [commitmentSheetOpen, setCommitmentSheetOpen] = useState(false);
-  const [loanSheetOpen, setLoanSheetOpen] = useState(false);
-  const [editingLoan, setEditingLoan] = useState<LoanRow | undefined>(undefined);
   const [ccPayOpen, setCcPayOpen] = useState(false);
   const [ccPayAccount, setCcPayAccount] = useState<AccountRow | null>(null);
   const [ccPayOutstandingMinor, setCcPayOutstandingMinor] = useState(0);
@@ -268,7 +261,6 @@ export function UpcomingDashboard({
   const [editingBill, setEditingBill] = useState<BillDefinitionRow | null>(null);
 
   const commitmentById = new Map(commitments.map((c) => [c.id, c]));
-  const loanById = new Map(loans.map((l) => [l.id, l]));
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const bankCashAccounts = accounts.filter((a) => (a.type === "bank" || a.type === "cash") && !a.is_archived);
@@ -317,7 +309,7 @@ export function UpcomingDashboard({
     let toProtect = 0;
     let preparationDue = 0;
     for (const ev of selectedEvents) {
-      if (ev.kind === "commitment_payment" || ev.kind === "loan") {
+      if (ev.kind === "commitment_payment") {
         paymentsDue += ev.amountMinor;
       }
       if (ev.kind === "commitment_payment" && ev.reserveAccountId) {
@@ -602,46 +594,6 @@ export function UpcomingDashboard({
       );
     }
 
-    if (ev.kind === "loan") {
-      const loan = loanById.get(ev.sourceId);
-      const paymentAccount = loan?.payment_account_id ? accountById.get(loan.payment_account_id) : null;
-      const lrs = ev.reserveStatus;
-      return (
-        <ListRow
-          key={ev.id}
-          icon={<Landmark className="size-4 text-muted-foreground" />}
-          title={ev.title}
-          subtitle={
-            <span className="flex items-center gap-2">
-              <DueDateLabel isoDate={ev.date} />
-              {lrs && <ReserveLabel rs={lrs} />}
-              {paymentAccount && (
-                <span className="text-xs text-muted-foreground">via {paymentAccount.name}</span>
-              )}
-            </span>
-          }
-          trailing={
-            <div className="flex items-center gap-1">
-              <Money
-                value={DomainMoney.fromMinorUnits(BigInt(ev.amountMinor), ev.currency)}
-                masked={masked}
-                size="numeric"
-              />
-              {loan && (
-                <LoanActions
-                  loan={loan}
-                  accounts={accounts}
-                  categories={categories}
-                  onChanged={refresh}
-                  onEdit={(l) => { setEditingLoan(l); setLoanSheetOpen(true); }}
-                />
-              )}
-            </div>
-          }
-        />
-      );
-    }
-
     if (ev.kind === "credit_card_statement" || ev.kind === "credit_card_payment") {
       const isCcPayment = ev.kind === "credit_card_payment";
       const ccAccount = accountById.get(ev.sourceId);
@@ -715,10 +667,6 @@ export function UpcomingDashboard({
           <p className="text-sm text-muted-foreground mt-0.5">What needs your attention next</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="touch" variant="outline" onClick={() => { setEditingLoan(undefined); setLoanSheetOpen(true); }}>
-            <Plus className="size-4 mr-1" aria-hidden="true" />
-            Add loan
-          </Button>
           <Button size="touch" onClick={() => setCommitmentSheetOpen(true)}>
             <Plus className="size-4 mr-1" aria-hidden="true" />
             Add commitment
@@ -807,7 +755,7 @@ export function UpcomingDashboard({
         <EmptyState
           icon={<CalendarClock className="size-10 text-muted-foreground" />}
           title="Nothing upcoming"
-          description="Add a planned commitment or loan to track what is coming and protect money in Safe to Spend."
+          description="Add a planned commitment to track what is coming and protect money in Safe to Spend."
         />
       ) : selectedEvents.length === 0 && selectedBills.length === 0 ? (
         <div className="py-12 text-center">
@@ -846,14 +794,6 @@ export function UpcomingDashboard({
         onSaved={() => { setCommitmentSheetOpen(false); refresh(); }}
         accounts={accounts}
         categories={categories}
-      />
-
-      <LoanSheet
-        open={loanSheetOpen}
-        onOpenChange={(v) => { setLoanSheetOpen(v); if (!v) setEditingLoan(undefined); }}
-        onSaved={() => { setLoanSheetOpen(false); setEditingLoan(undefined); refresh(); }}
-        accounts={accounts}
-        existing={editingLoan}
       />
 
       {ccPayAccount && (

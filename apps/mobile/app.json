@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Spencare",
+    "slug": "spencare",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "spencare",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.spencare.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

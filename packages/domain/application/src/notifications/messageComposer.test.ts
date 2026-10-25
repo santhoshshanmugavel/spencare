@@ -175,19 +175,6 @@ describe("composeNotificationMessage — privacy ON masking", () => {
     expect(m.body).not.toMatch(/₹|1,000|SBI/);
   });
 
-  it("masks LOAN_1_DAY: no amount, no loan name", () => {
-    const m = composeNotificationMessage(
-      "LOAN_1_DAY",
-      {
-        loanName: "Home Loan",
-        installmentMinor: 5000000,
-        currency: "INR",
-      },
-      { privacyMode: true },
-    );
-    expect(m.body).not.toMatch(/₹|50,000|Home Loan/);
-  });
-
   it("masks PLAN_ITEM_DUE_TODAY: no amount, no plan or item name", () => {
     const m = composeNotificationMessage(
       "PLAN_ITEM_DUE_TODAY",
@@ -276,7 +263,6 @@ describe("composeNotificationMessage — sweep: no financial event falls through
     "BILL_7_DAYS","BILL_3_DAYS","BILL_1_DAY","BILL_DUE_TODAY","BILL_OVERDUE","BILL_AMOUNT_CHANGED",
     "COMMITMENT_7_DAYS","COMMITMENT_3_DAYS","COMMITMENT_1_DAY","COMMITMENT_DUE_TODAY","COMMITMENT_OVERDUE","COMMITMENT_SHORTFALL",
     "COMMITMENT_AUTO_PAID","COMMITMENT_AUTO_PAY_FAILED","COMMITMENT_AUTO_PROTECTED","COMMITMENT_PREPARATION",
-    "LOAN_7_DAYS","LOAN_3_DAYS","LOAN_1_DAY","LOAN_DUE_TODAY","LOAN_OVERDUE",
     "CC_STATEMENT_7_DAYS","CC_STATEMENT_TODAY",
     "CC_PAYMENT_7_DAYS","CC_PAYMENT_3_DAYS","CC_PAYMENT_1_DAY","CC_PAYMENT_TODAY","CC_PAYMENT_OVERDUE",
     "PLAN_ITEM_7_DAYS","PLAN_ITEM_3_DAYS","PLAN_ITEM_1_DAY","PLAN_ITEM_DUE_TODAY","PLAN_ITEM_OVERDUE",

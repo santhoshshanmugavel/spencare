@@ -29,6 +29,15 @@ export const RATE_LIMITS = {
    * blunts repeated invalid-token probing, not just legitimate traffic.
    */
   MCP_REQUEST: { maxAttempts: 30, windowSeconds: 60 },
+  /**
+   * 5 MFA verification attempts per 5 minutes per challenge-token hash.
+   * The window is kept short (300 s vs. a 600 s challenge TTL) so a stolen
+   * challenge token cannot be brute-forced through a full 10-minute window.
+   * 5 attempts is generous for genuine users who mistype a TOTP code once
+   * or twice but tight enough to make 6-digit exhaustion (10^6 combos)
+   * infeasible within the window.
+   */
+  MOBILE_MFA_VERIFY: { maxAttempts: 5, windowSeconds: 300 },
 } as const;
 
 export async function checkRateLimit(client: TypedSupabaseClient, bucketKey: string, limit: { maxAttempts: number; windowSeconds: number }): Promise<boolean> {

@@ -88,12 +88,6 @@ export interface SafeToSpendContext {
    * planned_commitment_occurrence reserved amounts appear here.
    */
   commitmentReservedTotal?: Money;
-  /**
-   * Sum of `installment_amount_minor` for active loans with a reserve_account_id set.
-   * Reduces Safe-to-Spend to protect cash earmarked for loan repayments.
-   * Optional -- defaults to zero so callers that predate the loan feature compile.
-   */
-  loanReservedTotal?: Money;
   /** Undefined (not zero-valued) when `hasActiveBudget` is false -- there is no meaningful "empty budget" figure to report, only its absence. */
   budget?: { totalAmount: Money; totalSpent: Money };
   hasActiveGoals: boolean;
@@ -118,8 +112,6 @@ export interface SafeToSpendResult {
   upcomingBillsTotal: Money;
   /** Sum of reserved_minor across upcoming planned_commitment_occurrences. Zero when no planned commitments exist. */
   commitmentReservedTotal: Money;
-  /** Sum of installment_amount_minor for active loans with a reserve_account_id. Zero when no loans are reserved. */
-  loanReservedTotal: Money;
   /** Bank+Cash owned money -- as of Phase 29, this always equals `availableBalance` (Credit Card no longer contributes to either). */
   ownedSpendableTotal: Money;
   /** Credit Card available credit (limit minus used, never the limit) -- display-only, NEVER included in `amount`/`availableBalance`. Zero when the user has no credit cards. */
@@ -170,15 +162,12 @@ export function calculateSafeToSpend(ctx: SafeToSpendContext): SafeToSpendResult
     base = { state: "budget_and_goals", amount: Money.min(budgetRemaining, cashAfterReserves), budgetRemaining };
   }
 
-  // Bills total, commitment reserve, and loan reserve are all subtracted
-  // unconditionally on top of every state above. They are additive and
-  // must not double-count.
+  // Bills total and commitment reserve are both subtracted unconditionally
+  // on top of every state above. They are additive and must not double-count.
   const commitmentReservedTotal = ctx.commitmentReservedTotal ?? Money.zero(currency);
-  const loanReservedTotal = ctx.loanReservedTotal ?? Money.zero(currency);
   const amount = base.amount
     .subtract(ctx.upcomingBillsTotal)
-    .subtract(commitmentReservedTotal)
-    .subtract(loanReservedTotal);
+    .subtract(commitmentReservedTotal);
 
   return {
     state: base.state,
@@ -189,7 +178,6 @@ export function calculateSafeToSpend(ctx: SafeToSpendContext): SafeToSpendResult
     cardPaymentReservedTotal,
     upcomingBillsTotal: ctx.upcomingBillsTotal,
     commitmentReservedTotal,
-    loanReservedTotal,
     ownedSpendableTotal: ctx.ownedSpendableTotal ?? availableBalance,
     creditAvailableTotal: ctx.creditAvailableTotal ?? Money.zero(currency),
   };

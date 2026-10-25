@@ -40,7 +40,6 @@ vi.mock("@spencare/domain-application", () => ({
   getOnboardingStatusQuery: vi.fn(),
   listCommitments: vi.fn(),
   listUpcoming: vi.fn(),
-  listAllLoans: vi.fn(),
   listPlansWithSummaries: vi.fn(),
   getPlanDetail: vi.fn(),
 }));
@@ -72,7 +71,7 @@ describe("registerReadTools — scope enforcement", () => {
   it("a read-scoped session can call a read tool successfully", async () => {
     const domainApp = await import("@spencare/domain-application");
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: false } as never);
-    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, goalReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, cardPaymentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, upcomingBillsTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, commitmentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, loanReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
+    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, goalReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, cardPaymentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, upcomingBillsTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, commitmentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
 
     const { registerReadTools } = await import("./readTools.js");
     const server = fakeServer();
@@ -101,7 +100,7 @@ describe("registerReadTools — Privacy Mode", () => {
   it("redacts the Safe-to-Spend figure when Privacy Mode is enabled", async () => {
     const domainApp = await import("@spencare/domain-application");
     vi.mocked(domainApp.getProfile).mockResolvedValue({ privacy_mode_enabled: true } as never);
-    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, goalReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, cardPaymentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, upcomingBillsTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, commitmentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, loanReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
+    vi.mocked(domainApp.getSafeToSpend).mockResolvedValue({ state: "balance_only", amount: { amountMinorUnits: 500000n, currencyCode: "INR" }, ownedSpendableTotal: { amountMinorUnits: 500000n, currencyCode: "INR" }, creditAvailableTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, goalReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, cardPaymentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, upcomingBillsTotal: { amountMinorUnits: 0n, currencyCode: "INR" }, commitmentReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" } } as never);
     vi.mocked(domainApp.redactFinancialSnapshot).mockImplementation((input) => ({
       safeToSpend: { state: (input as { safeToSpend: { state: string } }).safeToSpend.state, amount: { private: true } },
       accounts: [],
@@ -367,7 +366,6 @@ describe("registerReadTools — getSafeToSpend serialization completeness", () =
       budgetRemaining: { amountMinorUnits: 351_488n, currencyCode: "INR" },
       upcomingBillsTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
       commitmentReservedTotal: { amountMinorUnits: 195_834n, currencyCode: "INR" },
-      loanReservedTotal: { amountMinorUnits: 0n, currencyCode: "INR" },
     };
   }
 
@@ -387,7 +385,7 @@ describe("registerReadTools — getSafeToSpend serialization completeness", () =
 
     const d = result.data as Record<string, unknown>;
 
-    // All 11 fields must be present.
+    // All 10 fields must be present.
     expect(d).toHaveProperty("state");
     expect(d).toHaveProperty("amountMinor");
     expect(d).toHaveProperty("currency");
@@ -398,7 +396,6 @@ describe("registerReadTools — getSafeToSpend serialization completeness", () =
     expect(d).toHaveProperty("budgetRemainingMinor");
     expect(d).toHaveProperty("upcomingBillsMinor");
     expect(d).toHaveProperty("commitmentReservedMinor");
-    expect(d).toHaveProperty("loanReservedMinor");
 
     // The Safe-to-Spend figure must match the production snapshot.
     expect(d.amountMinor).toBe(155_654);
@@ -407,7 +404,7 @@ describe("registerReadTools — getSafeToSpend serialization completeness", () =
     const monetaryFields = [
       "amountMinor", "ownedSpendableMinor", "creditAvailableMinor",
       "goalReservedMinor", "cardPaymentReservedMinor",
-      "upcomingBillsMinor", "commitmentReservedMinor", "loanReservedMinor",
+      "upcomingBillsMinor", "commitmentReservedMinor",
     ];
     for (const field of monetaryFields) {
       expect(Number.isInteger(d[field]), `${field} must be an integer`).toBe(true);

@@ -1669,6 +1669,36 @@ export type Database = {
           },
         ]
       }
+      mobile_mfa_challenges: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          encrypted_session: string
+          expires_at: string
+          id: string
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          encrypted_session: string
+          expires_at: string
+          id?: string
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          encrypted_session?: string
+          expires_at?: string
+          id?: string
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       mcp_sessions: {
         Row: {
           client_name: string

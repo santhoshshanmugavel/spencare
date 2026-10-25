@@ -105,22 +105,10 @@ export interface CommitmentReserveItem {
   nextOccurrenceReservedMinor: number;
 }
 
-/** One loan contributing to the account's loan reservation. */
-export interface LoanReserveItem {
-  id: string;
-  name: string;
-  reservedMinor: number;
-  nextInstallmentAmountMinor: number;
-  nextPaymentDate: string | null;
-  frequency: string;
-  outstandingMinor: number | null;
-}
-
 /** Per-account itemized breakdown behind the aggregate reserve rows. Totals of each array exactly reconcile to the aggregate on the same props. */
 export interface AccountReserveBreakdown {
   goals: GoalReserveItem[];
   commitments: CommitmentReserveItem[];
-  loans: LoanReserveItem[];
 }
 
 interface AccountDetailsSheetProps {
@@ -130,7 +118,6 @@ interface AccountDetailsSheetProps {
   masked: boolean;
   goalReserveMinor: number;
   commitmentReserveMinor: number;
-  loanReserveMinor: number;
   cardReserveMinor: number;
   cardReserveDetails: CardReserveDetail[];
   billingStatus?: CreditCardBillingStatusView | null;
@@ -156,7 +143,6 @@ export function AccountDetailsSheet({
   masked,
   goalReserveMinor,
   commitmentReserveMinor,
-  loanReserveMinor,
   cardReserveMinor,
   cardReserveDetails,
   billingStatus = null,
@@ -211,7 +197,6 @@ export function AccountDetailsSheet({
           const todayIso = todayIsoLocal();
           const goals = reserveBreakdown?.goals ?? [];
           const commitments = reserveBreakdown?.commitments ?? [];
-          const loans = reserveBreakdown?.loans ?? [];
 
           return (
           <>
@@ -264,22 +249,6 @@ export function AccountDetailsSheet({
               </ReserveSection>
 
               <ReserveSection
-                label="Reserved for loans"
-                countLabel={loans.length > 0 ? `${loans.length} ${loans.length === 1 ? "loan" : "loans"}` : null}
-                description="Money protected for scheduled loan payments."
-                aggregateMinor={loanReserveMinor}
-                hasBreakdown={loans.length > 0}
-                expanded={!!expanded.loans}
-                onToggle={() => toggle("loans")}
-                masked={masked}
-                money={money}
-              >
-                {loans.map((l) => (
-                  <LoanBreakdownRow key={l.id} item={l} masked={masked} money={money} />
-                ))}
-              </ReserveSection>
-
-              <ReserveSection
                 label="Reserved for card bills"
                 countLabel={
                   cardReserveDetails.length > 0
@@ -305,7 +274,7 @@ export function AccountDetailsSheet({
                   value={money(
                     Math.max(
                       0,
-                      account.balance_minor - goalReserveMinor - commitmentReserveMinor - loanReserveMinor - cardReserveMinor,
+                      account.balance_minor - goalReserveMinor - commitmentReserveMinor - cardReserveMinor,
                     ),
                   )}
                   masked={masked}
@@ -315,7 +284,7 @@ export function AccountDetailsSheet({
               </Row>
             </div>
             <p className="mt-2 px-1 text-xs text-muted-foreground">
-              Available is your current balance after protecting money already assigned to goals, commitments, loans, and
+              Available is your current balance after protecting money already assigned to goals, commitments, and
               card bills. You move the money yourself unless a specific automatic action says otherwise.
             </p>
           </>
@@ -629,47 +598,6 @@ function CommitmentBreakdownRow({
         <div className="shrink-0 text-right">
           <Money value={money(item.reservedMinor)} masked={masked} size="numeric" />
           <p className="text-xs text-muted-foreground">protected</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LoanBreakdownRow({
-  item,
-  masked,
-  money,
-}: {
-  item: LoanReserveItem;
-  masked: boolean;
-  money: MoneyFactory;
-}) {
-  return (
-    <div className="rounded-md bg-background px-3 py-2 text-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-foreground">{item.name}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Next EMI{" "}
-            <Money
-              value={money(item.nextInstallmentAmountMinor)}
-              masked={masked}
-              size="body"
-              className="inline"
-            />
-            {item.nextPaymentDate ? ` · ${formatDate(item.nextPaymentDate)}` : ""}
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{formatFrequency(item.frequency)}</p>
-          {item.outstandingMinor != null ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Outstanding{" "}
-              <Money value={money(item.outstandingMinor)} masked={masked} size="body" className="inline" />
-            </p>
-          ) : null}
-        </div>
-        <div className="shrink-0 text-right">
-          <Money value={money(item.reservedMinor)} masked={masked} size="numeric" />
-          <p className="text-xs text-muted-foreground">reserved</p>
         </div>
       </div>
     </div>

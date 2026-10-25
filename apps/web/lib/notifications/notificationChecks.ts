@@ -7,7 +7,7 @@
 import type { TypedSupabaseClient } from "@spencare/domain-infra";
 import {
   checkBudgetThreshold, checkBalanceThreshold, checkCreditUtilization, checkBillReminder,
-  checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder, checkLoanReminder,
+  checkGoalPlanReminder, checkCommitmentReminder, checkPreparationReminder,
   checkCreditCardBillingReminder, checkPlanItemReminder, checkPlanBudgetRisk, checkPlanCompletion,
   checkVehicleReminder,
 } from "./eventRules";
@@ -442,40 +442,6 @@ async function runChecksForUser(
         }, stats);
         checksRun++;
       }
-    } catch {
-      notificationsFailed++;
-    }
-  }
-
-  // ---- Loan payment reminders ----
-  const loanWindowAhead = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const loanWindowAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-  const { data: loans } = await serviceRoleSupabase
-    .from("loans")
-    .select("id, name, installment_amount_minor, next_payment_date, currency")
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .eq("status", "active")
-    .not("next_payment_date", "is", null)
-    .gte("next_payment_date", loanWindowAgo)
-    .lte("next_payment_date", loanWindowAhead);
-
-  for (const loan of loans ?? []) {
-    try {
-      if (!loan.next_payment_date) continue;
-      await checkLoanReminder({
-        serviceRoleSupabase,
-        userId,
-        userEmail,
-        loanId: loan.id,
-        loanName: loan.name,
-        dueDateIso: loan.next_payment_date,
-        installmentMinor: loan.installment_amount_minor,
-        currency: loan.currency,
-        todayIso,
-      }, stats);
-      checksRun++;
     } catch {
       notificationsFailed++;
     }
