@@ -15,13 +15,12 @@ import { cn } from "@/lib/utils";
  * keep `/cash-flow/budgets` reachable without inventing a redundant
  * "Budgets" entry inside the new page's own in-page switcher.
  */
-export function CashFlowTabs({ active }: { active: "overview" | "transactions" | "budgets" | "upcoming" | "investigate" }) {
+export function CashFlowTabs({ active }: { active: "overview" | "transactions" | "budgets" | "upcoming" }) {
   const tabs = [
     { key: "overview" as const, label: "Overview", href: "/cash-flow" },
     { key: "transactions" as const, label: "Transactions", href: "/cash-flow/transactions" },
     { key: "budgets" as const, label: "Budgets", href: "/cash-flow/budgets" },
-    { key: "upcoming" as const, label: "Upcoming", href: "/cash-flow/upcoming" },
-    { key: "investigate" as const, label: "Investigate", href: "/cash-flow/investigate" },
+    { key: "upcoming" as const, label: "Commitments", href: "/cash-flow/upcoming" },
   ];
   return (
     <div className="flex gap-1 border-b border-border">
