@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only manifest overlay.
+  Merged into the main manifest for debug builds only.
+  NOT included in release APKs.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Required on Android 13+ to post test notifications from the receiver. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <!--
+            Test notification publisher — debug builds only.
+            Lets ADB trigger a realistic synthetic notification via NotificationCompat.Builder,
+            giving SpencareNotificationService proper android.title / android.text extras.
+            Declared exported so adb shell am broadcast can reach it by component name.
+        -->
+        <receiver
+            android:name=".debug.TestNotificationReceiver"
+            android:exported="true" />
+    </application>
+
+</manifest>

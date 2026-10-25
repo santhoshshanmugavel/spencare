@@ -3,10 +3,13 @@ package com.spencare.capture.auth
 import android.content.Context
 import com.spencare.capture.BuildConfig
 import io.github.jan.supabase.gotrue.Auth
+import io.github.jan.supabase.gotrue.SessionStatus
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email as EmailProvider
 import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
@@ -46,10 +49,16 @@ class AuthManager(private val context: Context) {
     /** Refreshes the session if expired and returns the fresh token. */
     suspend fun getRefreshedToken(): String? = withContext(Dispatchers.IO) {
         try {
+            // supabase-kt loads session from storage asynchronously after client init.
+            // Wait until that load completes before trying to refresh — avoids the race
+            // where refreshCurrentSession() sees no in-memory session and returns null.
+            supabaseClient.auth.sessionStatus
+                .filter { it !is SessionStatus.LoadingFromStorage }
+                .first()
             supabaseClient.auth.refreshCurrentSession()
             supabaseClient.auth.currentSessionOrNull()?.accessToken
         } catch (e: Exception) {
-            getAccessToken()
+            supabaseClient.auth.currentSessionOrNull()?.accessToken
         }
     }
 
@@ -74,15 +83,14 @@ class AuthManager(private val context: Context) {
         }
 
     /**
-     * Returns true if the Supabase SDK has a cached session.
+     * Returns true if the SDK has an in-memory session.
      *
-     * Uses gotrue.currentSessionOrNull() — the SDK's own in-memory session
-     * cache — rather than a separate storage key. This accurately reflects
-     * whether the user is signed in, including after a successful loginWith()
-     * call in the same process lifetime.
+     * This is ONLY reliable within the same process lifetime after a sign-in.
+     * After a process restart or Activity recreation (including backgrounding),
+     * the SDK's async storage-load may not have completed yet, so this can
+     * return false even when a valid persisted session exists.
      *
-     * For a durable check across process restarts, call getAccessToken()
-     * (suspend) which triggers a full session load from the SDK's storage.
+     * Use [getRefreshedToken] for a reliable cross-restart check.
      */
     fun isSignedIn(): Boolean {
         return try {

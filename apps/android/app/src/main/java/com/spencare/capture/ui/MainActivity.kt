@@ -57,12 +57,20 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        updateUi()
+        lifecycleScope.launch { updateUi() }
     }
 
-    private fun updateUi() {
+    /**
+     * Refreshes auth state from the Supabase SDK before updating UI.
+     * Must be called from a coroutine — getRefreshedToken() is suspend.
+     *
+     * Using getRefreshedToken() (not isSignedIn()) ensures the persisted
+     * session is loaded from storage after a process restart. isSignedIn()
+     * reads in-memory state only and returns false on a fresh instance.
+     */
+    private suspend fun updateUi() {
         val hasAccess = isNotificationAccessGranted()
-        val isSignedIn = authManager.isSignedIn()
+        val isSignedIn = authManager.getRefreshedToken() != null
 
         if (!hasAccess) {
             statusText.text = "Notification access not granted.\nTap the button below to open Settings."
