@@ -5,6 +5,10 @@ import {
   removeCommitment,
   payCommitmentOccurrenceAtomic,
   predictNextOccurrence,
+  addCommitment,
+  editCommitment,
+  listCommitments,
+  skipCommitmentOccurrence,
   type RecurrenceInterval,
 } from "@spencare/domain-application";
 import { projectOccurrenceDates, type PaymentFrequency } from "@spencare/domain-core";
@@ -44,6 +48,88 @@ async function resolveUser(request: Request) {
   };
 }
 
+export async function GET(request: Request): Promise<Response> {
+  const user = await resolveUser(request);
+  if (!user) return Response.json({ error: "Unauthorized." }, { status: 401 });
+
+  const ctx = {
+    userId: user.userId,
+    email: user.email,
+    supabase: user.userClient,
+    serviceRoleSupabase: user.serviceClient,
+  };
+
+  try {
+    const commitments = await listCommitments(ctx);
+    return Response.json({ commitments });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to list commitments.";
+    return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request): Promise<Response> {
+  const user = await resolveUser(request);
+  if (!user) return Response.json({ error: "Unauthorized." }, { status: 401 });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const { name, amount_minor, category_id, payment_frequency, next_payment_date, notes, tenure_type, payment_account_id } = body;
+
+  if (!name || typeof name !== "string") return Response.json({ error: "name is required." }, { status: 400 });
+  if (!Number.isInteger(amount_minor) || (amount_minor as number) <= 0) return Response.json({ error: "amount_minor must be a positive integer." }, { status: 400 });
+  if (!category_id || typeof category_id !== "string") return Response.json({ error: "category_id is required." }, { status: 400 });
+  if (!payment_frequency || typeof payment_frequency !== "string") return Response.json({ error: "payment_frequency is required." }, { status: 400 });
+  const VALID_FREQS = ["weekly", "biweekly", "monthly", "quarterly", "yearly", "irregular", "one_time"];
+  if (!VALID_FREQS.includes(payment_frequency as string)) return Response.json({ error: "Invalid payment_frequency." }, { status: 400 });
+  if (!next_payment_date || typeof next_payment_date !== "string") return Response.json({ error: "next_payment_date is required." }, { status: 400 });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(next_payment_date as string)) return Response.json({ error: "next_payment_date must be YYYY-MM-DD." }, { status: 400 });
+
+  const ctx = {
+    userId: user.userId,
+    email: user.email,
+    supabase: user.userClient,
+    serviceRoleSupabase: user.serviceClient,
+  };
+
+  try {
+    const paymentDayRule = parseInt((next_payment_date as string).slice(8, 10), 10);
+    const commitment = await addCommitment(ctx, {
+      name: name as string,
+      categoryId: category_id as string,
+      amountMinor: amount_minor as number,
+      amountIsEstimate: false,
+      currency: "INR",
+      paymentFrequency: payment_frequency as import("@spencare/domain-application").PlannedCommitmentRow["payment_frequency"],
+      nextPaymentDate: next_payment_date as string,
+      savingCadence: null,
+      savingAmountMinor: null,
+      firstSavingDate: null,
+      savingDayRule: null,
+      paymentAccountId: (payment_account_id as string | null) ?? null,
+      reserveAccountId: null,
+      alreadyReservedMinor: null,
+      tenureType: (tenure_type as import("@spencare/domain-application").PlannedCommitmentRow["tenure_type"]) ?? "ongoing",
+      tenurePayments: null,
+      tenureEndDate: null,
+      notes: (notes as string | null) ?? null,
+      autoPayEnabled: false,
+      autoProtectEnabled: false,
+      initialOccurrenceDate: next_payment_date as string,
+      paymentDayRule,
+    });
+    return Response.json({ ok: true, commitment }, { status: 201 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to create commitment.";
+    return Response.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: Request): Promise<Response> {
   const user = await resolveUser(request);
   if (!user) return Response.json({ error: "Unauthorized." }, { status: 401 });
@@ -55,7 +141,8 @@ export async function PATCH(request: Request): Promise<Response> {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { action, commitment_id } = body;
+  const { action, commitment_id, occurrence_id } = body;
+
   if (!commitment_id || typeof commitment_id !== "string") {
     return Response.json({ error: "commitment_id is required." }, { status: 400 });
   }
@@ -70,17 +157,17 @@ export async function PATCH(request: Request): Promise<Response> {
   try {
     switch (action) {
       case "pause": {
-        await pauseCommitment(ctx, commitment_id);
+        await pauseCommitment(ctx, commitment_id as string);
         return Response.json({ ok: true });
       }
 
       case "resume": {
-        await resumeCommitment(ctx, commitment_id);
+        await resumeCommitment(ctx, commitment_id as string);
         return Response.json({ ok: true });
       }
 
       case "delete": {
-        await removeCommitment(ctx, commitment_id);
+        await removeCommitment(ctx, commitment_id as string);
         return Response.json({ ok: true });
       }
 
@@ -151,7 +238,7 @@ export async function PATCH(request: Request): Promise<Response> {
 
         const result = await payCommitmentOccurrenceAtomic(ctx, {
           occurrenceId: occRow.id,
-          commitmentId: commitment_id,
+          commitmentId: commitment_id as string,
           accountId: account_id as string,
           categoryId: category_id as string,
           amountMinor: amount_minor as number,
@@ -161,6 +248,48 @@ export async function PATCH(request: Request): Promise<Response> {
         });
 
         return Response.json({ ok: true, transactionId: result.transactionId, nextOccurrenceDate: result.nextDueDate });
+      }
+
+      case "update": {
+        const { name, amount_minor, category_id, payment_frequency, next_payment_date, notes } = body;
+        if (amount_minor !== undefined && (!Number.isInteger(amount_minor) || (amount_minor as number) <= 0)) {
+          return Response.json({ error: "amount_minor must be a positive integer." }, { status: 400 });
+        }
+        if (next_payment_date !== undefined && (typeof next_payment_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(next_payment_date as string))) {
+          return Response.json({ error: "next_payment_date must be YYYY-MM-DD." }, { status: 400 });
+        }
+        type EditPatch = Parameters<typeof editCommitment>[2];
+        const updated = await editCommitment(ctx, commitment_id as string, {
+          ...(name !== undefined ? { name: name as string } : {}),
+          ...(amount_minor !== undefined ? { amountMinor: amount_minor as number } : {}),
+          ...(category_id !== undefined ? { categoryId: category_id as string } : {}),
+          ...(payment_frequency !== undefined ? { paymentFrequency: payment_frequency as import("@spencare/domain-application").PlannedCommitmentRow["payment_frequency"] } : {}),
+          ...(notes !== undefined ? { notes: notes as string | null } : {}),
+          ...(next_payment_date !== undefined ? {
+            nextPaymentDate: next_payment_date as string,
+            paymentDayRule: parseInt((next_payment_date as string).slice(8, 10), 10),
+          } : {}),
+        } satisfies EditPatch);
+        return Response.json({ ok: true, commitment: updated });
+      }
+
+      case "skip": {
+        if (!occurrence_id || typeof occurrence_id !== "string") {
+          return Response.json({ error: "occurrence_id is required for skip." }, { status: 400 });
+        }
+        // Verify occurrence belongs to this commitment (prevents same-user wrong-commitment skip)
+        const { data: occCheck } = await ctx.supabase
+          .from("planned_commitment_occurrences")
+          .select("id")
+          .eq("id", occurrence_id)
+          .eq("commitment_id", commitment_id as string)
+          .eq("user_id", ctx.userId)
+          .maybeSingle();
+        if (!occCheck) {
+          return Response.json({ error: "Occurrence not found or does not belong to this commitment." }, { status: 404 });
+        }
+        await skipCommitmentOccurrence(ctx, occurrence_id);
+        return Response.json({ ok: true });
       }
 
       default:

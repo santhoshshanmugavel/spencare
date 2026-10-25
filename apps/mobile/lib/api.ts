@@ -468,6 +468,26 @@ export interface UpcomingDataResponse {
   commitments: CommitmentJSON[];
 }
 
+export interface CreateCommitmentBody {
+  name: string;
+  amount_minor: number;
+  category_id: string;
+  payment_frequency: string;
+  next_payment_date: string;
+  notes?: string | null;
+  tenure_type?: string;
+  payment_account_id?: string | null;
+}
+
+export interface UpdateCommitmentBody {
+  name?: string;
+  amount_minor?: number;
+  category_id?: string;
+  payment_frequency?: string;
+  next_payment_date?: string;
+  notes?: string | null;
+}
+
 // ── Spensa AI types ───────────────────────────────────────────────────────────
 
 export interface SpensaMessageBody {
@@ -658,6 +678,14 @@ export interface CreateMaintenanceBody {
   next_due_date?: string | null;
   next_due_odometer?: number | null;
   status?: "completed" | "upcoming" | "overdue";
+}
+
+export interface AiProviderStatusResponse {
+  connected: boolean;
+  provider?: string;
+  keyLastFour?: string;
+  lastValidatedAt?: string | null;
+  lastValidationError?: string | null;
 }
 
 export interface CreateVehicleDocumentBody {
@@ -939,10 +967,35 @@ export const api = {
       accessToken,
     ),
 
+  listCommitments: (accessToken: string) =>
+    get<{ commitments: CommitmentJSON[] }>("/api/mobile/commitments", accessToken),
+
+  createCommitment: (body: CreateCommitmentBody, accessToken: string) =>
+    post<{ ok: boolean; commitment: CommitmentJSON }>("/api/mobile/commitments", body, accessToken),
+
+  updateCommitment: (commitmentId: string, body: UpdateCommitmentBody, accessToken: string) =>
+    patch<{ ok: boolean; commitment: CommitmentJSON }>("/api/mobile/commitments", { action: "update", commitment_id: commitmentId, ...body }, accessToken),
+
+  skipCommitmentOccurrence: (occurrenceId: string, commitmentId: string, accessToken: string) =>
+    patch<{ ok: boolean }>("/api/mobile/commitments", { action: "skip", occurrence_id: occurrenceId, commitment_id: commitmentId }, accessToken),
+
   // Profile
   getProfile: (accessToken: string) =>
     get<{ profile: ProfileJSON }>("/api/mobile/profile/me", accessToken),
 
   updateProfile: (body: UpdateProfileBody, accessToken: string) =>
     patch<{ profile: ProfileJSON }>("/api/mobile/profile/me", body, accessToken),
+
+  // AI Provider
+  getAiProvider: (accessToken: string) =>
+    get<AiProviderStatusResponse>("/api/mobile/ai-provider", accessToken),
+
+  connectAiProvider: (provider: string, apiKey: string, accessToken: string) =>
+    post<AiProviderStatusResponse>("/api/mobile/ai-provider", { provider, apiKey }, accessToken),
+
+  updateAiProviderKey: (apiKey: string, accessToken: string) =>
+    patch<AiProviderStatusResponse>("/api/mobile/ai-provider", { apiKey }, accessToken),
+
+  disconnectAiProvider: (accessToken: string) =>
+    del<void>("/api/mobile/ai-provider", undefined, accessToken),
 };

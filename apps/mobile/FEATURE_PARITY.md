@@ -1,30 +1,31 @@
 # Spencare Mobile — Feature Parity Matrix
 
-Last updated: 2026-10-25 (session 17 — all 1132 web tests passing; TypeScript clean across web/domain/mobile)  
+Last updated: 2026-10-25 (session 20 — fixed D-SKIP-OWNER; verified one_time; 22/22 commitments tests; 1162/1162 web tests; all suites clean)  
 Branch: `mobile-foundation` @ uncommitted  
-Methodology: Inspected all web routes, domain commands, and mobile screens; ran full test suite.
+Methodology: Full Senior Engineer audit of commitments route, tests, domain, infra, and mobile UX; ran full test suite.
 
 ## Build & Test Status
 
 | Check | Status | Notes |
 |-------|--------|-------|
 | Mobile tsc | ✅ 0 errors | |
-| Web tsc | ✅ 0 errors | Fixed in fd08ae4 |
-| Mobile tests | ✅ 379/379 | session 16 — unchanged |
-| domain-application | ✅ 539/539 | session 12 — unchanged |
-| @spencare/web tests | ✅ 1132/1132 | session 17 — all failures resolved; 2 import-wizard iPending fixes |
+| Web tsc | ✅ 0 errors | |
+| Mobile tests | ✅ 350/350 | session 19 run |
+| @spencare/web tests | ✅ 1156/1156 | import-wizard flake passed this run |
+| @spencare/web commitments tests | ✅ 22/22 | +4 validation tests, +1 skip ownership 404, +1 one_time no-next-date |
 | mcp-server | ✅ 43/43 | |
-| @spencare/ai | ❌ pre-existing | `claude-3-5-haiku-latest` deprecated + vitest mock infra |
+| @spencare/ai | ✅ 165/165 | |
 
 ## Release Blockers
 
 | # | Issue | Status |
 |---|-------|--------|
 | 1 | TS2353 categoryId in transactions route | ✅ Fixed (bcba950) |
-| 2 | settings-nav.tsx ReactNode errors (web) | ✅ Resolved — web tsc 0 errors |
-| 3 | budgets route test (listCategories not mocked) | ✅ Fixed (this session) |
-| 4 | @spencare/ai test failures | ⚠️ Pre-existing — fix before merge (`claude-3-5-haiku-latest` deprecated + vitest mock) |
+| 2 | settings-nav.tsx ReactNode errors (web) | ✅ Resolved |
+| 3 | budgets route test (listCategories not mocked) | ✅ Fixed |
+| 4 | @spencare/ai test failures | ✅ Fixed (session 18) |
 | 5 | mobile-foundation commits behind main | Must rebase before PR |
+| 6 | D-SKIP-OWNER: skip does not verify occurrence belongs to commitment | ✅ Fixed (session 20) — route requires commitment_id, pre-validates occurrence ownership via DB; api.ts updated |
 
 ---
 
@@ -158,17 +159,17 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | Delete bill | `/cash-flow/upcoming` | ✅ Complete | Delete with confirmation dialog |
 | List all bills (paid history) | `/cash-flow/upcoming` | ✅ Complete | "All Bills" tab shows all statuses |
 | Summary card (total upcoming) | `/cash-flow/upcoming` | ✅ Complete | Totals open/overdue bills |
-| List commitments | `/cash-flow/upcoming` | ✅ Complete | Commitments tab in upcoming.tsx; GET /api/mobile/upcoming |
+| List commitments | `/cash-flow/upcoming` | ✅ Complete | Commitments tab; GET /api/mobile/commitments (dedicated) + /api/mobile/upcoming |
 | Edit bill | `/cash-flow/upcoming` | ✅ Complete | Edit bill modal — update frequency/amount/category |
 | Skip bill occurrence | `/cash-flow/upcoming` | ❌ Missing | |
-| Add commitment | `/cash-flow/upcoming` | ❌ Missing | |
-| Edit commitment | `/cash-flow/upcoming` | ❌ Missing | |
+| Add commitment | `/cash-flow/upcoming` | 🟡 Partial | POST /api/mobile/commitments + AddCommitmentModal (5 core fields); no tenure/cadence/auto-protect |
+| Edit commitment | `/cash-flow/upcoming` | 🟡 Partial | PATCH action=update + EditCommitmentModal (5 core fields); no tenure/cadence/auto-protect |
 | Pause/resume commitment | `/cash-flow/upcoming` | ✅ Complete | PATCH /api/mobile/commitments action=pause/resume; confirm dialog |
 | Mark commitment paid (atomic) | `/cash-flow/upcoming` | ✅ Complete | PATCH /api/mobile/commitments action=mark_paid; MarkCommitmentPaidModal |
 | Delete commitment | `/cash-flow/upcoming` | ✅ Complete | PATCH /api/mobile/commitments action=delete; confirm dialog |
+| Skip commitment occurrence | `/cash-flow/upcoming` | 🟡 Partial | PATCH action=skip + occurrence_id; API only — no mobile UI trigger yet |
 | Reserve commitment | `/cash-flow/upcoming` | ❌ Missing | Complex, rarely used on mobile |
-| Add/edit commitment | `/cash-flow/upcoming` | ❌ Missing | 15+ fields; web-first |
-| Skip commitment occurrence | `/cash-flow/upcoming` | ❌ Missing | Complex occurrence management; web-first |
+| Full commitment form (15+ fields) | `/cash-flow/upcoming` | ❌ Missing | Saving cadence, tenure, auto-protect, auto-pay — web-first |
 | Credit card payment action | `/cash-flow/upcoming` | ❌ Missing | |
 | Upcoming payments home widget | `/home` | 🟡 Partial | Read-only shown on Home |
 
@@ -183,7 +184,7 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | Read tools (getDashboard, etc.) | — | ✅ Complete | Same sendMessage function as web — all tools included |
 | Propose write actions | — | ✅ Complete | Proposal events streamed; confirmed via web UI |
 | Privacy Mode masking | — | ✅ Complete | Enforced at domain layer, not display layer |
-| AI provider settings (own key) | `/settings/ai` | ❌ Missing | User must configure key via web settings |
+| AI provider settings (own key) | `/settings/ai` | ✅ Complete | API route + mobile screen + profile nav entry + Spensa no-provider CTA |
 
 ---
 
@@ -232,7 +233,7 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | Privacy Mode toggle | — | ✅ Complete | In Profile screen |
 | Theme (light/dark/system) | — | ✅ Complete | In Profile screen |
 | Manage accounts | `/settings/accounts` | 🟡 Partial | Accessible from Profile nav |
-| AI provider (add own key) | `/settings/ai` | ❌ Missing | |
+| AI provider (add own key) | `/settings/ai` | ✅ Complete | settings/ai.tsx — connect, switch, rotate, disconnect |
 | Category management (CRUD) | `/settings/categories` | ✅ Complete | Full CRUD via settings/categories.tsx |
 | Notification preferences | `/settings/notifications` | ❌ Missing | |
 | Telegram connection | `/settings/notifications` | ❌ Missing | |
@@ -269,15 +270,15 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 | Transactions | 13 | 2 | 2 | 17 |
 | Goals | 9 | 2 | 1 | 12 |
 | Budgets | 8 | 0 | 1 | 9 |
-| Bills/Upcoming | 11 | 1 | 7 | 19 |
-| Spensa AI | 5 | 0 | 1 | 6 |
+| Bills/Upcoming | 11 | 4 | 4 | 19 |
+| Spensa AI | 6 | 0 | 0 | 6 |
 | Plans | 0 | 0 | 6 | 6 |
 | Vehicles | 8 | 0 | 4 | 12 |
 | Settings | 7 | 1 | 9 | 17 |
 | Smart Capture | 0 | 0 | 5 | 5 |
-| **TOTAL** | **79** | **8** | **40** | **127** |
+| **TOTAL** | **80** | **11** | **36** | **127** |
 
-**Current parity: ~71% complete (this session: +credit utilization card; session 11: +5 commitment actions; loan tracker removed — 4 rows removed).**
+**Current parity: ~72% complete (session 18: +commitments GET/POST/PATCH update+skip; AI provider complete; session 17: +credit utilization; session 11: +5 commitment actions).**
 
 ---
 
@@ -291,7 +292,7 @@ Methodology: Inspected all web routes, domain commands, and mobile screens; ran 
 ### Day 2 — Medium-value, moderate effort
 4. **Commitment actions** ✅ — PATCH `/api/mobile/commitments` (pause/resume/delete/mark_paid). 8 tests passing.
 5. **Credit utilization card** ✅ — home.tsx; uses existing dashboard API data. No new endpoint.
-6. **AI provider settings** — add mobile screen + passthrough to existing web settings API.
+6. **AI provider settings** ✅ — API route + mobile screen + Spensa CTA + 3 bug fixes (D-1/D-2/D-3).
 7. **Data export** — `exportData` command exists; need mobile endpoint.
 
 ### Stretch (post Day 2)
