@@ -564,7 +564,8 @@ gap is closed (synchronous `commit()` + return-value check); the boot gap is clo
 (`BootCompletedReceiver`); force-stop recovery is confirmed (NLS `onCreate()`); KEEP
 deduplication prevents double-upload; auth recovery no longer recycles stale tokens; recovered
 events are now accepted by the server and stored as audit records rather than silently dropped;
-all 95 unit tests pass.
+all 95 Android unit tests pass; 550/550 domain tests pass; Android debug `assembleDebug` BUILD
+SUCCESSFUL (3s).
 
 **The recovery path is now end-to-end correct.** Events recovered from the outbox after
 process-death or reboot produce a `"recovered"` status record on the server. No financial
@@ -579,3 +580,89 @@ Priority for GA:
 1. **M6** — auth revocation event loss (product decision)
 2. **M3** — `commit()` on main thread (physical device validation)
 3. **M4** — null `sourceRefId` orphaned outbox entry (extremely unlikely)
+
+---
+
+## Release-Readiness Review (2026-10-26)
+
+**Scope:** commits `41a352c` (M2 fix) and `7422fce` (type fixes + evidence). Working tree clean.
+
+### 1. Non-null assertion safety
+
+**`captureEvent.ts:122` — `payload.notificationBody!`**
+
+Control-flow proof that body is non-null and non-empty at line 119:
+- Line 95: `hasBody = payload.notificationBody != null` — false for null or undefined
+- Lines 97–100: `if (hasBody && !bodyNonEmpty) return` — exits if body present but whitespace-only
+- Lines 101–116: `if (!hasBody) return` — exits if body absent
+
+Line 119 is only reachable when both exits above have NOT triggered, which requires `hasBody = true` AND `bodyNonEmpty = true`. TypeScript's type narrowing cannot track through a boolean intermediary variable (`hasBody`), so the `!` is required for compilation but does not suppress a real runtime risk. **Assertion is safe.**
+
+**`captureEvent.test.ts:137` — `mock.calls[0]!`**
+
+Before line 137, the test has asserted `result.status === "recovered"` and `result.eventId === "recovery-uuid"`. Both can only pass if the recovery path executed `insertCaptureEvent` and the mock returned the non-null row. `mock.calls[0]` is therefore guaranteed to exist. **Assertion is safe.**
+
+### 2. Android debug build
+
+```
+JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew :app:assembleDebug
+BUILD SUCCESSFUL in 3s  (38 tasks: 4 executed, 34 up-to-date)
+```
+
+### 3. TypeScript checks
+
+```
+pnpm --filter @spencare/domain-application exec tsc --noEmit
+```
+**0 errors.** The regenerated `database.types.ts` (8 enum values) and both non-null assertions pass cleanly.
+
+### 4. Focused regression tests
+
+`pnpm --filter @spencare/domain-application test` — **550 tests, 0 failures** (37 files, run same session). Recovery path, duplicate recovery, empty-body rejection, OTP-ignored, and extraction paths all exercised. No regressions.
+
+### 5. Migration + generated-types consistency
+
+| Artifact | `"recovered"` present | Location |
+|----------|-----------------------|----------|
+| `supabase/migrations/20261026000001_atc_recovered_status.sql` | ✓ | `ALTER TYPE capture_processing_status ADD VALUE IF NOT EXISTS 'recovered'` |
+| `packages/domain/infra/src/generated/database.types.ts` | ✓ | Union type (line 3825) + runtime array (line 4103) |
+| `packages/domain/infra/src/captureEventsRepo.ts` | ✓ | `CaptureProcessingStatus` union |
+
+Migration is additive only (`IF NOT EXISTS` — idempotent). Migration is last in the ordered list (`20261026000001`). All three artifacts are consistent.
+
+### 6. Migration-history issue + safe production deployment order
+
+`supabase db diff` and `supabase migration list` fail locally with `LegacyShadowDbError` / `LegacyProjectNotLinkedError`. The shadow DB stops at `20260915000001_credit_card_payment_sources.sql` due to `moddatetime()` not existing in the shadow schema (pre-existing unrelated issue). This blocks local `db diff` tooling only — it has no effect on production.
+
+**Safe production deployment order:**
+
+1. **Apply migration first** — in the Supabase dashboard or via `supabase db push` (does not use shadow DB):
+   ```sql
+   ALTER TYPE capture_processing_status ADD VALUE IF NOT EXISTS 'recovered';
+   ```
+   Verify: `\dT+ capture_processing_status` in production should show 8 values including `recovered`.
+
+2. **Deploy server code to Vercel** — commit `41a352c` + `7422fce`:
+   ```bash
+   npx vercel deploy --prod --yes --scope spencare --project spencare
+   ```
+   The route handler and domain command are safe to deploy once the ENUM exists in production.
+
+3. **Deploy Android APK** — distribute to beta testers after step 2 is confirmed live.
+
+**Do not** use `supabase db diff` as a deploy mechanism. The shadow-DB failure is unrelated to these commits and should not be fixed automatically.
+
+### 7. No transaction from recovered event — code path audit
+
+- `captureEvent.ts` recovery path calls `insertCaptureEvent` with only metadata fields (`userId`, `source`, `sourceRefId`, `processingStatus: "recovered"`, `parserVersion: null`, `deviceReceivedAt`). No financial fields. Returns without calling `extractNotification`.
+- `listPendingCaptureEvents` (the review inbox feeder, `captureEventsRepo.ts:193`) filters `.in("processing_status", ["pending", "extracted", "promoted"])`. `"recovered"` is absent from this whitelist — recovered rows cannot be surfaced to the inbox.
+- There is no Phase 2 promotion command. The Phase 3+ promote step (future) will need to explicitly guard `WHERE processing_status IN ('extracted')` and must not include `"recovered"`.
+- Live DB verification confirmed: zero `transactions` rows, zero `pending_confirmations` rows created for the test user during recovery-event testing.
+
+### 8. Physical-device low-storage validation
+
+**OPEN.** Emulator cannot reproduce storage pressure. Requires a physical device with <100 MB free internal storage to validate `SharedPreferences.commit()` returning `false` on main thread (M3). This remains an explicit open item for GA.
+
+### Release verdict
+
+**Ready for limited internal beta.** All blockers (H1, M1, H2, M2) resolved. Build, types, tests, and live server behavior confirmed. Production deployment order is documented above. Remaining open items (M3, M4, M6) are GA-gate concerns, not beta blockers.
