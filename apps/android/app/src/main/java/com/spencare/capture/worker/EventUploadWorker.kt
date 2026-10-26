@@ -3,8 +3,10 @@ package com.spencare.capture.worker
 import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
+import androidx.work.ListenableWorker
 import androidx.work.WorkerParameters
 import com.spencare.capture.api.CaptureApiClient
+import com.spencare.capture.api.HttpException
 import com.spencare.capture.auth.AuthManager
 import com.spencare.capture.model.CaptureEventPayload
 import com.spencare.capture.model.CaptureSource
@@ -40,6 +42,22 @@ class EventUploadWorker(
         const val KEY_DEVICE_FINGERPRINT = "deviceFingerprint"
         const val KEY_DEVICE_NAME = "deviceName"
         private const val TAG = "EventUploadWorker"
+
+        /**
+         * Maps a failure exception and attempt count to a WorkManager result.
+         * Extracted for unit-testability; logging is handled by the caller.
+         */
+        internal fun retryDecision(e: Throwable, attemptCount: Int): ListenableWorker.Result =
+            when {
+                e is HttpException && e.code == 401 ->
+                    if (attemptCount < 3) ListenableWorker.Result.retry()
+                    else ListenableWorker.Result.failure()
+                e is HttpException && (e.code == 400 || e.code == 422) ->
+                    ListenableWorker.Result.failure()
+                else ->
+                    if (attemptCount < 3) ListenableWorker.Result.retry()
+                    else ListenableWorker.Result.failure()
+            }
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -73,9 +91,15 @@ class EventUploadWorker(
                 }
             },
             onFailure = { e ->
-                Log.w(TAG, "Upload failed, will retry: ${e.message}")
-                // Retry for network errors; runAttemptCount is capped by WorkManager's policy.
-                if (runAttemptCount < 3) Result.retry() else Result.failure()
+                when {
+                    e is HttpException && e.code == 401 ->
+                        Log.w(TAG, "Auth failure (401), attempt ${runAttemptCount + 1}")
+                    e is HttpException && (e.code == 400 || e.code == 422) ->
+                        Log.w(TAG, "Permanent error (${e.code}), dropping event: ${e.message}")
+                    else ->
+                        Log.w(TAG, "Transient failure (${e.message}), will retry")
+                }
+                retryDecision(e, runAttemptCount)
             }
         )
     }

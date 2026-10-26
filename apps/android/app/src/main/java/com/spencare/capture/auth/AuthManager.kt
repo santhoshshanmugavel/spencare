@@ -7,10 +7,14 @@ import io.github.jan.supabase.gotrue.SessionStatus
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email as EmailProvider
 import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.SupabaseClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /**
  * Manages the Supabase session for the Android capture app.
@@ -25,10 +29,14 @@ import kotlinx.coroutines.withContext
  * Phase 3 will replace the PoC email/password sign-in with a deep-link
  * hand-off from the web app or a mobile OAuth flow.
  */
-class AuthManager(private val context: Context) {
+class AuthManager(
+    private val context: Context,
+    clientOverride: SupabaseClient? = null,
+    private val sessionTimeoutMs: Long = 5_000L,
+) {
 
-    private val supabaseClient by lazy {
-        createSupabaseClient(
+    private val supabaseClient: SupabaseClient by lazy {
+        clientOverride ?: createSupabaseClient(
             supabaseUrl = BuildConfig.SUPABASE_URL,
             supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
         ) {
@@ -52,11 +60,17 @@ class AuthManager(private val context: Context) {
             // supabase-kt loads session from storage asynchronously after client init.
             // Wait until that load completes before trying to refresh — avoids the race
             // where refreshCurrentSession() sees no in-memory session and returns null.
-            supabaseClient.auth.sessionStatus
-                .filter { it !is SessionStatus.LoadingFromStorage }
-                .first()
+            withTimeout(sessionTimeoutMs) {
+                supabaseClient.auth.sessionStatus
+                    .filter { it !is SessionStatus.LoadingFromStorage }
+                    .first()
+            }
             supabaseClient.auth.refreshCurrentSession()
             supabaseClient.auth.currentSessionOrNull()?.accessToken
+        } catch (e: TimeoutCancellationException) {
+            null  // SDK init timed out; treat as no session rather than returning a stale token
+        } catch (e: CancellationException) {
+            throw e  // propagate real coroutine cancellation
         } catch (e: Exception) {
             supabaseClient.auth.currentSessionOrNull()?.accessToken
         }
@@ -85,13 +99,13 @@ class AuthManager(private val context: Context) {
     /**
      * Returns true if the SDK has an in-memory session.
      *
-     * This is ONLY reliable within the same process lifetime after a sign-in.
-     * After a process restart or Activity recreation (including backgrounding),
-     * the SDK's async storage-load may not have completed yet, so this can
-     * return false even when a valid persisted session exists.
-     *
-     * Use [getRefreshedToken] for a reliable cross-restart check.
+     * @deprecated Unreliable after process restart — storage load is async.
+     *   Use [getRefreshedToken] instead.
      */
+    @Deprecated(
+        message = "Unreliable after process restart. Use getRefreshedToken() instead.",
+        replaceWith = ReplaceWith("getRefreshedToken() != null"),
+    )
     fun isSignedIn(): Boolean {
         return try {
             supabaseClient.auth.currentSessionOrNull() != null

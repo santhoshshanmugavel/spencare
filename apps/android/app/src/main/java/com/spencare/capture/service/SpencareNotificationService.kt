@@ -122,7 +122,7 @@ class SpencareNotificationService : NotificationListenerService() {
 
     /**
      * Returns a stable, non-hardware device fingerprint. Stored in
-     * EncryptedSharedPreferences and generated once on first launch.
+     * SharedPreferences and generated once on first launch.
      *
      * Phase 2 PoC: uses a simple UUID stored in prefs.
      * Phase 3: move to the AuthManager-managed CaptureDeviceRegistry.

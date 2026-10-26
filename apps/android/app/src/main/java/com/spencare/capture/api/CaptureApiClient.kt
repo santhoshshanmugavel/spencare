@@ -21,6 +21,11 @@ import java.net.URL
 class CaptureApiClient(
     private val getToken: suspend () -> String?,
     private val baseUrl: String = BuildConfig.CAPTURE_API_BASE_URL,
+    // shortcut: injected only in unit tests; URL.openConnection() is stubbed in the Android
+    // unit-test JVM. Replace with OkHttp when this class matures beyond PoC.
+    private val openConnection: (url: String) -> HttpURLConnection = { url ->
+        URL(url).openConnection() as HttpURLConnection
+    },
 ) {
 
     companion object {
@@ -96,8 +101,7 @@ class CaptureApiClient(
     // registerDevice is deferred — server route exists; Android integration planned for Phase 3.
 
     private fun postJson(urlString: String, body: String, bearerToken: String): String {
-        val url = URL(urlString)
-        val conn = url.openConnection() as HttpURLConnection
+        val conn = openConnection(urlString)
         conn.apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json")
@@ -107,6 +111,14 @@ class CaptureApiClient(
             readTimeout = 30_000
         }
         OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body) }
-        return conn.inputStream.bufferedReader(Charsets.UTF_8).readText()
+        val code = conn.responseCode
+        if (code in 200..299) {
+            return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        }
+        val errorBody = conn.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
+        throw HttpException(code, errorBody)
     }
 }
+
+/** Typed HTTP error from the capture API. Lets the worker distinguish retry vs. abort. */
+class HttpException(val code: Int, val body: String) : Exception("HTTP $code: $body")

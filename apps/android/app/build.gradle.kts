@@ -96,6 +96,14 @@ android {
         buildConfig = true
         viewBinding = true
     }
+
+    testOptions {
+        unitTests {
+            // Prevent android.util.Log (and other Android SDK stubs) from
+            // throwing RuntimeException in JVM unit tests.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
@@ -112,4 +120,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Provides a real org.json implementation; the Android SDK jar mocks it in unit tests.
+    testImplementation("org.json:json:20231013")
 }
