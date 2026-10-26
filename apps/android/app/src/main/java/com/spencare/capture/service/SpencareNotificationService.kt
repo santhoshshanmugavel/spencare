@@ -1,5 +1,6 @@
 package com.spencare.capture.service
 
+import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -10,6 +11,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.spencare.capture.outbox.CaptureOutbox
 import com.spencare.capture.parser.NotificationParser
 import com.spencare.capture.worker.EventUploadWorker
 import java.util.concurrent.TimeUnit
@@ -41,6 +43,68 @@ class SpencareNotificationService : NotificationListenerService() {
 
     companion object {
         private const val TAG = "SpencareNotifService"
+
+        /**
+         * Schedules a capture event for upload via WorkManager.
+         * Extracted to companion so BootCompletedReceiver can call it without
+         * binding the notification listener service.
+         * ExistingWorkPolicy.KEEP prevents duplicate uploads for the same sourceRefId.
+         */
+        fun enqueueCapture(
+            context: Context,
+            sourceRefId: String,
+            packageName: String?,
+            title: String?,
+            body: String?,
+            deviceReceivedAt: String,
+            deviceFingerprint: String?,
+            deviceName: String?,
+        ) {
+            val inputData = Data.Builder()
+                .putString(EventUploadWorker.KEY_SOURCE_REF_ID, sourceRefId)
+                .putString(EventUploadWorker.KEY_PACKAGE_NAME, packageName)
+                .putString(EventUploadWorker.KEY_TITLE, title)
+                .putString(EventUploadWorker.KEY_BODY, body)
+                .putString(EventUploadWorker.KEY_DEVICE_RECEIVED_AT, deviceReceivedAt)
+                .putString(EventUploadWorker.KEY_DEVICE_FINGERPRINT, deviceFingerprint)
+                .putString(EventUploadWorker.KEY_DEVICE_NAME, deviceName)
+                .build()
+
+            val workRequest = OneTimeWorkRequestBuilder<EventUploadWorker>()
+                .setInputData(inputData)
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30L, TimeUnit.SECONDS)
+                .build()
+
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(
+                    "capture_event_$sourceRefId",
+                    ExistingWorkPolicy.KEEP,
+                    workRequest,
+                )
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Re-enqueue events that reached the outbox but not WorkManager (process-death recovery).
+        for (entry in CaptureOutbox.from(applicationContext).pendingEntries()) {
+            enqueueCapture(
+                context = applicationContext,
+                sourceRefId = entry.sourceRefId,
+                packageName = entry.packageName,
+                title = null,   // not stored in outbox per privacy policy
+                body = null,    // not stored in outbox per privacy policy
+                deviceReceivedAt = entry.deviceReceivedAt,
+                deviceFingerprint = entry.deviceFingerprint,
+                deviceName = entry.deviceName,
+            )
+            Log.d(TAG, "Re-enqueued recovered event (ref=${entry.sourceRefId})")
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -72,48 +136,39 @@ class SpencareNotificationService : NotificationListenerService() {
             packageName, notificationKey, deviceReceivedAtMs
         )
 
+        val deviceReceivedAtIso = java.time.Instant.ofEpochMilli(deviceReceivedAtMs)
+            .atZone(java.time.ZoneId.of("UTC"))
+            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        val deviceFingerprint = getDeviceFingerprint()
+        val deviceModelName = android.os.Build.MODEL
+
         Log.d(TAG, "Queuing financial notification from $packageName (ref=$sourceRefId)")
 
-        // ── 3. Queue upload ──────────────────────────────────────────────────
-        val inputData = Data.Builder()
-            .putString(EventUploadWorker.KEY_SOURCE_REF_ID, sourceRefId)
-            .putString(EventUploadWorker.KEY_PACKAGE_NAME, packageName)
-            .putString(EventUploadWorker.KEY_TITLE, title)
-            .putString(EventUploadWorker.KEY_BODY, body)
-            .putString(EventUploadWorker.KEY_DEVICE_RECEIVED_AT,
-                java.time.Instant.ofEpochMilli(deviceReceivedAtMs)
-                    .atZone(java.time.ZoneId.of("UTC"))
-                    .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-            )
-            // Device fingerprint + name are retrieved from the singleton
-            // CaptureDeviceRegistry in a production build. For Phase 2 PoC,
-            // the worker reads them from BuildConfig.
-            .putString(EventUploadWorker.KEY_DEVICE_FINGERPRINT,
-                getDeviceFingerprint())
-            .putString(EventUploadWorker.KEY_DEVICE_NAME,
-                android.os.Build.MODEL)
-            .build()
+        // ── 3. Persist to outbox (synchronous) before WorkManager enqueue ────
+        // commit() returns false on disk-write failure; we still enqueue so
+        // WorkManager provides best-effort durability, but we log the gap.
+        val persisted = CaptureOutbox.from(applicationContext).save(
+            sourceRefId = sourceRefId,
+            packageName = packageName,
+            deviceReceivedAt = deviceReceivedAtIso,
+            deviceFingerprint = deviceFingerprint,
+            deviceName = deviceModelName,
+        )
+        if (!persisted) {
+            Log.w(TAG, "Outbox write failed (ref=$sourceRefId) — event queued without reboot durability")
+        }
 
-        val workRequest = OneTimeWorkRequestBuilder<EventUploadWorker>()
-            .setInputData(inputData)
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL,
-                30L,
-                TimeUnit.SECONDS,
-            )
-            .build()
-
-        WorkManager.getInstance(applicationContext)
-            .enqueueUniqueWork(
-                "capture_event_$sourceRefId",
-                ExistingWorkPolicy.KEEP,
-                workRequest,
-            )
+        // ── 4. Queue upload ──────────────────────────────────────────────────
+        enqueueCapture(
+            context = applicationContext,
+            sourceRefId = sourceRefId,
+            packageName = packageName,
+            title = title,
+            body = body,
+            deviceReceivedAt = deviceReceivedAtIso,
+            deviceFingerprint = deviceFingerprint,
+            deviceName = deviceModelName,
+        )
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {

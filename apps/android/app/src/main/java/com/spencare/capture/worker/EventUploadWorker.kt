@@ -10,6 +10,7 @@ import com.spencare.capture.api.HttpException
 import com.spencare.capture.auth.AuthManager
 import com.spencare.capture.model.CaptureEventPayload
 import com.spencare.capture.model.CaptureSource
+import com.spencare.capture.outbox.CaptureOutbox
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -79,8 +80,8 @@ class EventUploadWorker(
             notificationAccessGranted = true,
         )
 
-        val result = apiClient.postCaptureEvent(payload)
-        result.fold(
+        val apiResult = apiClient.postCaptureEvent(payload)
+        val workerResult = apiResult.fold(
             onSuccess = { response ->
                 if (response.ok || response.duplicate || response.ignored) {
                     Log.d(TAG, "Event uploaded: id=${response.eventId} status=${response.status}")
@@ -102,5 +103,13 @@ class EventUploadWorker(
                 retryDecision(e, runAttemptCount)
             }
         )
+
+        // Clear outbox entry on any terminal outcome (success or permanent failure).
+        // Leave it on retry so the entry survives for reboot recovery.
+        if (workerResult !is ListenableWorker.Result.Retry) {
+            CaptureOutbox.from(applicationContext).markDone(sourceRefId)
+        }
+
+        workerResult
     }
 }

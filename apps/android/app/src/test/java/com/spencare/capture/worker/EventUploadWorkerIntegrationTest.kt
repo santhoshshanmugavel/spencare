@@ -8,11 +8,15 @@ import com.spencare.capture.api.CaptureApiClient
 import com.spencare.capture.api.HttpException
 import com.spencare.capture.auth.AuthManager
 import com.spencare.capture.model.CaptureEventResponse
+import com.spencare.capture.outbox.CaptureOutbox
 import io.mockk.coEvery
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import io.mockk.mockkConstructor
+import io.mockk.runs
 import io.mockk.unmockkConstructor
+import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -63,7 +67,12 @@ class EventUploadWorkerIntegrationTest {
 
     @After
     fun tearDown() {
-        unmockkConstructor(AuthManager::class, CaptureApiClient::class)
+        unmockkConstructor(AuthManager::class, CaptureApiClient::class, CaptureOutbox::class)
+    }
+
+    private fun stubOutbox() {
+        mockkConstructor(CaptureOutbox::class)
+        every { anyConstructed<CaptureOutbox>().markDone(any()) } just runs
     }
 
     @Test
@@ -108,5 +117,49 @@ class EventUploadWorkerIntegrationTest {
     fun `missing auth token returns Result retry at attempt 0`() = runTest {
         stubClient(kotlin.Result.failure(IllegalStateException("Not authenticated.")))
         assertEquals(ListenableWorker.Result.retry(), makeWorker().doWork())
+    }
+
+    // ── Outbox lifecycle tests (scenarios 4, 6, 7) ───────────────────────────
+
+    @Test
+    fun `successful upload calls markDone on outbox`() = runTest {
+        stubClient(
+            kotlin.Result.success(
+                CaptureEventResponse(
+                    ok = true, eventId = "evt-001", status = "accepted",
+                    duplicate = false, ignored = false, error = null,
+                )
+            )
+        )
+        stubOutbox()
+        makeWorker().doWork()
+        verify { anyConstructed<CaptureOutbox>().markDone("ref-001") }
+    }
+
+    @Test
+    fun `terminal HTTP 400 failure calls markDone on outbox`() = runTest {
+        stubClient(kotlin.Result.failure(HttpException(400, """{"error":"bad"}""")))
+        stubOutbox()
+        makeWorker().doWork()
+        verify { anyConstructed<CaptureOutbox>().markDone("ref-001") }
+    }
+
+    @Test
+    fun `retryable HTTP 429 does not call markDone on outbox`() = runTest {
+        stubClient(kotlin.Result.failure(HttpException(429, """{"error":"rate limited"}""")))
+        stubOutbox()
+        makeWorker().doWork()
+        verify(exactly = 0) { anyConstructed<CaptureOutbox>().markDone(any()) }
+    }
+
+    // Phase 3 review: 401 after retry cap is exhausted must call markDone
+    // to prevent the event from looping forever on every service restart.
+    @Test
+    fun `exhausted 401 retries calls markDone on outbox`() = runTest {
+        stubClient(kotlin.Result.failure(HttpException(401, """{"error":"unauthorized"}""")))
+        stubOutbox()
+        val result = makeWorker(runAttemptCount = 3).doWork()
+        assertEquals(ListenableWorker.Result.failure(), result)
+        verify { anyConstructed<CaptureOutbox>().markDone("ref-001") }
     }
 }

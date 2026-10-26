@@ -72,7 +72,8 @@ class AuthManager(
         } catch (e: CancellationException) {
             throw e  // propagate real coroutine cancellation
         } catch (e: Exception) {
-            supabaseClient.auth.currentSessionOrNull()?.accessToken
+            // refreshCurrentSession() failed — do not return a stale token that will 401 again
+            null
         }
     }
 

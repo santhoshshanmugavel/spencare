@@ -45,10 +45,15 @@ class AuthManagerTest {
         statusFlow: MutableStateFlow<SessionStatus>,
         token: String?,
         timeoutMs: Long = 500L,
+        refreshThrows: Throwable? = null,
     ): AuthManager {
         val mockAuth = mockk<Auth>(relaxed = true)
         every { mockAuth.sessionStatus } returns statusFlow
-        coEvery { mockAuth.refreshCurrentSession() } returns Unit
+        if (refreshThrows != null) {
+            coEvery { mockAuth.refreshCurrentSession() } throws refreshThrows
+        } else {
+            coEvery { mockAuth.refreshCurrentSession() } returns Unit
+        }
         coEvery { mockAuth.currentSessionOrNull() } returns token?.let { t ->
             mockk(relaxed = true) { every { accessToken } returns t }
         }
@@ -116,6 +121,15 @@ class AuthManagerTest {
     fun `no session returns null`() = runTest {
         val flow = MutableStateFlow<SessionStatus>(SessionStatus.Authenticated(mockk(relaxed = true)))
         val manager = makeManager(flow, null)
+        assertNull(manager.getRefreshedToken())
+    }
+
+    // Phase 2 reliability fix (H2): if refreshCurrentSession() itself fails (e.g. revoked session),
+    // getRefreshedToken() must return null — not the stale token that would produce repeated 401s.
+    @Test
+    fun `refresh failure returns null not stale token`() = runTest {
+        val flow = MutableStateFlow<SessionStatus>(SessionStatus.Authenticated(mockk(relaxed = true)))
+        val manager = makeManager(flow, token = "stale-token", refreshThrows = RuntimeException("session revoked"))
         assertNull(manager.getRefreshedToken())
     }
 }
