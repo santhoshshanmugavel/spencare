@@ -134,7 +134,7 @@ describe("processCaptureEvent", () => {
     expect(result.ignored).toBe(false);
     expect(result.eventId).toBe("recovery-uuid");
     // Must not run extraction — insert contains only metadata fields, no extracted* keys
-    const call = vi.mocked(insertCaptureEvent).mock.calls[0][1];
+    const call = vi.mocked(insertCaptureEvent).mock.calls[0]![1];
     expect(call.processingStatus).toBe("recovered");
     expect(call.parserVersion).toBeNull();
     expect(call).not.toHaveProperty("extractedAmountMinor");

@@ -422,6 +422,41 @@ by the device but the content was not available for extraction at upload time. T
 `capture_processing_status` ENUM. Additive only (`IF NOT EXISTS`). Must be applied to the
 production Supabase project before deploying the server-side code.
 
+### Live server verification (2026-10-26, local stack)
+
+Migration applied to local DB. Packages rebuilt (`domain-infra`, `domain-application`). Generated
+types regenerated with 8th ENUM value. Next.js dev server restarted. JWT acquired for
+`atctest@spencare.test` via admin magic link flow.
+
+**Five HTTP scenarios executed in sequence:**
+
+| # | Scenario | HTTP | Response |
+|---|----------|------|----------|
+| 1 | Normal financial notification (HDFC debit ₹500) | **201** | `{"ok":true,"eventId":"ca65f9b6…","status":"extracted","duplicate":false,"ignored":false,"recovered":false}` |
+| 2 | Recovery event — `notificationBody` absent | **200** | `{"ok":true,"eventId":"f3d2ac37…","status":"recovered","duplicate":false,"ignored":false,"recovered":true}` |
+| 3 | Duplicate recovery (same `sourceRefId`) | **200** | `{"ok":true,"eventId":"","status":"duplicate","duplicate":true,"ignored":false,"recovered":false}` |
+| 4 | Empty `notificationBody` (present but `""`) | **400** | `{"error":"notificationBody is required."}` |
+| 5 | OTP notification | **200** | `{"ok":true,"eventId":"cdd32161…","status":"ignored","duplicate":false,"ignored":true,"recovered":false}` |
+
+**DB verification (via `docker exec … psql`):**
+
+```
+ id                                   | processing_status | extracted_amount_minor | extracted_type | parser_version
+--------------------------------------+-------------------+------------------------+----------------+-----------------
+ f3d2ac37-b793-4803-9be2-7e30bdd7060c | recovered         |                        |                |
+ ca65f9b6-6b88-40fa-b814-8f1f59630d62 | extracted         |                  50000 | expense        | android-notif-v1
+ cdd32161-cdf6-408d-8bc6-209bd778855a | ignored           |                        |                | android-notif-v1
+```
+
+Recovery row: `processing_status = 'recovered'`, `extracted_amount_minor = NULL`,
+`extracted_type = NULL`, `parser_version = NULL`. Correct: no extraction was attempted.
+
+**Downstream isolation confirmed:** `SELECT COUNT(*) FROM transactions WHERE user_id = '074e4aa2…'` = 0.
+`SELECT COUNT(*) FROM pending_confirmations WHERE user_id = '074e4aa2…'` = 0. No financial records
+created for the recovery event.
+
+**Test suite:** `pnpm --filter @spencare/domain-application test` — **550 tests, 0 failures** (37 test files).
+
 ---
 
 ## Remaining Limitations and Beta Recommendation
@@ -472,7 +507,7 @@ After session revocation, events are dropped after 3 retries. The stale-token cy
 | Auth revocation → null token → retry → eventual drop | **DONE (partial)** | Phase 4b emulator: first-retry path confirmed (`Transient failure (Not authenticated.)`); exhaustion to attempt 3 covered by unit tests |
 | Server-side duplicate (`duplicate=true` → `Result.success()`) | **DONE** | Phase 5a emulator: curl POST same `sourceRefId` → `{"duplicate":true}` |
 | Outbox-only recovery (no WM job): force-stop with entry in outbox, NLS `onCreate()` re-enqueues | **DONE** | VP1 emulator (14:17:10): `SpencareNotifService: Re-enqueued recovered event`; outbox cleared after terminal 400 |
-| M2 confirmed then resolved: VP1 confirmed 400 drop; contract mismatch fix applied | **DONE** | VP1: `Permanent error (400)` (pre-fix). Fix: server now returns 200 `recovered=true`; worker maps to `Result.success()`. 95 unit tests pass including 2 new recovery tests. |
+| M2 confirmed then resolved: VP1 confirmed 400 drop; contract mismatch fix applied | **DONE** | VP1: `Permanent error (400)` (pre-fix). Fix verified live: `POST /api/capture/event` (no body) → HTTP 200 `{"ok":true,"status":"recovered","recovered":true}`; DB row `processing_status='recovered'`, null extracted fields, no downstream transaction. 550 domain tests, 95 Android tests pass. |
 | `commit()` failure on a real low-storage device (M3/VP3 validation) | **OPEN** | Requires physical low-storage device; emulator does not reproduce storage pressure |
 
 ### Same-event deduplication — verification pass summary

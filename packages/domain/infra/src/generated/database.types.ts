@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -1807,36 +1827,6 @@ export type Database = {
           },
         ]
       }
-      mobile_mfa_challenges: {
-        Row: {
-          consumed_at: string | null
-          created_at: string
-          encrypted_session: string
-          expires_at: string
-          id: string
-          token_hash: string
-          user_id: string
-        }
-        Insert: {
-          consumed_at?: string | null
-          created_at?: string
-          encrypted_session: string
-          expires_at: string
-          id?: string
-          token_hash: string
-          user_id: string
-        }
-        Update: {
-          consumed_at?: string | null
-          created_at?: string
-          encrypted_session?: string
-          expires_at?: string
-          id?: string
-          token_hash?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       mcp_sessions: {
         Row: {
           client_name: string
@@ -1868,6 +1858,36 @@ export type Database = {
           last_used_at?: string | null
           revoked_at?: string | null
           scopes?: string[]
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mobile_mfa_challenges: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          encrypted_session: string
+          expires_at: string
+          id: string
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          encrypted_session: string
+          expires_at: string
+          id?: string
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          encrypted_session?: string
+          expires_at?: string
+          id?: string
           token_hash?: string
           user_id?: string
         }
@@ -3498,6 +3518,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      expire_capture_raw_content: { Args: never; Returns: number }
       mark_bill_paid: {
         Args: {
           p_account_id: string
@@ -3801,7 +3822,13 @@ export type Database = {
         | "duplicate"
         | "ignored"
         | "promoted"
-      capture_source: "android_notification" | "sms" | "gmail" | "statement" | "manual"
+        | "recovered"
+      capture_source:
+        | "android_notification"
+        | "sms"
+        | "gmail"
+        | "statement"
+        | "manual"
       channel_connection_status: "connected" | "disconnected"
       commitment_occurrence_status: "upcoming" | "paid" | "skipped"
       commitment_status: "active" | "paused" | "completed" | "cancelled"
@@ -4056,12 +4083,32 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       account_type: ["bank", "cash", "credit_card", "investment", "epfo"],
       ai_provider: ["anthropic", "openai", "google", "openrouter", "other"],
       audit_actor: ["web", "spensa", "mcp", "system", "gmail"],
       bill_prediction_status: ["open", "matched", "skipped", "overdue"],
+      capture_processing_status: [
+        "pending",
+        "extracting",
+        "extracted",
+        "failed",
+        "duplicate",
+        "ignored",
+        "promoted",
+        "recovered",
+      ],
+      capture_source: [
+        "android_notification",
+        "sms",
+        "gmail",
+        "statement",
+        "manual",
+      ],
       channel_connection_status: ["connected", "disconnected"],
       commitment_occurrence_status: ["upcoming", "paid", "skipped"],
       commitment_status: ["active", "paused", "completed", "cancelled"],
@@ -4207,3 +4254,4 @@ export const Constants = {
     },
   },
 } as const
+

@@ -119,7 +119,7 @@ export async function processCaptureEvent(
   const parsed = extractNotification(
     payload.packageName,
     payload.notificationTitle ?? "",
-    payload.notificationBody,
+    payload.notificationBody!,
   );
 
   // Determine lifecycle status from the parser result.
