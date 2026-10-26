@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: result.reason }, { status: 400 });
   }
 
-  const responseStatus = result.duplicate || result.ignored ? 200 : 201;
+  const responseStatus = result.duplicate || result.ignored || result.recovered ? 200 : 201;
 
   return NextResponse.json(
     {
@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
       status: result.status,
       duplicate: result.duplicate,
       ignored: result.ignored,
+      recovered: result.recovered,
     },
     { status: responseStatus },
   );

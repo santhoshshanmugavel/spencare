@@ -93,6 +93,15 @@ class CaptureApiClientTest {
     // Null / optional field handling
     // ──────────────────────────────────────────────────────────────────────────
 
+    // Recovery events (process-death or reboot) send null body — the key must be absent
+    // so the server routes to the recovery path (notificationBody == null in TypeScript).
+    @Test
+    fun `buildRequestBody omits null notificationBody (recovery event)`() {
+        val payload = makePayload(notificationBody = null)
+        val body = CaptureApiClient.buildRequestBody(payload)
+        assertFalse("Null notificationBody must not produce a key — server uses absence to detect recovery", body.containsKey("notificationBody"))
+    }
+
     @Test
     fun `buildRequestBody omits null notificationTitle`() {
         val payload = makePayload(notificationTitle = null)

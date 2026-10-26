@@ -33,7 +33,8 @@ export type CaptureProcessingStatus =
   | "failed"
   | "duplicate"
   | "ignored"
-  | "promoted";
+  | "promoted"
+  | "recovered";
 
 export interface CaptureEventRow {
   id: string;

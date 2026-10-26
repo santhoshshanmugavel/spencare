@@ -102,13 +102,60 @@ describe("processCaptureEvent", () => {
     expect(result.reason).toMatch(/sourceRefId/i);
   });
 
-  it("returns ok:false when notificationBody is missing", async () => {
+  it("returns ok:false when notificationBody is an empty string (malformed normal request)", async () => {
     const { processCaptureEvent } = await import("./captureEvent.js");
     const result = await processCaptureEvent(ctx, { ...BASE_PAYLOAD, notificationBody: "" });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toMatch(/notificationBody/i);
+  });
+
+  it("recovery path: returns ok:true with status=recovered when notificationBody is absent", async () => {
+    const { insertCaptureEvent } = await import("@spencare/domain-infra");
+    vi.mocked(insertCaptureEvent).mockResolvedValue({
+      ...MOCK_ROW,
+      processing_status: "recovered",
+      id: "recovery-uuid",
+    } as never);
+
+    const { processCaptureEvent } = await import("./captureEvent.js");
+    const result = await processCaptureEvent(ctx, {
+      ...BASE_PAYLOAD,
+      notificationTitle: undefined,
+      notificationBody: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.status).toBe("recovered");
+    expect(result.recovered).toBe(true);
+    expect(result.duplicate).toBe(false);
+    expect(result.ignored).toBe(false);
+    expect(result.eventId).toBe("recovery-uuid");
+    // Must not run extraction — insert contains only metadata fields, no extracted* keys
+    const call = vi.mocked(insertCaptureEvent).mock.calls[0][1];
+    expect(call.processingStatus).toBe("recovered");
+    expect(call.parserVersion).toBeNull();
+    expect(call).not.toHaveProperty("extractedAmountMinor");
+    expect(call).not.toHaveProperty("extractedType");
+  });
+
+  it("recovery path: duplicate recovery event returns ok:true with status=duplicate", async () => {
+    const { insertCaptureEvent } = await import("@spencare/domain-infra");
+    vi.mocked(insertCaptureEvent).mockResolvedValue(null as never);
+
+    const { processCaptureEvent } = await import("./captureEvent.js");
+    const result = await processCaptureEvent(ctx, {
+      ...BASE_PAYLOAD,
+      notificationBody: undefined,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.status).toBe("duplicate");
+    expect(result.duplicate).toBe(true);
+    expect(result.recovered).toBe(false);
   });
 
   it("returns ok:false when packageName is missing", async () => {

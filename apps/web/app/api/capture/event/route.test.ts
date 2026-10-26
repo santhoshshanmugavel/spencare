@@ -54,6 +54,7 @@ beforeEach(() => {
     status: "extracted",
     duplicate: false,
     ignored: false,
+    recovered: false,
   } as never);
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key";
@@ -161,6 +162,20 @@ describe("POST /api/capture/event", () => {
     const res = await POST(makeRequest(VALID_PAYLOAD) as never);
     expect(res.status).toBe(200);
     expect((await res.json()).duplicate).toBe(true);
+  });
+
+  it("returns 200 for a recovery event (no notification body) and passes recovered:true", async () => {
+    vi.mocked(processCaptureEvent).mockResolvedValue({
+      ok: true, eventId: "evt-recovery", status: "recovered",
+      duplicate: false, ignored: false, recovered: true,
+    } as never);
+    const res = await POST(makeRequest({ ...VALID_PAYLOAD, notificationBody: undefined }) as never);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.recovered).toBe(true);
+    expect(body.status).toBe("recovered");
+    expect(body.duplicate).toBe(false);
+    expect(body.ignored).toBe(false);
   });
 
   it("returns 400 when processCaptureEvent returns ok:false", async () => {

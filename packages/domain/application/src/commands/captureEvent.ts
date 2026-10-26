@@ -41,8 +41,8 @@ export interface IncomingCaptureEventPayload {
   source: "android_notification";
   sourceRefId: string;
   packageName: string;
-  notificationTitle: string;
-  notificationBody: string;
+  notificationTitle?: string | null;
+  notificationBody?: string | null;
   deviceRegistrationId?: string | null;
   deviceReceivedAt?: string | null;
   // rawContent accepted in the wire format but not persisted (privacy default)
@@ -56,6 +56,7 @@ export type ProcessCaptureEventResult =
       status: CaptureProcessingStatus;
       duplicate: boolean;
       ignored: boolean;
+      recovered: boolean;
     }
   | { ok: false; reason: string };
 
@@ -91,8 +92,27 @@ export async function processCaptureEvent(
   if (!payload.packageName?.trim()) {
     return { ok: false, reason: "packageName is required." };
   }
-  if (!payload.notificationBody?.trim()) {
+  const hasBody = payload.notificationBody != null;
+  const bodyNonEmpty = hasBody && payload.notificationBody!.trim().length > 0;
+  if (hasBody && !bodyNonEmpty) {
+    // Present but empty/whitespace — malformed normal capture request
     return { ok: false, reason: "notificationBody is required." };
+  }
+  if (!hasBody) {
+    // Absent — process-death or reboot recovery; store without extraction
+    const row = await insertCaptureEvent(ctx.serviceRoleSupabase, {
+      userId: ctx.userId,
+      source: payload.source,
+      sourceRefId: payload.sourceRefId,
+      deviceRegistrationId: payload.deviceRegistrationId ?? null,
+      processingStatus: "recovered",
+      parserVersion: null,
+      deviceReceivedAt: payload.deviceReceivedAt ?? null,
+    });
+    if (row === null) {
+      return { ok: true, eventId: "", status: "duplicate", duplicate: true, ignored: false, recovered: false };
+    }
+    return { ok: true, eventId: row.id, status: "recovered", duplicate: false, ignored: false, recovered: true };
   }
 
   // ── Parse ───────────────────────────────────────────────────────────────
@@ -151,6 +171,7 @@ export async function processCaptureEvent(
       status: "duplicate",
       duplicate: true,
       ignored: false,
+      recovered: false,
     };
   }
 
@@ -160,5 +181,6 @@ export async function processCaptureEvent(
     status: processingStatus,
     duplicate: false,
     ignored: isIgnored,
+    recovered: false,
   };
 }

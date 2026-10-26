@@ -35,6 +35,7 @@ data class CaptureEventResponse(
     val status: String?,
     val duplicate: Boolean,
     val ignored: Boolean,
+    val recovered: Boolean = false,
     val error: String?,
 )
 

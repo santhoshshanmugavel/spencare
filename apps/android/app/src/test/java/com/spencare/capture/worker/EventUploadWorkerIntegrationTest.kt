@@ -119,6 +119,19 @@ class EventUploadWorkerIntegrationTest {
         assertEquals(ListenableWorker.Result.retry(), makeWorker().doWork())
     }
 
+    @Test
+    fun `recovery response (ok=true recovered=true) returns Result success`() = runTest {
+        stubClient(
+            kotlin.Result.success(
+                CaptureEventResponse(
+                    ok = true, eventId = "evt-recovery", status = "recovered",
+                    duplicate = false, ignored = false, recovered = true, error = null,
+                )
+            )
+        )
+        assertEquals(ListenableWorker.Result.success(), makeWorker().doWork())
+    }
+
     // ── Outbox lifecycle tests (scenarios 4, 6, 7) ───────────────────────────
 
     @Test

@@ -83,8 +83,14 @@ class EventUploadWorker(
         val apiResult = apiClient.postCaptureEvent(payload)
         val workerResult = apiResult.fold(
             onSuccess = { response ->
-                if (response.ok || response.duplicate || response.ignored) {
-                    Log.d(TAG, "Event uploaded: id=${response.eventId} status=${response.status}")
+                if (response.ok || response.duplicate || response.ignored || response.recovered) {
+                    val outcome = when {
+                        response.recovered -> "recovered"
+                        response.duplicate -> "duplicate"
+                        response.ignored -> "ignored"
+                        else -> "extracted"
+                    }
+                    Log.d(TAG, "Event accepted: id=${response.eventId} outcome=$outcome status=${response.status}")
                     Result.success()
                 } else {
                     Log.w(TAG, "Server rejected event: ${response.error}")

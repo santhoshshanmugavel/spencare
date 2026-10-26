@@ -80,6 +80,7 @@ class CaptureApiClient(
                         status = result.optString("status").takeIf { it.isNotEmpty() },
                         duplicate = result.optBoolean("duplicate", false),
                         ignored = result.optBoolean("ignored", false),
+                        recovered = result.optBoolean("recovered", false),
                         error = result.optString("error").takeIf { it.isNotEmpty() && it != "null" },
                     )
                 )
