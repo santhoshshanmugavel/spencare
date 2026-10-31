@@ -377,6 +377,8 @@ export interface CreditCardBillingStatus {
   snapshot: CreditCardBillSnapshot;
   /** The most recently closed cycle's bill amount -- computed from actual transactions in that exact historical period, never the account's live running balance. Stays named "statementBalanceMinor" to preserve the DB column + obligation-row contract; "statement" here is a historical name for "closed-cycle bill." */
   statementBalanceMinor: number;
+  /** Running total of spending in the currently-open (not yet billed) cycle. */
+  openCycleBalanceMinor: number;
   obligation: CreditCardObligation;
   paymentStatus: CreditCardPaymentStatus;
 }
