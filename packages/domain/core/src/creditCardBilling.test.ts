@@ -715,8 +715,8 @@ describe("deriveCreditCardCardStatus (Accounts card label, Oct 2026 production b
       },
     });
     expect(r.kind).toBe("paid");
-    expect(r.text).toBe("Bill paid · Next due 5 Nov");
-    expect(r.tone).toBe("info");
+    expect(r.text).toBe("Next bill due 5 Nov");
+    expect(r.tone).toBe("neutral");
   });
 
   it("no_bill shows upcoming open-cycle due date when nextBillDueDate is provided", () => {
@@ -736,7 +736,7 @@ describe("deriveCreditCardCardStatus (Accounts card label, Oct 2026 production b
       },
     });
     expect(r.kind).toBe("no_bill");
-    expect(r.text).toBe("No bill due · Next due 2 Nov");
+    expect(r.text).toBe("Next bill due 2 Nov");
     expect(r.tone).toBe("neutral");
   });
 
