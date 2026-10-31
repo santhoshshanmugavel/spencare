@@ -215,6 +215,24 @@ describe("classifyNotification", () => {
       "Get 10% cashback on your next recharge! Offer valid till Oct 31."
     )).toBe("non_financial");
   });
+
+  it("classifies HDFC/IDFC transaction-alert format as financial (no debited/paid keyword)", () => {
+    expect(classifyNotification(
+      "HDFC Bank",
+      "HDFC Bank: Rs.500 transaction on A/c XX1234. Info: SWIGGY. Avl Bal: Rs.10000."
+    )).toBe("financial");
+    expect(classifyNotification(
+      "IDFC FIRST Bank",
+      "Transaction Alert! INR 250.00 transacted at ZOMATO on 01-Nov-26."
+    )).toBe("financial");
+  });
+
+  it("classifies IDFC credit card 'used at' format as financial", () => {
+    expect(classifyNotification(
+      "IDFC FIRST Bank",
+      "Your IDFC FIRST Credit Card ending 1234 was used for INR 500 at ZOMATO on 01-Nov-26."
+    )).toBe("financial");
+  });
 });
 
 // ============================================================

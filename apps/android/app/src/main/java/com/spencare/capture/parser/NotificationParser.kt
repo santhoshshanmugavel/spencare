@@ -58,6 +58,11 @@ object NotificationParser {
         Regex("\\bcharged\\b", RegexOption.IGNORE_CASE),
         Regex("\\byou paid\\b", RegexOption.IGNORE_CASE),
         Regex("\\bwithdrawn?\\b", RegexOption.IGNORE_CASE),
+        Regex("\\bpurchase(?:d|s)?\\b", RegexOption.IGNORE_CASE),
+        Regex("\\bdeducted\\b", RegexOption.IGNORE_CASE),
+        Regex("\\btransferred\\s+to\\b", RegexOption.IGNORE_CASE),
+        Regex("\\btransaction\\b", RegexOption.IGNORE_CASE),
+        Regex("\\bused\\b", RegexOption.IGNORE_CASE),   // "INR 500 used at MERCHANT" (IDFC credit card format)
     )
 
     private val CREDIT_PATTERNS = listOf(
@@ -66,6 +71,8 @@ object NotificationParser {
         Regex("\\breceived\\b", RegexOption.IGNORE_CASE),
         Regex("\\bdeposited\\b", RegexOption.IGNORE_CASE),
         Regex("\\brefund\\b", RegexOption.IGNORE_CASE),
+        Regex("\\bcashback\\b", RegexOption.IGNORE_CASE),
+        Regex("\\btransferred\\s+from\\b", RegexOption.IGNORE_CASE),
     )
 
     private val AMOUNT_RE = Regex(
