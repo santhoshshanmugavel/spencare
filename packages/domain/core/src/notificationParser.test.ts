@@ -295,4 +295,41 @@ describe("KNOWN_FINANCIAL_PACKAGES", () => {
   it("does not include Chrome", () => {
     expect(KNOWN_FINANCIAL_PACKAGES.has("com.android.chrome")).toBe(false);
   });
+  it("includes Google Messages (bank SMS source)", () => {
+    expect(KNOWN_FINANCIAL_PACKAGES.has("com.google.android.apps.messaging")).toBe(true);
+  });
+  it("includes Samsung Messages (bank SMS source)", () => {
+    expect(KNOWN_FINANCIAL_PACKAGES.has("com.samsung.android.messaging")).toBe(true);
+  });
+});
+
+// ============================================================
+// SMS notification extraction (bank alerts via messaging app)
+// ============================================================
+
+describe("extractNotification — bank SMS via Google Messages", () => {
+  // Typical HDFC bank debit SMS: amount + direction + date + accountHint, no merchant
+  const result = extractNotification(
+    "com.google.android.apps.messaging",
+    "HDFC Bank",
+    "Dear Customer, Rs.1500 debited from your a/c **1234 on 30-OCT-26 by UPI. Avail Bal Rs.25000. -HDFC Bank"
+  );
+
+  it("classifies as financial", () => expect(result.classification).toBe("financial"));
+  it("extracts amount", () => expect(result.amountMinor).toBe(150000));
+  it("extracts direction as expense", () => expect(result.type).toBe("expense"));
+  it("confidence meets threshold (>= 0.70) due to isKnownFinancialApp bonus", () =>
+    expect(result.confidence).toBeGreaterThanOrEqual(0.7));
+});
+
+describe("extractNotification — bank SMS credit via Google Messages", () => {
+  const result = extractNotification(
+    "com.google.android.apps.messaging",
+    "SBI Bank",
+    "Rs.5000 credited to your SBI A/c **5678 on 30-OCT-26. Ref No. SBI123456789"
+  );
+
+  it("classifies as financial", () => expect(result.classification).toBe("financial"));
+  it("extracts direction as income", () => expect(result.type).toBe("income"));
+  it("confidence meets threshold", () => expect(result.confidence).toBeGreaterThanOrEqual(0.7));
 });

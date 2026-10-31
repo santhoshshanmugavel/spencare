@@ -401,6 +401,10 @@ export function extractNotification(
  * allowlist filter before queuing events.
  */
 export const KNOWN_FINANCIAL_PACKAGES = new Set([
+  // SMS messaging apps (bank alerts arrive via these)
+  "com.google.android.apps.messaging",   // Google Messages (most Android phones)
+  "com.samsung.android.messaging",        // Samsung Messages
+  "com.android.mms",                      // AOSP MMS (older / stock Android)
   // UPI apps
   "com.phonepe.app",
   "net.one97.paytm",

@@ -25,6 +25,11 @@ object NotificationParser {
      * Must be kept in sync with KNOWN_FINANCIAL_PACKAGES in notificationParser.ts.
      */
     private val KNOWN_FINANCIAL_PACKAGES = setOf(
+        // SMS messaging apps (bank alerts arrive via these)
+        "com.google.android.apps.messaging",
+        "com.samsung.android.messaging",
+        "com.android.mms",
+        // UPI apps
         "com.phonepe.app",
         "net.one97.paytm",
         "com.google.android.apps.nbu.paisa.user",

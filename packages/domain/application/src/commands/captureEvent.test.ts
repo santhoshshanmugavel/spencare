@@ -359,6 +359,25 @@ describe("processCaptureEvent", () => {
     );
   });
 
+  it("extracts a bank SMS from com.google.android.apps.messaging as 'extracted' (not ignored)", async () => {
+    const { insertCaptureEvent } = await import("@spencare/domain-infra");
+    vi.mocked(insertCaptureEvent).mockResolvedValue(MOCK_ROW as never);
+
+    const { processCaptureEvent } = await import("./captureEvent.js");
+    const result = await processCaptureEvent(ctx, {
+      ...BASE_PAYLOAD,
+      packageName: "com.google.android.apps.messaging",
+      notificationTitle: "HDFC Bank",
+      notificationBody:
+        "Dear Customer, Rs.500 debited from your a/c **1234 on 30-OCT-26 by UPI. -HDFC Bank",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ignored).toBe(false);
+    expect(result.status).toBe("extracted");
+  });
+
   it("includes the NOTIFICATION_PARSER_VERSION in every insert", async () => {
     const { insertCaptureEvent } = await import("@spencare/domain-infra");
     vi.mocked(insertCaptureEvent).mockResolvedValue(MOCK_ROW as never);
