@@ -174,6 +174,13 @@ export async function listBudgetsWithUsage(ctx: AuthContext, periodStart: string
   );
   const activeCommitments = await listPlannedCommitments(ctx.supabase, ctx.userId);
 
+  // For future periods, commitment planning allocations (monthly share of quarterly/annual
+  // commitments) must not inflate spending for categories with no actual transactions yet.
+  // They still apply when a transaction EXISTS and needs smoothing (e.g., an imported future charge).
+  const now = new Date();
+  const currentPeriodStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const isFuturePeriod = periodStart > currentPeriodStart;
+
   const matchedByTxnId = new Map<string, CommitmentLike>(
     matched.map((m) => [
       m.matched_transaction_id,
@@ -195,10 +202,15 @@ export async function listBudgetsWithUsage(ctx: AuthContext, periodStart: string
   }
 
   return budgets.map((b) => {
+    const categoryTxns = txnsByCategory.get(b.category_id) ?? [];
+    // In a future period, only activate commitment smoothing for categories that already have
+    // a real transaction to smooth; otherwise the monthly share appears as phantom spending.
+    const effectiveActiveCommitments =
+      isFuturePeriod && categoryTxns.length === 0 ? [] : (activeByCategory.get(b.category_id) ?? []);
     const result = calculateCommitmentAwareSpend({
-      transactions: txnsByCategory.get(b.category_id) ?? [],
+      transactions: categoryTxns,
       matchedTransactionCommitments: matchedByTxnId,
-      activeCommitments: activeByCategory.get(b.category_id) ?? [],
+      activeCommitments: effectiveActiveCommitments,
       periodStart,
       periodEnd,
     });
