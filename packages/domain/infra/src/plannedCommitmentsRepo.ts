@@ -501,6 +501,33 @@ export async function callPayCommitmentOccurrenceAtomic(
   return { transactionId: result.transaction_id, nextDueDate: result.next_due_date };
 }
 
+/**
+ * Returns the most recent PAID occurrence due_date for each commitment.
+ * Used by getUpcomingProjection to establish the previous payment boundary
+ * for preparation-event cycle calculations, so paid occurrences (excluded
+ * from listUpcomingOccurrences) don't cause a null prevPaymentDate.
+ */
+export async function listLatestPaidOccurrenceDates(
+  client: TypedSupabaseClient,
+  userId: string,
+): Promise<Map<string, string>> {
+  const { data, error } = await client
+    .from("planned_commitment_occurrences")
+    .select("commitment_id, due_date")
+    .eq("user_id", userId)
+    .eq("status", "paid")
+    .order("due_date", { ascending: false });
+  if (error) throw error;
+
+  const result = new Map<string, string>();
+  for (const row of (data ?? []) as { commitment_id: string; due_date: string }[]) {
+    if (!result.has(row.commitment_id)) {
+      result.set(row.commitment_id, row.due_date);
+    }
+  }
+  return result;
+}
+
 export async function insertPlannedCommitmentOccurrence(
   client: TypedSupabaseClient,
   userId: string,

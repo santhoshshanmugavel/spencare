@@ -698,6 +698,48 @@ describe("deriveCreditCardCardStatus (Accounts card label, Oct 2026 production b
     expect(r.remainingMinor).toBe(300000);
   });
 
+  it("Paid with nextBillDueDate uses info tone (not success green) and shows correct upcoming date", () => {
+    // Bug A + B: page.tsx was passing nextCycle.dueDate (Dec 5) instead of
+    // openCycle.dueDate (Nov 5). The tone was "success" (green) even though
+    // the appended date is a future event, not a completed one.
+    const r = deriveCreditCardCardStatus({
+      todayIso: today,
+      billing: {
+        paymentStatus: "paid",
+        dueDate: "2026-10-05",
+        statementBalanceMinor: 1880475,
+        paidMinor: 1880475,
+        remainingMinor: 0,
+        obligationStatus: "paid",
+        nextBillDueDate: "2026-11-05",
+      },
+    });
+    expect(r.kind).toBe("paid");
+    expect(r.text).toBe("Bill paid · Next due 5 Nov");
+    expect(r.tone).toBe("info");
+  });
+
+  it("no_bill shows upcoming open-cycle due date when nextBillDueDate is provided", () => {
+    // Bug C: HDFC Pixel Pay had statementBalanceMinor=0 (Sep cycle quiet)
+    // but the open cycle had ₹474 due Nov 2. The card showed only "No bill due"
+    // with no hint that a bill was 2 days away.
+    const r = deriveCreditCardCardStatus({
+      todayIso: "2026-10-31",
+      billing: {
+        paymentStatus: "paid",
+        dueDate: "2026-10-02",
+        statementBalanceMinor: 0,
+        paidMinor: 0,
+        remainingMinor: 0,
+        obligationStatus: "unpaid",
+        nextBillDueDate: "2026-11-02",
+      },
+    });
+    expect(r.kind).toBe("no_bill");
+    expect(r.text).toBe("No bill due · Next due 2 Nov");
+    expect(r.tone).toBe("neutral");
+  });
+
   it("null billing (card not configured): unconfigured label, no overdue", () => {
     const r = deriveCreditCardCardStatus({ todayIso: today, billing: null });
     expect(r.kind).toBe("unconfigured");

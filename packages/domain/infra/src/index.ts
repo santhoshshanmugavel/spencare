@@ -49,6 +49,7 @@ export {
   getOccurrence,
   callPayCommitmentOccurrenceAtomic,
   insertPlannedCommitmentOccurrence,
+  listLatestPaidOccurrenceDates,
   type CommitmentStatus,
   type CommitmentTenureType,
   type CommitmentOccurrenceStatus,

@@ -307,13 +307,23 @@ export function deriveCreditCardCardStatus(input: {
   // to show the user as owed, and in particular MUST NOT show an
   // overdue label even if the due date is in the past.
   if (input.billing.statementBalanceMinor === 0) {
-    return { kind: "no_bill", text: "No bill due", tone: "neutral", remainingMinor: 0 };
+    // No closed-cycle bill, but surface the open cycle's upcoming due date so
+    // cards with approaching bills (e.g. HDFC Pixel Pay due Nov 2) don't silently
+    // show "No bill due" while the user has a real balance accumulating.
+    const nextText = input.billing.nextBillDueDate
+      ? ` · Next due ${formatShortDate(input.billing.nextBillDueDate)}`
+      : "";
+    return { kind: "no_bill", text: `No bill due${nextText}`, tone: "neutral", remainingMinor: 0 };
   }
   if (input.billing.obligationStatus === "paid" || input.billing.remainingMinor <= 0) {
     const nextText = input.billing.nextBillDueDate
       ? ` · Next due ${formatShortDate(input.billing.nextBillDueDate)}`
       : "";
-    return { kind: "paid", text: `Bill paid${nextText}`, tone: "success", remainingMinor: 0 };
+    // Use "info" (foreground) not "success" (green): the next-due date is a future
+    // event, not a confirmation of something completed, and green misled users into
+    // thinking the upcoming date was already settled.
+    const tone: CreditCardCardStatusTone = nextText ? "info" : "success";
+    return { kind: "paid", text: `Bill paid${nextText}`, tone, remainingMinor: 0 };
   }
 
   // Date-driven states below: the obligation is real and unpaid, so

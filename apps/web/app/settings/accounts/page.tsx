@@ -70,7 +70,8 @@ export default async function AccountsSettingsPage() {
         dueDate: status.obligation.dueDate,
         paidMinor: status.obligation.paidMinor,
         remainingMinor: status.obligation.remainingMinor,
-        nextBillDueDate: status.snapshot.nextCycle.dueDate,
+        // openCycle.dueDate is the next bill actually coming up; nextCycle.dueDate is the one after that
+        nextBillDueDate: status.snapshot.openCycle.dueDate,
       };
     }
   }

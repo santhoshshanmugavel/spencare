@@ -67,6 +67,7 @@ import {
   listEpfoLedgerEntries,
   listEpfoEmployments,
   listEpfoContributionProfiles,
+  listLatestPaidOccurrenceDates,
   type EpfoContributionProfileRow,
 } from "@spencare/domain-infra";
 import type { PlannedCommitmentRow, GoalRow, GoalContributionPlanRow } from "@spencare/domain-infra";
@@ -320,12 +321,13 @@ export async function getUpcomingProjection(
   })();
 
   // Fetch all required data in parallel
-  const [commitments, persistedOccurrences, goalPlans, goals, accounts] = await Promise.all([
+  const [commitments, persistedOccurrences, goalPlans, goals, accounts, latestPaidByCommitment] = await Promise.all([
     listCommitments(ctx),
     listUpcoming(ctx, { limit: 500, dueBefore: endDate }),
     listGoalContributionPlans(ctx),
     listGoals(ctx),
     listAccounts(ctx),
+    listLatestPaidOccurrenceDates(ctx.supabase, ctx.userId),
   ]);
 
   const goalById = new Map<string, GoalRow>(goals.map((g) => [g.id, g]));
@@ -506,6 +508,13 @@ export async function getUpcomingProjection(
       ...projectedDatesForC,
     ])).sort();
 
+    // The most recently paid occurrence gives the correct previous-cycle boundary
+    // for prep-event generation. persistedOccurrences only contains 'upcoming' rows,
+    // so without this a null prevPaymentDate causes ALL saving dates since
+    // first_saving_date to be counted in n (balanced allocation), splitting the
+    // amount incorrectly and surfacing stale past-cycle prep events.
+    const lastPaidDate = latestPaidByCommitment.get(c.id) ?? null;
+
     // For each payment date in (startDate, endDate], generate prep events
     for (let i = 0; i < allDatesForC.length; i++) {
       const paymentDate = allDatesForC[i]!;
@@ -514,7 +523,9 @@ export async function getUpcomingProjection(
       // Find the matching event (to get occurrenceId if persisted)
       const paymentEvent = allPaymentEventsForC.find((e) => e.date === paymentDate);
       const occurrenceId = paymentEvent?.occurrenceId;
-      const prevPaymentDate = i > 0 ? allDatesForC[i - 1]! : null;
+      // Use the persisted previous date when available; fall back to the most recent
+      // paid occurrence so the first upcoming cycle gets the right cycle boundary.
+      const prevPaymentDate = i > 0 ? allDatesForC[i - 1]! : lastPaidDate;
 
       const prepEvents = generatePrepEventsForPayment(
         c,
