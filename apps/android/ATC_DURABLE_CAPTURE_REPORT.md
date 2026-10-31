@@ -666,3 +666,60 @@ Migration is additive only (`IF NOT EXISTS` — idempotent). Migration is last i
 ### Release verdict
 
 **Ready for limited internal beta.** All blockers (H1, M1, H2, M2) resolved. Build, types, tests, and live server behavior confirmed. Production deployment order is documented above. Remaining open items (M3, M4, M6) are GA-gate concerns, not beta blockers.
+
+---
+
+## Internal Beta Preparation (2026-10-31)
+
+**Branch:** `mobile-foundation`  
+**HEAD:** `dc61846`  
+**Spec:** 7-phase internal beta preparation audit
+
+### Phase 4 — Release Regression Suite Results
+
+| Suite | Result | Count | Evidence |
+|-------|--------|-------|----------|
+| `@spencare/domain-application` TypeScript | ✓ 0 errors | — | `tsc --noEmit` |
+| `@spencare/domain-infra` TypeScript | ✓ 0 errors | — | `tsc --noEmit` |
+| `@spencare/domain-application` unit tests | ✓ 0 failures | 550 tests, 37 files | `pnpm --filter @spencare/domain-application test` |
+| `@spencare/web` unit tests | ✓ 0 failures | 1199 tests, 105 files | `pnpm --filter @spencare/web test` |
+| Android unit tests | ✓ 0 failures | 95 tests | `./gradlew :app:testDebugUnitTest` (JDK 17) |
+| Android debug build | ✓ BUILD SUCCESSFUL | — | `./gradlew :app:assembleDebug` (3s) |
+
+Route coverage: `route.test.ts` (17 cases) includes recovery path (line 167-176): `ok:true`, `status:"recovered"`, `body.recovered===true` confirmed at the HTTP layer.
+
+### Phase 7 — Beta Checklist and Operations Plan
+
+The full beta acceptance checklist (Phase 2), deployment prerequisites detail (Phase 3), physical-device low-storage validation plan (Phase 5), and internal beta operations plan (Phase 6) are documented in:
+
+**`apps/android/ATC_BETA_CHECKLIST.md`**
+
+#### Checklist summary
+
+| Section | PASS | FAIL | NOT TESTED | BLOCKED |
+|---------|------|------|------------|---------|
+| CC — Capture Correctness | 8 | 0 | 2 | 0 |
+| RL — Reliability | 8 | 0 | 3 | 0 |
+| DI — Data Integrity | 5 | 0 | 0 | 0 |
+| PR — Privacy / Security | 8 | 0 | 0 | 0 |
+| DP — Deployment Prerequisites | 8 | 0 | 2 | 1 |
+| **Total** | **37** | **0** | **7** | **1** |
+
+**One blocker (DP-9):** production migration `20261026000001_atc_recovered_status.sql` must be applied in the Supabase dashboard before deploying server code or distributing the APK.
+
+**7 NOT TESTED items** all require a physical device or production access: live notification capture (CC-9, CC-10), WorkManager KEEP deduplication (RL-9), reboot recovery (RL-10), process-death recovery (RL-11), Vercel deploy (DP-10), APK distribution (DP-11). None are blockers for starting beta; all are required before GA.
+
+#### Low-storage risk (M3)
+
+`CaptureOutbox.save()` calls `SharedPreferences.commit()` (synchronous). If storage is critically low and `commit()` returns `false`, the outbox entry is not created. The process always proceeds to `enqueueCapture()`, but if the process dies before WorkManager commits to Room, the event is irrecoverably lost. This is a known acceptable risk for beta. The 8-step physical-device validation plan is in `ATC_BETA_CHECKLIST.md` Phase 5.
+
+#### Beta operations
+
+- **Max 3 testers** (developer/QA only) with active Spencare accounts
+- Testers must be briefed on: `recovered` events not appearing in inbox (by design), M3 low-storage edge case, no notification content stored on server
+- Pause criteria include: any evidence of notification body/title in DB, auth bypass, data corruption
+- Full setup, reporting, and revocation procedures in `ATC_BETA_CHECKLIST.md` Phase 6
+
+#### Overall beta readiness verdict
+
+**APPROVED FOR LIMITED INTERNAL BETA** subject to DP-9 (production migration applied) and DP-10 (Vercel deploy confirmed live). All 37 tested items pass. No regressions introduced. Safety rules confirmed in effect: no transactions or pending_confirmations from recovered events; no notification content in outbox or DB; service-role key server-side only.
