@@ -102,7 +102,7 @@ create policy "device_registrations: users own their own"
 
 create trigger device_registrations_updated_at
   before update on device_registrations
-  for each row execute procedure extensions.moddatetime(updated_at);
+  for each row execute procedure public.moddatetime(updated_at);
 
 comment on table device_registrations is
   'Android (or future mobile) devices authorized to POST capture events for a user.';
@@ -186,7 +186,7 @@ create index capture_events_user_received_idx
 
 create trigger capture_events_updated_at
   before update on capture_events
-  for each row execute procedure extensions.moddatetime(updated_at);
+  for each row execute procedure public.moddatetime(updated_at);
 
 comment on table capture_events is
   'Normalized transaction signals from all capture sources (Android notifications, SMS, etc.). '
