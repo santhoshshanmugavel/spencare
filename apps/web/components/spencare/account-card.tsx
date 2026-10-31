@@ -205,6 +205,7 @@ function CreditCardBillingRow({
         remainingMinor: billingStatus.remainingMinor ?? billingStatus.statementBalanceMinor,
         obligationStatus: billingStatus.obligationStatus,
         nextBillDueDate: billingStatus.nextBillDueDate ?? null,
+        openCycleBalanceMinor: billingStatus.openCycleBalanceMinor ?? 0,
       }
     : null;
 

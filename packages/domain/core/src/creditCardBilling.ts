@@ -294,8 +294,10 @@ export function deriveCreditCardCardStatus(input: {
     paidMinor: number;
     remainingMinor: number;
     obligationStatus: "unpaid" | "partial" | "paid";
-    /** Due date of the next (not-yet-closed) billing cycle, used to show "Next due 5 Nov" after payment. */
+    /** Due date of the next (not-yet-closed) billing cycle, used to show "Next bill due DATE" after payment. */
     nextBillDueDate?: string | null;
+    /** Running balance of the open cycle. When 0 (nothing spent), we skip the next-due hint to avoid implying a phantom bill. */
+    openCycleBalanceMinor?: number;
   } | null;
 }): CreditCardCardStatus {
   if (input.billing == null) {
@@ -307,16 +309,15 @@ export function deriveCreditCardCardStatus(input: {
   // to show the user as owed, and in particular MUST NOT show an
   // overdue label even if the due date is in the past.
   if (input.billing.statementBalanceMinor === 0) {
-    if (input.billing.nextBillDueDate) {
-      // No closed-cycle bill outstanding; point the user forward to the next one.
+    if (input.billing.nextBillDueDate && (input.billing.openCycleBalanceMinor ?? 0) > 0) {
+      // No closed-cycle bill outstanding but open-cycle spending exists — point forward.
       return { kind: "no_bill", text: `Next bill due ${formatShortDate(input.billing.nextBillDueDate)}`, tone: "neutral", remainingMinor: 0 };
     }
     return { kind: "no_bill", text: "No bill due", tone: "neutral", remainingMinor: 0 };
   }
   if (input.billing.obligationStatus === "paid" || input.billing.remainingMinor <= 0) {
-    if (input.billing.nextBillDueDate) {
-      // Closed bill is settled — don't say "Bill paid" (reads as "all clear") when
-      // the user may have open-cycle spending; just show when the next bill falls.
+    if (input.billing.nextBillDueDate && (input.billing.openCycleBalanceMinor ?? 0) > 0) {
+      // Closed bill settled + open-cycle spend accumulating — show the upcoming date.
       return { kind: "paid", text: `Next bill due ${formatShortDate(input.billing.nextBillDueDate)}`, tone: "neutral", remainingMinor: 0 };
     }
     return { kind: "paid", text: "Bill paid", tone: "success", remainingMinor: 0 };

@@ -414,12 +414,15 @@ export async function getCreditCardBillingStatus(
   const cycleStart = snapshot.mostRecentClosedCycle.cycleStart; // inclusive on both sides
   const cycleEndExclusive = snapshot.mostRecentClosedCycle.cycleEnd;
   const periodEndInclusive = subtractOneDay(cycleEndExclusive);
-  const statementBalanceMinor = await computeStatementBalanceForPeriod(
-    ctx,
-    account.id,
-    cycleStart,
-    periodEndInclusive,
-  );
+  const [statementBalanceMinor, openCycleBalanceMinor] = await Promise.all([
+    computeStatementBalanceForPeriod(ctx, account.id, cycleStart, periodEndInclusive),
+    computeStatementBalanceForPeriod(
+      ctx,
+      account.id,
+      snapshot.openCycle.cycleStart,
+      subtractOneDay(snapshot.openCycle.cycleEnd),
+    ),
+  ]);
 
   let obligation = await upsertCreditCardObligation(ctx, {
     accountId: account.id,
@@ -457,7 +460,7 @@ export async function getCreditCardBillingStatus(
     statementBalanceMinor: obligation.statementBalanceMinor,
   });
 
-  return { snapshot, statementBalanceMinor, obligation, paymentStatus };
+  return { snapshot, statementBalanceMinor, openCycleBalanceMinor, obligation, paymentStatus };
 }
 
 /**

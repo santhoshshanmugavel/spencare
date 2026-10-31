@@ -78,6 +78,8 @@ export interface CreditCardBillingStatusView {
   remainingMinor?: number;
   /** Due date of the next billing cycle, shown as "Next due 5 Nov" after payment. */
   nextBillDueDate?: string | null;
+  /** Running balance of the currently-open billing cycle (0 = nothing spent yet). */
+  openCycleBalanceMinor?: number;
 }
 
 /** One goal contributing to the account's goal reservation. */

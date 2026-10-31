@@ -712,6 +712,7 @@ describe("deriveCreditCardCardStatus (Accounts card label, Oct 2026 production b
         remainingMinor: 0,
         obligationStatus: "paid",
         nextBillDueDate: "2026-11-05",
+        openCycleBalanceMinor: 270938,
       },
     });
     expect(r.kind).toBe("paid");
@@ -733,6 +734,7 @@ describe("deriveCreditCardCardStatus (Accounts card label, Oct 2026 production b
         remainingMinor: 0,
         obligationStatus: "unpaid",
         nextBillDueDate: "2026-11-02",
+        openCycleBalanceMinor: 47440,
       },
     });
     expect(r.kind).toBe("no_bill");
