@@ -244,26 +244,6 @@ export {
   type GenericRowResult,
 } from "./vehicles.js";
 
-// Phase 1 — Shared Financial Intelligence Engine
-export {
-  calculatePeriodDiff,
-  isPeriodPartial,
-  getEquivalentElapsedPeriod,
-  buildMetricComparison,
-  type DateRange,
-  type PeriodComparisonRequest,
-  type MetricComparison,
-  type PeriodComparisonResult,
-} from "./periodComparison.js";
-
-export {
-  createEvidence,
-  evidenceFromComparison,
-  type EvidenceType,
-  type EvidenceSource,
-  type FinancialEvidence,
-} from "./evidence.js";
-
 export {
   EXCLUDED_TRANSACTION_TYPES,
   filterToExternalTransactions,
@@ -290,16 +270,6 @@ export {
   type ScenarioResult,
 } from "./scenario.js";
 
-export {
-  classifyDirection,
-  rankContributorsByAbsoluteChange,
-  buildInvestigationAiContext,
-  INVESTIGABLE_METRIC_LABELS,
-  type InvestigableMetric,
-  type ContributorDirection,
-  type ContributorSummary,
-  type InvestigationResult,
-} from "./investigation.js";
 
 export {
   generateAuthorizationCode,

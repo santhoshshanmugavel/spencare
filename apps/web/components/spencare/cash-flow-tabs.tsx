@@ -2,9 +2,9 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * Minimal link-based ROUTE switcher between the four top-level Cash Flow
- * pages (Overview, Transactions, Budgets, Bills). This is distinct from
- * the in-page "Recent Transactions / Upcoming Bills" tab switcher SP-081
+ * Minimal link-based ROUTE switcher between the top-level Cash Flow pages
+ * (Overview, Transactions, Budgets, Upcoming). This is distinct from the
+ * in-page "Recent Transactions / Upcoming Bills" tab switcher SP-081
  * itself describes (a same-page preview toggle inside the new Overview
  * page, built with Radix `Tabs` in `cash-flow-overview.tsx`, not here) --
  * this component only ever does cross-page navigation between sibling

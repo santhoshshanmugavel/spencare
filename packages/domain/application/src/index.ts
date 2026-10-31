@@ -540,27 +540,10 @@ export {
   type UpcomingPlanContextMaps,
 } from "./queries/plans.js";
 
-// Phase 1 — Shared Financial Intelligence Engine
-export { comparePeriods } from "./queries/periodComparison.js";
 export { buildForecastInput } from "./queries/forecasting.js";
 export { captureScenarioBaseline } from "./queries/scenario.js";
 
-// Phase 2A — Financial Decision Investigator (F01)
-export { getDecisionInvestigation, type InvestigationQuery } from "./queries/investigation.js";
 export {
-  calculatePeriodDiff,
-  isPeriodPartial,
-  getEquivalentElapsedPeriod,
-  buildMetricComparison,
-  type DateRange,
-  type PeriodComparisonRequest,
-  type PeriodComparisonResult,
-  type MetricComparison,
-  createEvidence,
-  evidenceFromComparison,
-  type EvidenceType,
-  type EvidenceSource,
-  type FinancialEvidence,
   EXCLUDED_TRANSACTION_TYPES,
   filterToExternalTransactions,
   sumByPeriod,
@@ -578,14 +561,6 @@ export {
   type ScenarioBaseline,
   type ScenarioInput,
   type ScenarioResult,
-  classifyDirection,
-  rankContributorsByAbsoluteChange,
-  buildInvestigationAiContext,
-  INVESTIGABLE_METRIC_LABELS,
-  type InvestigableMetric,
-  type ContributorDirection,
-  type ContributorSummary,
-  type InvestigationResult,
 } from "@spencare/domain-core";
 
 export {
