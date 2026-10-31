@@ -194,6 +194,19 @@ describe("POST /api/capture/event", () => {
     expect(JSON.stringify(body)).not.toContain("DB connection refused");
   });
 
+  it("returns 500 and does not expose details when a non-Error Supabase PostgrestError is thrown", async () => {
+    // PostgrestError is a plain object, not an Error instance — instanceof Error is false
+    const postgrestError = { message: "insert or update violates foreign key constraint", code: "23503", details: null, hint: null };
+    vi.mocked(processCaptureEvent).mockRejectedValue(postgrestError);
+    const res = await POST(makeRequest(VALID_PAYLOAD) as never);
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("Internal server error.");
+    // The internal error message and Postgres code must not leak into the response body
+    expect(JSON.stringify(body)).not.toContain("foreign key");
+    expect(JSON.stringify(body)).not.toContain("23503");
+  });
+
   it("scopes rate limit key to the authenticated user", async () => {
     await POST(makeRequest(VALID_PAYLOAD) as never);
     expect(checkRateLimit).toHaveBeenCalledWith(

@@ -314,6 +314,51 @@ describe("processCaptureEvent", () => {
     );
   });
 
+  it("propagates a non-Error Supabase PostgrestError (FK violation) without swallowing it", async () => {
+    const { insertCaptureEvent } = await import("@spencare/domain-infra");
+    // PostgrestError is not an Error instance — it is a plain object with message+code
+    const postgrestError = { message: "FK violation on device_registration_id", code: "23503", details: null, hint: null };
+    vi.mocked(insertCaptureEvent).mockRejectedValue(postgrestError);
+
+    const { processCaptureEvent } = await import("./captureEvent.js");
+    await expect(processCaptureEvent(ctx, BASE_PAYLOAD)).rejects.toMatchObject({ code: "23503" });
+  });
+
+  it("always passes deviceRegistrationId: null to the repository (Phase 3 not yet implemented)", async () => {
+    const { insertCaptureEvent } = await import("@spencare/domain-infra");
+    vi.mocked(insertCaptureEvent).mockResolvedValue(MOCK_ROW as never);
+
+    const { processCaptureEvent } = await import("./captureEvent.js");
+    // Even when the payload carries a device UUID, the command must not forward it as a FK value
+    await processCaptureEvent(ctx, { ...BASE_PAYLOAD, deviceRegistrationId: "some-device-uuid" });
+
+    expect(vi.mocked(insertCaptureEvent)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ deviceRegistrationId: null }),
+    );
+  });
+
+  it("recovery path: always passes deviceRegistrationId: null to the repository", async () => {
+    const { insertCaptureEvent } = await import("@spencare/domain-infra");
+    vi.mocked(insertCaptureEvent).mockResolvedValue({
+      ...MOCK_ROW,
+      processing_status: "recovered",
+      id: "recovery-uuid-2",
+    } as never);
+
+    const { processCaptureEvent } = await import("./captureEvent.js");
+    await processCaptureEvent(ctx, {
+      ...BASE_PAYLOAD,
+      notificationBody: undefined,
+      deviceRegistrationId: "some-device-uuid",
+    });
+
+    expect(vi.mocked(insertCaptureEvent)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ deviceRegistrationId: null }),
+    );
+  });
+
   it("includes the NOTIFICATION_PARSER_VERSION in every insert", async () => {
     const { insertCaptureEvent } = await import("@spencare/domain-infra");
     vi.mocked(insertCaptureEvent).mockResolvedValue(MOCK_ROW as never);
