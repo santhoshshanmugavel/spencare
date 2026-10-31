@@ -565,7 +565,7 @@ describe("deriveCreditCardCardStatus (Accounts card label, Oct 2026 production b
     expect(r.remainingMinor).toBe(0);
   });
 
-  it("Paid bill after due date stays 'Bill paid', NOT overdue", () => {
+  it("Paid bill after due date shows 'No bill due', NOT overdue", () => {
     const r = deriveCreditCardCardStatus({
       todayIso: today,
       billing: {
@@ -578,8 +578,8 @@ describe("deriveCreditCardCardStatus (Accounts card label, Oct 2026 production b
       },
     });
     expect(r.kind).toBe("paid");
-    expect(r.text).toBe("Bill paid");
-    expect(r.tone).toBe("success");
+    expect(r.text).toBe("No bill due");
+    expect(r.tone).toBe("neutral");
   });
 
   it("Paid-early still shows paid once the due date passes", () => {

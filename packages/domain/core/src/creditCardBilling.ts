@@ -320,7 +320,9 @@ export function deriveCreditCardCardStatus(input: {
       // Closed bill settled + open-cycle spend accumulating — show the upcoming date.
       return { kind: "paid", text: `Next bill due ${formatShortDate(input.billing.nextBillDueDate)}`, tone: "neutral", remainingMinor: 0 };
     }
-    return { kind: "paid", text: "Bill paid", tone: "success", remainingMinor: 0 };
+    // Nothing owed on the closed bill and nothing accumulating — the card is idle.
+    // "No bill due" is more accurate than "Bill paid" (backward-looking, implies a recent event).
+    return { kind: "paid", text: "No bill due", tone: "neutral", remainingMinor: 0 };
   }
 
   // Date-driven states below: the obligation is real and unpaid, so
