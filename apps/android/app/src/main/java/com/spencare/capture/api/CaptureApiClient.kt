@@ -90,16 +90,39 @@ class CaptureApiClient(
         }
 
     /**
-     * Device registration — DEFERRED (Phase 3).
+     * Registers or refreshes this device on the server.
      *
-     * POST /api/capture/device now exists on the server (ATC Phase 2), but the
-     * Android client intentionally does not call it yet. Device registration is
-     * opt-in and not required for capture event submission via postCaptureEvent.
-     * Integration is planned for Phase 3.
+     * Called once after sign-in and on each app resume so the server reflects
+     * the current notification-access state. The returned device ID is stored
+     * by the caller for inclusion in capture-event payloads.
      *
-     * Event upload via postCaptureEvent does NOT require device registration.
+     * Returns the device row on success, null on any failure (non-fatal — event
+     * capture proceeds without a registration ID if this call fails).
      */
-    // registerDevice is deferred — server route exists; Android integration planned for Phase 3.
+    suspend fun registerDevice(
+        deviceFingerprint: String,
+        deviceName: String,
+        notificationAccessGranted: Boolean,
+    ): DeviceRegistrationResult? = withContext(Dispatchers.IO) {
+        if (baseUrl.isBlank()) return@withContext null
+        val token = getToken() ?: return@withContext null
+        try {
+            val json = JSONObject().apply {
+                put("deviceFingerprint", deviceFingerprint)
+                put("deviceName", deviceName)
+                put("notificationAccessGranted", notificationAccessGranted)
+                put("smsPermissionGranted", false)
+            }
+            val response = postJson("$baseUrl/api/capture/device", json.toString(), token)
+            val result = JSONObject(response)
+            val device = result.optJSONObject("device") ?: return@withContext null
+            DeviceRegistrationResult(
+                deviceId = device.optString("id").takeIf { it.isNotEmpty() && it != "null" },
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     private fun postJson(urlString: String, body: String, bearerToken: String): String {
         val conn = openConnection(urlString)
@@ -123,3 +146,6 @@ class CaptureApiClient(
 
 /** Typed HTTP error from the capture API. Lets the worker distinguish retry vs. abort. */
 class HttpException(val code: Int, val body: String) : Exception("HTTP $code: $body")
+
+/** Result returned by [CaptureApiClient.registerDevice]. */
+data class DeviceRegistrationResult(val deviceId: String?)

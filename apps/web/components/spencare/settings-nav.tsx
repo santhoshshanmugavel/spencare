@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Landmark, Sparkles, User, ShieldCheck, DatabaseBackup, Plug, EyeOff, Tag, Bell } from "lucide-react";
+import { Landmark, Sparkles, User, ShieldCheck, DatabaseBackup, Plug, EyeOff, Tag, Bell, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
  * reused portion of the IA stays recognizable against its source.
  */
 
-export type SettingsNavKey = "accounts" | "ai" | "profile" | "privacy" | "security" | "data-backup" | "mcp" | "gmail" | "categories" | "notifications";
+export type SettingsNavKey = "accounts" | "ai" | "profile" | "privacy" | "security" | "data-backup" | "mcp" | "gmail" | "categories" | "notifications" | "mobile";
 
 interface SettingsNavItem {
   key: SettingsNavKey;
@@ -65,6 +65,7 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   // Gmail nav entry hidden (feature temporarily not exposed in UI; backend intact)
   { key: "categories", label: "Categories", href: "/settings/categories", icon: <Tag className="size-4" aria-hidden="true" /> },
   { key: "notifications", label: "Notifications", href: "/settings/notifications", icon: <Bell className="size-4" aria-hidden="true" /> },
+  { key: "mobile", label: "Mobile", href: "/settings/mobile", icon: <Smartphone className="size-4" aria-hidden="true" /> },
 ];
 
 /**

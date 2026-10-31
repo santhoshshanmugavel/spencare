@@ -35,6 +35,8 @@ import {
   deleteCategory,
   exportUserData,
   deleteAccount,
+  listDeviceRegistrations,
+  revokeDeviceRegistration,
   type AuthContext,
   type McpScope,
   type GmailCandidateReviewStatus,
@@ -368,4 +370,16 @@ export async function deleteCategoryAction(input: DeleteCategoryInput) {
   const result = await deleteCategory.execute(ctx, input);
   if (result.ok) revalidatePath("/settings/categories");
   return result;
+}
+
+export async function listDeviceRegistrationsAction() {
+  const ctx = await requireAuthContext();
+  return listDeviceRegistrations(ctx.serviceRoleSupabase, ctx.userId);
+}
+
+export async function revokeDeviceRegistrationAction(deviceId: string) {
+  const ctx = await requireAuthContext();
+  await revokeDeviceRegistration(ctx.serviceRoleSupabase, ctx.userId, deviceId);
+  revalidatePath("/settings/mobile");
+  return { ok: true as const };
 }

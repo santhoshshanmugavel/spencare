@@ -1,7 +1,9 @@
 package com.spencare.capture.ui
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.TextUtils
@@ -11,25 +13,28 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.spencare.capture.R
+import com.spencare.capture.api.CaptureApiClient
 import com.spencare.capture.auth.AuthManager
 import com.spencare.capture.service.SpencareNotificationService
 import kotlinx.coroutines.launch
 
 /**
- * Main entry point for the Spencare Capture PoC app.
+ * Main entry point for the Spencare Capture app.
  *
- * This activity:
- *  1. Checks whether notification access has been granted.
- *  2. Enables the SpencareNotificationService component once access is granted.
- *  3. Shows the authentication status and a sign-in UI for the PoC.
+ * Handles three states:
+ *   1. Not signed in — shows sign-in prompt.
+ *   2. Signed in, notification access not granted — prompts for access.
+ *   3. Signed in, access granted — enables the service, registers the device,
+ *      shows capture-active confirmation.
  *
- * This is a minimal PoC UI, not the production design. The production
- * experience (Phase 3+) will integrate capture setup into the main Spencare
- * web app's settings screen, with the Android app deep-linking into it.
+ * Device registration (POST /api/capture/device) is called each time the app
+ * resumes so the server reflects the current notification-access state and
+ * last-seen timestamp.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var authManager: AuthManager
+    private lateinit var apiClient: CaptureApiClient
     private lateinit var statusText: TextView
     private lateinit var grantButton: MaterialButton
     private lateinit var signInButton: MaterialButton
@@ -39,6 +44,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         authManager = AuthManager(this)
+        apiClient = CaptureApiClient(getToken = { authManager.getRefreshedToken() })
+
         statusText = findViewById(R.id.tv_status)
         grantButton = findViewById(R.id.btn_grant_access)
         signInButton = findViewById(R.id.btn_sign_in)
@@ -48,9 +55,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         signInButton.setOnClickListener {
-            // PoC: prompts for email/password in a real dialog.
-            // For initial testing, hardcode test credentials here or use
-            // BuildConfig.DEBUG to load from a local config file.
             showSignInPrompt()
         }
     }
@@ -60,32 +64,45 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch { updateUi() }
     }
 
-    /**
-     * Refreshes auth state from the Supabase SDK before updating UI.
-     * Must be called from a coroutine — getRefreshedToken() is suspend.
-     *
-     * Using getRefreshedToken() (not isSignedIn()) ensures the persisted
-     * session is loaded from storage after a process restart. isSignedIn()
-     * reads in-memory state only and returns false on a fresh instance.
-     */
     private suspend fun updateUi() {
         val hasAccess = isNotificationAccessGranted()
-        val isSignedIn = authManager.getRefreshedToken() != null
+        val token = authManager.getRefreshedToken()
+        val isSignedIn = token != null
 
-        if (!hasAccess) {
-            statusText.text = "Notification access not granted.\nTap the button below to open Settings."
-            grantButton.visibility = View.VISIBLE
-        } else {
-            enableNotificationService()
-            statusText.text = if (isSignedIn) {
-                "Capture active. Listening for financial notifications."
-            } else {
-                "Notification access granted. Please sign in to Spencare to start capturing."
+        when {
+            !isSignedIn -> {
+                statusText.text = "Sign in to your Spencare account to start capturing financial notifications."
+                grantButton.visibility = View.GONE
+                signInButton.visibility = View.VISIBLE
             }
-            grantButton.visibility = View.GONE
+            !hasAccess -> {
+                statusText.text = "Grant notification access so Spencare can capture financial notifications from your banking apps."
+                grantButton.visibility = View.VISIBLE
+                signInButton.visibility = View.GONE
+                enableNotificationService()
+            }
+            else -> {
+                enableNotificationService()
+                statusText.text = "Capture is active. Financial notifications from your banking apps will appear in Spencare for review."
+                grantButton.visibility = View.GONE
+                signInButton.visibility = View.GONE
+                registerDeviceInBackground(hasAccess)
+            }
         }
+    }
 
-        signInButton.visibility = if (!isSignedIn) View.VISIBLE else View.GONE
+    private fun registerDeviceInBackground(notificationAccessGranted: Boolean) {
+        lifecycleScope.launch {
+            try {
+                apiClient.registerDevice(
+                    deviceFingerprint = getDeviceFingerprint(),
+                    deviceName = getDeviceDisplayName(),
+                    notificationAccessGranted = notificationAccessGranted,
+                )
+            } catch (_: Exception) {
+                // Non-fatal — capture works without a registered device ID.
+            }
+        }
     }
 
     private fun isNotificationAccessGranted(): Boolean {
@@ -109,8 +126,22 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun getDeviceFingerprint(): String {
+        val prefs = getSharedPreferences("spencare_device", Context.MODE_PRIVATE)
+        val existing = prefs.getString("fingerprint", null)
+        if (existing != null) return existing
+        val generated = java.util.UUID.randomUUID().toString()
+        prefs.edit().putString("fingerprint", generated).apply()
+        return generated
+    }
+
+    private fun getDeviceDisplayName(): String {
+        val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL
+        return if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+    }
+
     private fun showSignInPrompt() {
-        // PoC sign-in dialog. Phase 3 will replace with deep-link flow.
         val emailInput = android.widget.EditText(this).apply {
             hint = "Email"
             inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
@@ -122,6 +153,8 @@ class MainActivity : AppCompatActivity() {
         }
         val container = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
+            val pad = (16 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, 0)
             addView(emailInput)
             addView(passwordInput)
         }
@@ -130,12 +163,21 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Sign in to Spencare")
             .setView(container)
             .setPositiveButton("Sign in") { _, _ ->
-                val email = emailInput.text.toString()
+                val email = emailInput.text.toString().trim()
                 val password = passwordInput.text.toString()
+                if (email.isEmpty() || password.isEmpty()) {
+                    statusText.text = "Enter your email and password."
+                    return@setPositiveButton
+                }
                 lifecycleScope.launch {
+                    statusText.text = "Signing in…"
                     val ok = authManager.signInWithEmail(email, password)
-                    statusText.text = if (ok) "Signed in." else "Sign-in failed. Check credentials."
-                    updateUi()
+                    if (ok) {
+                        updateUi()
+                    } else {
+                        statusText.text = "Sign-in failed. Check your email and password and try again."
+                        signInButton.visibility = View.VISIBLE
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)

@@ -654,4 +654,10 @@ export {
 export type {
   CaptureCandidateRow,
   CaptureCandidateReviewStatus,
+  DeviceRegistrationRow,
+} from "@spencare/domain-infra";
+
+export {
+  listDeviceRegistrations,
+  revokeDeviceRegistration,
 } from "@spencare/domain-infra";
