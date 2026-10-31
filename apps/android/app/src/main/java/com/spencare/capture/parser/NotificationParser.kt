@@ -61,8 +61,9 @@ object NotificationParser {
         Regex("\\bpurchase(?:d|s)?\\b", RegexOption.IGNORE_CASE),
         Regex("\\bdeducted\\b", RegexOption.IGNORE_CASE),
         Regex("\\btransferred\\s+to\\b", RegexOption.IGNORE_CASE),
-        Regex("\\btransaction\\b", RegexOption.IGNORE_CASE),
+        Regex("\\btransact\\w*\\b", RegexOption.IGNORE_CASE), // transaction, transacted, transacting
         Regex("\\bused\\b", RegexOption.IGNORE_CASE),   // "INR 500 used at MERCHANT" (IDFC credit card format)
+        Regex("\\bauthori[sz]ed?\\b", RegexOption.IGNORE_CASE), // authorised/authorized
     )
 
     private val CREDIT_PATTERNS = listOf(

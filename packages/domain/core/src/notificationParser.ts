@@ -101,8 +101,9 @@ const DEBIT_PATTERNS: RegExp[] = [
   /\bdeducted\b/i,
   /\btransferred\s+to\b/i,    // "transferred to AXIS BANK"
   /\byou\s+sent\b/i,
-  /\btransaction\b/i,         // "Rs.500 transaction on A/c XX1234" (HDFC/IDFC alert format)
+  /\btransact\w*\b/i,         // transaction, transacted, transacting (HDFC/IDFC alert format)
   /\bused\b/i,               // "INR 500 used at MERCHANT" (IDFC credit card format)
+  /\bauthori[sz]ed?\b/i,     // authorised/authorized
 ];
 
 const CREDIT_PATTERNS: RegExp[] = [
