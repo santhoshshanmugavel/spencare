@@ -119,11 +119,18 @@ class SpencareNotificationService : NotificationListenerService() {
         val title = extras.getCharSequence("android.title")?.toString()
         val body = extras.getCharSequence("android.text")?.toString()
             ?: extras.getCharSequence("android.bigText")?.toString()
+            // InboxStyle: android.text is a summary count; actual lines are in android.textLines.
+            ?: (extras.getCharSequenceArray("android.textLines")
+                ?.joinToString(" ") { it.toString() }
+                ?.takeIf { it.isNotBlank() })
             // MessagingStyle fallback: android.text is a count string ("3 new messages") on
             // group-summary notifications; the actual text lives in android.messages bundles.
             ?: extras.getParcelableArray("android.messages")
                 ?.lastOrNull()
                 ?.let { (it as? android.os.Bundle)?.getString("text") }
+
+        val cls = NotificationParser.classify(packageName, title ?: "", body ?: "")
+        Log.d(TAG, "onNotificationPosted pkg=$packageName bodyLen=${body?.length ?: 0} cls=${cls.classification}")
 
         // ── 1. Classify ──────────────────────────────────────────────────────
         if (!NotificationParser.shouldCapture(

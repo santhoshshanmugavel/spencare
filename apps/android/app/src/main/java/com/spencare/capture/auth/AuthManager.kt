@@ -2,6 +2,7 @@ package com.spencare.capture.auth
 
 import android.content.Context
 import com.spencare.capture.BuildConfig
+import com.spencare.capture.SpencareApplication
 import io.github.jan.supabase.gotrue.Auth
 import io.github.jan.supabase.gotrue.SessionStatus
 import io.github.jan.supabase.gotrue.auth
@@ -36,12 +37,14 @@ class AuthManager(
 ) {
 
     private val supabaseClient: SupabaseClient by lazy {
-        clientOverride ?: createSupabaseClient(
-            supabaseUrl = BuildConfig.SUPABASE_URL,
-            supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
-        ) {
-            install(Auth)
-        }
+        clientOverride
+            ?: (context.applicationContext as? SpencareApplication)?.supabaseClient
+            ?: createSupabaseClient(
+                supabaseUrl = BuildConfig.SUPABASE_URL,
+                supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
+            ) {
+                install(Auth)
+            }
     }
 
     /** Returns the current access token or null if not signed in. */

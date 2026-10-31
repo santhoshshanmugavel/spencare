@@ -1,6 +1,7 @@
 package com.spencare.capture.auth
 
 import android.content.Context
+import com.spencare.capture.SpencareApplication
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.gotrue.Auth
 import io.github.jan.supabase.gotrue.SessionStatus
@@ -131,5 +132,29 @@ class AuthManagerTest {
         val flow = MutableStateFlow<SessionStatus>(SessionStatus.Authenticated(mockk(relaxed = true)))
         val manager = makeManager(flow, token = "stale-token", refreshThrows = RuntimeException("session revoked"))
         assertNull(manager.getRefreshedToken())
+    }
+
+    // Regression: AuthManager must use the Application singleton so Worker shares the session
+    // from the sign-in done in MainActivity, not its own isolated in-memory client.
+    @Test
+    fun `uses SpencareApplication singleton client when no clientOverride`() = runTest {
+        val mockAuth = mockk<Auth>(relaxed = true)
+        val flow = MutableStateFlow<SessionStatus>(SessionStatus.Authenticated(mockk(relaxed = true)))
+        every { mockAuth.sessionStatus } returns flow
+        coEvery { mockAuth.refreshCurrentSession() } returns Unit
+        coEvery { mockAuth.currentSessionOrNull() } returns mockk(relaxed = true) {
+            every { accessToken } returns "singleton-tok"
+        }
+
+        val mockClient = mockk<SupabaseClient>()
+        every { mockClient.auth } returns mockAuth
+
+        val mockApp = mockk<SpencareApplication>(relaxed = true)
+        every { mockApp.applicationContext } returns mockApp
+        every { mockApp.supabaseClient } returns mockClient
+
+        val manager = AuthManager(context = mockApp, sessionTimeoutMs = 500L)
+        val token = manager.getRefreshedToken()
+        assertNotNull("Worker must see session from Application singleton", token)
     }
 }

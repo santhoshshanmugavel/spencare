@@ -65,8 +65,15 @@ class EventUploadWorker(
         val sourceRefId = inputData.getString(KEY_SOURCE_REF_ID)
             ?: return@withContext Result.failure()
 
+        Log.d(TAG, "doWork: start ref=$sourceRefId attempt=$runAttemptCount")
+
         val authManager = AuthManager(applicationContext)
-        val apiClient = CaptureApiClient(getToken = { authManager.getRefreshedToken() })
+        val apiClient = CaptureApiClient(getToken = {
+            val token = authManager.getRefreshedToken()
+            if (token == null) Log.w(TAG, "doWork: auth=null attempt=$runAttemptCount")
+            else Log.d(TAG, "doWork: auth=ok attempt=$runAttemptCount")
+            token
+        })
 
         val payload = CaptureEventPayload(
             sourceRefId = sourceRefId,
