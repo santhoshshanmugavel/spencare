@@ -123,6 +123,14 @@ class CaptureApiClientTest {
         assertEquals(true, body["notificationAccessGranted"])
     }
 
+    @Test
+    fun `buildRequestBody uses deviceRegistrationId key not deviceFingerprint`() {
+        val payload = makePayload(deviceFingerprint = "fp-test-1234")
+        val body = CaptureApiClient.buildRequestBody(payload)
+        assertEquals("fp-test-1234", body["deviceRegistrationId"])
+        assertFalse("old key must not appear", body.containsKey("deviceFingerprint"))
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // Device registration deferral — Change 2
     // ──────────────────────────────────────────────────────────────────────────
