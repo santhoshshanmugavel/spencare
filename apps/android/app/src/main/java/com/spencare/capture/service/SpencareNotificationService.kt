@@ -129,7 +129,8 @@ class SpencareNotificationService : NotificationListenerService() {
                 ?.lastOrNull()
                 ?.let { (it as? android.os.Bundle)?.getString("text") }
 
-        Log.d(TAG, "onNotificationPosted pkg=$packageName bodyLen=${body?.length ?: 0}")
+        val cls = NotificationParser.classify(packageName, title ?: "", body ?: "")
+        Log.d(TAG, "onNotificationPosted pkg=$packageName bodyLen=${body?.length ?: 0} cls=${cls.classification}")
 
         // ── 1. Classify ──────────────────────────────────────────────────────
         if (!NotificationParser.shouldCapture(

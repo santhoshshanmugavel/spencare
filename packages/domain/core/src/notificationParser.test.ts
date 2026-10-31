@@ -233,6 +233,13 @@ describe("classifyNotification", () => {
       "Your IDFC FIRST Credit Card ending 1234 was used for INR 500 at ZOMATO on 01-Nov-26."
     )).toBe("financial");
   });
+
+  it("classifies 'transacted' (past tense) as financial", () => {
+    expect(classifyNotification(
+      "IDFCFB",
+      "INR 500.00 transacted at ZOMATO on 01-Nov-26."
+    )).toBe("financial");
+  });
 });
 
 // ============================================================
