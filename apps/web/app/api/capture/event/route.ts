@@ -104,7 +104,9 @@ export async function POST(request: NextRequest) {
     result = await processCaptureEvent(ctx, payload);
   } catch (err) {
     // Do not expose internal error details — log server-side only.
-    console.error("[capture/event] processCaptureEvent error:", err instanceof Error ? err.message : "unknown");
+    const msg = err instanceof Error ? err.message : (typeof err === "object" && err !== null && "message" in err ? String((err as Record<string, unknown>).message) : String(err));
+    const code = typeof err === "object" && err !== null && "code" in err ? String((err as Record<string, unknown>).code) : "";
+    console.error("[capture/event] processCaptureEvent error:", msg, code ? `(code=${code})` : "");
     return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
 

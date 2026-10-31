@@ -104,7 +104,9 @@ export async function processCaptureEvent(
       userId: ctx.userId,
       source: payload.source,
       sourceRefId: payload.sourceRefId,
-      deviceRegistrationId: payload.deviceRegistrationId ?? null,
+      // Phase 3: device fingerprint → device_registrations lookup not yet implemented;
+      // device_registration_id is a FK and must remain null until then.
+      deviceRegistrationId: null,
       processingStatus: "recovered",
       parserVersion: null,
       deviceReceivedAt: payload.deviceReceivedAt ?? null,
@@ -147,7 +149,9 @@ export async function processCaptureEvent(
     userId: ctx.userId,
     source: payload.source,
     sourceRefId: payload.sourceRefId,
-    deviceRegistrationId: payload.deviceRegistrationId ?? null,
+    // Phase 3: device fingerprint → device_registrations lookup not yet implemented;
+    // device_registration_id is a FK and must remain null until then.
+    deviceRegistrationId: null,
     // Extracted fields are populated only for financial events above threshold
     extractedAmountMinor: isIgnored ? null : (parsed.amountMinor ?? null),
     extractedCurrency: isIgnored ? null : (parsed.currency ?? "INR"),
