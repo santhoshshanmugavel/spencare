@@ -416,6 +416,7 @@ export const KNOWN_FINANCIAL_PACKAGES = new Set([
   "com.snapwork.hdfc",                       // HDFC PayZapp
   "com.isgec.iMobile",                       // HDFC iMobile
   "com.snapwork.HDFCBank",
+  "com.hdfcbank.payzapp",                    // HDFC PayZapp (wallet)
   "com.csam.icici.bank.imobile",             // ICICI iMobile Pay
   "com.axis.mobile",                         // Axis Bank
   "com.kotak.mahindra.kotak",                // Kotak Mobile Banking

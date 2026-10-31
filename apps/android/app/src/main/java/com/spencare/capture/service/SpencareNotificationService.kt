@@ -35,9 +35,9 @@ import java.util.concurrent.TimeUnit
  * stores it in its internal SQLite database until the upload succeeds, then
  * deletes it. Text from OTP or non-financial events is never written anywhere.
  *
- * ACTIVATION: This service is declared `android:enabled="false"` in the
- * manifest. It is only enabled after the user explicitly grants Notification
- * Access in Android Settings. MainActivity checks and enables it.
+ * ACTIVATION: This service is declared `android:enabled="true"` in the
+ * manifest and enabled once the user grants Notification Access in Android
+ * Settings. MainActivity calls setComponentEnabledSetting on each resume.
  */
 class SpencareNotificationService : NotificationListenerService() {
 
@@ -119,6 +119,11 @@ class SpencareNotificationService : NotificationListenerService() {
         val title = extras.getCharSequence("android.title")?.toString()
         val body = extras.getCharSequence("android.text")?.toString()
             ?: extras.getCharSequence("android.bigText")?.toString()
+            // MessagingStyle fallback: android.text is a count string ("3 new messages") on
+            // group-summary notifications; the actual text lives in android.messages bundles.
+            ?: extras.getParcelableArray("android.messages")
+                ?.lastOrNull()
+                ?.let { (it as? android.os.Bundle)?.getString("text") }
 
         // ── 1. Classify ──────────────────────────────────────────────────────
         if (!NotificationParser.shouldCapture(
@@ -127,6 +132,7 @@ class SpencareNotificationService : NotificationListenerService() {
                 body ?: ""
             )
         ) {
+            Log.d(TAG, "Skipping $packageName (bodyLen=${body?.length ?: 0})")
             return
         }
 

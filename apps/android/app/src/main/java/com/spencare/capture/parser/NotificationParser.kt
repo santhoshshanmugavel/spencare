@@ -39,6 +39,7 @@ object NotificationParser {
         "com.snapwork.hdfc",
         "com.isgec.iMobile",
         "com.snapwork.HDFCBank",
+        "com.hdfcbank.payzapp",
         "com.csam.icici.bank.imobile",
         "com.axis.mobile",
         "com.kotak.mahindra.kotak",

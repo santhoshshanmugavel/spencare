@@ -301,6 +301,9 @@ describe("KNOWN_FINANCIAL_PACKAGES", () => {
   it("includes Samsung Messages (bank SMS source)", () => {
     expect(KNOWN_FINANCIAL_PACKAGES.has("com.samsung.android.messaging")).toBe(true);
   });
+  it("includes HDFC PayZapp", () => {
+    expect(KNOWN_FINANCIAL_PACKAGES.has("com.hdfcbank.payzapp")).toBe(true);
+  });
 });
 
 // ============================================================
