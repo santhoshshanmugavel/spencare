@@ -46,7 +46,7 @@ class CaptureApiClient(
             payload.notificationTitle?.let { map["notificationTitle"] = it }
             payload.notificationBody?.let { map["notificationBody"] = it }
             payload.deviceReceivedAt?.let { map["deviceReceivedAt"] = it }
-            payload.deviceFingerprint?.let { map["deviceFingerprint"] = it }
+            payload.deviceFingerprint?.let { map["deviceRegistrationId"] = it }
             payload.deviceName?.let { map["deviceName"] = it }
             map["notificationAccessGranted"] = payload.notificationAccessGranted
             return map

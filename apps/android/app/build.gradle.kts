@@ -33,6 +33,15 @@ android {
         buildConfigField("String", "CAPTURE_API_BASE_URL", "\"${localProp("CAPTURE_API_BASE_URL")}\"")
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = localProp("KEYSTORE_PATH").takeIf { it.isNotBlank() }?.let { file(it) }
+            storePassword = localProp("KEYSTORE_PASSWORD")
+            keyAlias = localProp("KEY_ALIAS")
+            keyPassword = localProp("KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -40,12 +49,19 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Fail at configuration time if CAPTURE_API_BASE_URL is completely absent.
-            // A blank URL in production would silently drop all capture events.
+            signingConfig = signingConfigs.getByName("release")
+            // Fail at configuration time if either production URL is missing.
             val captureUrl = localProp("CAPTURE_API_BASE_URL")
             if (captureUrl.isBlank()) {
                 throw GradleException(
                     "CAPTURE_API_BASE_URL must be set in local.properties for release builds. " +
+                        "See apps/android/local.properties.example."
+                )
+            }
+            val supabaseUrl = localProp("SUPABASE_URL")
+            if (supabaseUrl.isBlank()) {
+                throw GradleException(
+                    "SUPABASE_URL must be set in local.properties for release builds. " +
                         "See apps/android/local.properties.example."
                 )
             }
@@ -77,6 +93,19 @@ android {
                     "CAPTURE_API_BASE_URL must be a valid HTTPS URL with a public host for release builds. " +
                         "Got: '$captureUrl'. Development endpoints (http://, localhost, 127.0.0.1, " +
                         "10.x.x.x, 192.168.x.x, [::1], *.local) are not permitted. " +
+                        "See apps/android/local.properties.example."
+                )
+            }
+            val supabaseUrlValue = localProp("SUPABASE_URL")
+            val supabaseUri = try { URI(supabaseUrlValue) } catch (_: Exception) { null }
+            val supabaseScheme = supabaseUri?.scheme?.lowercase()
+            val supabaseHost = supabaseUri?.host?.lowercase() ?: ""
+            if (supabaseScheme != "https" || supabaseHost.isBlank() || supabaseHost in devHosts ||
+                    supabaseHost.endsWith(".local") || supabaseHost.startsWith("192.168.") ||
+                    supabaseHost.startsWith("10.")) {
+                throw GradleException(
+                    "SUPABASE_URL must be a valid HTTPS URL with a public host for release builds. " +
+                        "Got: '$supabaseUrlValue'. Development endpoints are not permitted. " +
                         "See apps/android/local.properties.example."
                 )
             }
