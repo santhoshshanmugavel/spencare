@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mock the infra layer only — the core parser is pure and tested directly.
 vi.mock("@spencare/domain-infra", () => ({
   insertCaptureEvent: vi.fn(),
+  // Phase 3 stubs — tests for promoteCaptureEvent live in promoteCapture.test.ts
+  insertCaptureCandidate: vi.fn().mockResolvedValue({ id: "cand-1" }),
+  updateCaptureEventStatus: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Distinct sentinel objects so vitest's deep-equality check can tell the two

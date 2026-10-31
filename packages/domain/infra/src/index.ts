@@ -100,3 +100,15 @@ export {
   type InsertCaptureEventInput,
   type UpsertDeviceRegistrationInput,
 } from "./captureEventsRepo.js";
+
+// ATC Phase 3
+export {
+  insertCaptureCandidate,
+  getCaptureCandidate,
+  listCaptureCandidates,
+  updateCaptureCandidate,
+  type CaptureCandidateRow,
+  type CaptureCandidateReviewStatus,
+  type InsertCaptureCandidateInput,
+  type UpdateCaptureCandidateInput,
+} from "./captureCandidatesRepo.js";

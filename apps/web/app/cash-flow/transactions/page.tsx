@@ -1,4 +1,4 @@
-import { getProfile, listAccounts, listCategories, searchTransactions, type AuthContext, getProfileForDisplay,
+import { getProfile, listAccounts, listCategories, searchTransactions, type AuthContext, getProfileForDisplay, listCaptureCandidatesQuery,
 } from "@spencare/domain-application";
 import { hasCapability } from "@spencare/domain-core";
 import { AppShell } from "@/components/spencare/app-shell";
@@ -10,6 +10,7 @@ import { CashFlowTabs } from "@/components/spencare/cash-flow-tabs";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service";
 import { TransactionList } from "./transaction-list";
+import { CaptureCandidatesSection } from "./capture-candidates-section";
 
 /**
  * Route matches SP-089/090's OBSERVED `/cash-flow/transactions`. This page
@@ -40,11 +41,12 @@ export default async function TransactionsPage() {
   // search function is the same one the toolbar hits later for text
   // queries and filters, so the first page and every subsequent page
   // come from one consistent server-side implementation.
-  const [initialPage, accounts, categories, profile] = await Promise.all([
+  const [initialPage, accounts, categories, profile, captureCandidates] = await Promise.all([
     searchTransactions(ctx, {}),
     listAccounts(ctx),
     listCategories(ctx),
     getProfile(ctx),
+    listCaptureCandidatesQuery(ctx, "pending").catch(() => []),
   ]);
   // Phase 28: any account that can participate in SOME transaction/transfer
   // role (Bank/Cash/Credit Card) -- the kind-specific narrowing (Expense
@@ -77,6 +79,14 @@ export default async function TransactionsPage() {
         <CashFlowTabs active="transactions" />
       </div>
       <div className="mx-auto max-w-2xl py-8">
+        {captureCandidates.length > 0 && (
+          <CaptureCandidatesSection
+            candidates={captureCandidates}
+            accounts={spendEligibleAccounts}
+            categories={categories}
+            masked={profile?.privacy_mode_enabled ?? false}
+          />
+        )}
         <TransactionList
           initialTransactions={initialPage.transactions}
           initialNextCursor={initialPage.nextCursor}

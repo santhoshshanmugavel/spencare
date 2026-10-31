@@ -10,9 +10,14 @@ import {
   searchTransactions,
   transfer,
   updateTransaction,
+  listCaptureCandidatesQuery,
+  editCaptureCandidate,
+  dismissCaptureCandidate,
+  acceptCaptureCandidate,
   type AuthContext,
   type SearchTransactionsOptions,
   type SearchTransactionsResult,
+  type EditCaptureCandidateInput,
 } from "@spencare/domain-application";
 import type { CreateCategoryInput, CreateTransactionInput, UpdateTransactionInput } from "@spencare/validation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -112,6 +117,38 @@ export async function createCategoryAction(input: CreateCategoryInput) {
   const result = await createCategory.execute(ctx, input);
   if (result.ok) {
     revalidatePath("/cash-flow/transactions");
+  }
+  return result;
+}
+
+// ── Capture candidate review actions ─────────────────────────────────────────
+
+export async function listCaptureCandidatesAction() {
+  const ctx = await requireAuthContext();
+  return listCaptureCandidatesQuery(ctx, "pending");
+}
+
+export async function editCaptureCandidateAction(candidateId: string, input: EditCaptureCandidateInput) {
+  const ctx = await requireAuthContext();
+  const result = await editCaptureCandidate(ctx, candidateId, input);
+  if (result.ok) revalidatePath("/cash-flow/transactions");
+  return result;
+}
+
+export async function dismissCaptureCandidateAction(candidateId: string) {
+  const ctx = await requireAuthContext();
+  const result = await dismissCaptureCandidate(ctx, candidateId);
+  if (result.ok) revalidatePath("/cash-flow/transactions");
+  return result;
+}
+
+export async function acceptCaptureCandidateAction(candidateId: string) {
+  const ctx = await requireAuthContext();
+  const result = await acceptCaptureCandidate(ctx, candidateId);
+  if (result.ok) {
+    revalidatePath("/cash-flow/transactions");
+    revalidatePath("/cash-flow");
+    revalidatePath("/home");
   }
   return result;
 }

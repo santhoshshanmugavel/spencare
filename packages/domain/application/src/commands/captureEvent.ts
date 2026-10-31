@@ -20,6 +20,7 @@ import {
   type CaptureProcessingStatus,
 } from "@spencare/domain-infra";
 import type { AuthContext } from "../types.js";
+import { promoteCaptureEvent } from "./promoteCapture.js";
 
 // ============================================================
 // Public types
@@ -177,6 +178,12 @@ export async function processCaptureEvent(
       ignored: false,
       recovered: false,
     };
+  }
+
+  // Phase 3: inline promotion — create a capture_candidate immediately so
+  // the user sees it in the review inbox without manual intervention.
+  if (processingStatus === "extracted") {
+    await promoteCaptureEvent(ctx.serviceRoleSupabase, row);
   }
 
   return {

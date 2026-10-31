@@ -173,13 +173,14 @@ export async function updateCaptureEventStatus(
   serviceRoleClient: TypedSupabaseClient,
   id: string,
   status: CaptureProcessingStatus,
-  errorMessage?: string,
+  extra?: { errorMessage?: string; promotedCandidateId?: string },
 ): Promise<void> {
   const { error } = await serviceRoleClient
     .from("capture_events")
     .update({
       processing_status: status,
-      ...(errorMessage !== undefined ? { error_message: errorMessage } : {}),
+      ...(extra?.errorMessage !== undefined ? { error_message: extra.errorMessage } : {}),
+      ...(extra?.promotedCandidateId !== undefined ? { promoted_candidate_id: extra.promotedCandidateId } : {}),
     })
     .eq("id", id);
 

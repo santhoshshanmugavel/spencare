@@ -642,3 +642,16 @@ export {
   type IncomingCaptureEventPayload,
   type ProcessCaptureEventResult,
 } from "./commands/captureEvent.js";
+
+// ATC Phase 3
+export {
+  listCaptureCandidatesQuery,
+  editCaptureCandidate,
+  dismissCaptureCandidate,
+  acceptCaptureCandidate,
+  type EditCaptureCandidateInput,
+} from "./commands/captureReview.js";
+export type {
+  CaptureCandidateRow,
+  CaptureCandidateReviewStatus,
+} from "@spencare/domain-infra";
